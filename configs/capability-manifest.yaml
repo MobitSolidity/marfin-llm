@@ -1,0 +1,265 @@
+# Capability Manifest — Phase 0
+# Built per SYSTEM_PROMPT.md Section 4 (Runtime Capability Contract).
+#
+# METHOD: Every entry below was determined by ACTUAL INSPECTION of this
+# sandbox on 2026-08-10 (shell probes, network probes, import checks).
+# Nothing here is inferred from the semantic tool catalog in Section 8.
+#
+# SCOPE WARNING: This manifest describes the BUILD/AUTHORING environment
+# (the agent sandbox). It is NOT the end-user's target deployment machine,
+# which is still UNKNOWN. Two separate environments must not be conflated.
+
+manifest_version: 0.1.0
+environment: offline_build_sandbox
+generated_at: "2026-08-10"
+generated_by: phase0_capability_discovery
+live_trading_enabled: false
+active_mode: ANALYSIS_ONLY
+
+# ---------------------------------------------------------------------------
+# AVAILABLE — verified working
+# ---------------------------------------------------------------------------
+available:
+
+  - capability_id: cap.file.read
+    semantic_name: read_file
+    actual_tool_name: Read / Glob / Grep (agent tools); POSIX fs via Bash
+    provider: sandbox
+    mode: read
+    environment: offline
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "Directory listing and file reads executed successfully."
+
+  - capability_id: cap.file.write
+    semantic_name: write_file
+    actual_tool_name: Write / Edit / MultiEdit (agent tools)
+    provider: sandbox
+    mode: write
+    environment: offline
+    requires_confirmation: true   # overwrite requires diff + approval (Sec 8.1)
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+
+  - capability_id: cap.exec.shell
+    semantic_name: run_command
+    actual_tool_name: Bash
+    provider: sandbox
+    mode: execute
+    environment: offline
+    requires_confirmation: true   # for destructive/irreversible ops (Sec 8.1)
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    notes: "Debian 13, gcc 14.2, Python 3.13.13, Node 22.23.2. cmake ABSENT."
+
+  - capability_id: cap.calc.deterministic
+    semantic_name: python_calculator
+    actual_tool_name: python3 via Bash
+    provider: sandbox
+    mode: execute
+    environment: offline
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "numpy 2.3.5, pandas 2.2.3, scipy 1.17.1, sklearn 1.6.1 present."
+    notes: >
+      Sufficient to implement the entire Section 5.3 deterministic engine
+      (returns/risk, valuation, technical indicators, fixed income,
+      Black-Scholes). No additional dependency required for core math.
+
+  - capability_id: cap.net.search
+    semantic_name: web_search
+    actual_tool_name: web_search / WebSearch (agent tools)
+    provider: platform
+    mode: read
+    environment: offline
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    trust_level_default: VERIFIED_SECONDARY
+
+  - capability_id: cap.net.fetch
+    semantic_name: fetch_document
+    actual_tool_name: crawler (agent tool) / curl via Bash
+    provider: platform + sandbox
+    mode: read
+    environment: offline
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "HTTP 200 from pypi.org, huggingface.co, github.com."
+
+  - capability_id: cap.data.sec_edgar
+    semantic_name: financial_filings (US jurisdiction only)
+    actual_tool_name: curl / crawler against data.sec.gov
+    provider: U.S. Securities and Exchange Commission
+    mode: read
+    environment: offline
+    data_license: >
+      U.S. government public domain. SEC Internet Security Policy REQUIRES a
+      declared User-Agent containing contact info, and rate-limits to
+      10 req/sec. Must be honored by any adapter.
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: >
+      HTTP 403 with generic UA; HTTP 200 from
+      data.sec.gov/submissions/CIK0000320193.json with a compliant
+      contact User-Agent. The 403 was a UA-policy rejection, not a block.
+    trust_level_default: VERIFIED_PRIMARY
+
+  - capability_id: cap.pkg.install
+    semantic_name: (no semantic equivalent)
+    actual_tool_name: pip3 / npm
+    provider: pypi.org / npmjs
+    mode: execute
+    environment: offline
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    notes: "pypi.org reachable (HTTP 200). Enables adding RAG/ML deps later."
+
+  - capability_id: cap.vcs.github
+    semantic_name: (no semantic equivalent)
+    actual_tool_name: git + gh (authenticated)
+    provider: GitHub
+    mode: write
+    environment: offline
+    requires_confirmation: false
+    status: AVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "Authenticated push to MobitSolidity/marfin-llm succeeded."
+
+# ---------------------------------------------------------------------------
+# DEGRADED — present but materially constrained
+# ---------------------------------------------------------------------------
+degraded:
+
+  - capability_id: cap.compute.ram
+    semantic_name: (host resource)
+    actual_tool_name: sandbox memory
+    provider: sandbox
+    mode: n/a
+    status: DEGRADED
+    last_verified_at: "2026-08-10"
+    measured:
+      total_ram_gib: 0.96
+      available_ram_gib: 0.60
+      swap_gib: 0.12
+      cpu_cores: 2
+      cpu_model: "Intel(R) Xeon(R) Processor @ 2.50GHz"
+      disk_available_gib: 20
+    impact: >
+      BLOCKING for local inference. The smallest artifact in scope
+      (~1.5B @ Q4_K_M = 0.85 GiB of weights alone) exceeds the 0.60 GiB
+      available. No model in the 1.5B-7B range can be loaded or benchmarked
+      in this sandbox. Disk (20 GiB) is adequate for artifact staging;
+      RAM is not adequate for execution.
+
+  - capability_id: cap.net.fred
+    semantic_name: macro_data
+    actual_tool_name: curl against api.stlouisfed.org
+    provider: Federal Reserve Bank of St. Louis
+    mode: read
+    status: DEGRADED
+    last_verified_at: "2026-08-10"
+    evidence: "HTTP 400 — endpoint reachable; request rejected for missing api_key."
+    impact: "Network path is open. Requires a free FRED API key to activate."
+    blocked_on: user_supplied_credential
+
+# ---------------------------------------------------------------------------
+# UNAVAILABLE — verified absent. MUST NOT be assumed or simulated.
+# ---------------------------------------------------------------------------
+unavailable:
+
+  - capability_id: cap.llm.local_runtime
+    semantic_name: (inference runtime)
+    actual_tool_name: ollama / llama-cli / llama-server / llama-cpp-python / lms
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "All five binaries absent from PATH."
+    consequence: >
+      Every performance figure in this project remains ESTIMATED until a
+      runtime exists on real target hardware. Per Section 20.4, estimated
+      performance must never be reported as measured.
+
+  - capability_id: cap.ml.training
+    semantic_name: (fine-tuning stack)
+    actual_tool_name: torch / transformers / peft
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "torch, transformers, sentence_transformers all MISSING."
+    consequence: "Phase 5 (LoRA/QLoRA) cannot execute here. Needs external GPU."
+
+  - capability_id: cap.rag.vector_search
+    semantic_name: vector_search / rerank
+    actual_tool_name: faiss / sentence_transformers / rank_bm25
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "faiss, sentence_transformers, rank_bm25 MISSING."
+    remediation: "Installable from pypi (reachable), but embedding models need RAM."
+
+  - capability_id: cap.data.iran_market
+    semantic_name: financial_filings / historical_bars (Iran jurisdiction)
+    actual_tool_name: codal.ir / tsetmc.com
+    provider: Codal (TSE disclosures), TSETMC (TSE market data)
+    status: BLOCKED
+    last_verified_at: "2026-08-10"
+    evidence: >
+      DNS resolves (codal.ir -> 185.117.205.17,
+      tsetmc.com -> 94.182.113.115) but TCP:443 is unreachable from this
+      sandbox. Network-level egress block, not a DNS or naming failure.
+    impact: >
+      MATERIAL. This is the single most important finding for the Persian
+      half of the mandate. Persian-language *market and filing data* cannot
+      be ingested from this environment. Note this does NOT block
+      Persian-language *financial reasoning* quality, which is a model
+      property, not a data-access property. The two must not be conflated.
+
+  - capability_id: cap.market.quotes
+    semantic_name: quote_snapshot / historical_bars / order_book_snapshot
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "No licensed market-data adapter configured; yfinance absent."
+    note: >
+      Per Section 5.5 and 7, a licensed machine-use provider is required.
+      Convenience scrapers are NOT an acceptable substitute for any
+      execution-adjacent path.
+
+  - capability_id: cap.broker.all
+    semantic_name: broker_account_snapshot, broker_positions, preview_order,
+                   place_order, modify_order, cancel_order, flatten_position
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "No broker adapter, no credentials, no paper or live account."
+    policy: >
+      Intentionally unavailable. Per Section 6.1 these remain disabled until
+      Phase 3A design + Phase 8A paper validation + explicit Phase 11
+      approval. Read-only broker tools come first; write tools last.
+
+  - capability_id: cap.tradingview.all
+    semantic_name: tradingview_open_link, tradingview_import_chart_csv,
+                   tradingview_capture_window, tradingview_webhook_ingest
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: >
+      tradingview.com returns HTTP 200 (public site reachable), but NO
+      connector of any level is implemented. Reachability of the website is
+      NOT a connector and must not be recorded as one.
+    current_connector_level: 0
+
+  - capability_id: cap.security.secret_store
+    semantic_name: (secret vault per Section 11)
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "No OS keychain or encrypted vault in this container."
+    consequence: >
+      No credential of any kind may be introduced into this environment
+      until a vault exists. This gates FRED, market data, and all broker work.
+
+  - capability_id: cap.mcp.server
+    semantic_name: (MCP orchestration layer)
+    status: UNAVAILABLE
+    last_verified_at: "2026-08-10"
+    evidence: "Not implemented; no MCP server process."

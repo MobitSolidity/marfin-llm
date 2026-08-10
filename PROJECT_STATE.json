@@ -1,34 +1,173 @@
 {
   "project_name": "marfin-llm",
   "current_phase": 0,
-  "phase_status": "BLOCKED",
+  "phase_status": "CONDITIONAL_PASS",
   "user_approval_required": true,
+  "conditional_pass_reason": "Capability discovery complete and Phase 0 acceptance criteria met. Conditions: (1) user inputs Q1-Q5 outstanding; (2) finding F1 - sandbox has 0.60 GiB available RAM and cannot load any in-scope model, so measurement phases 2/7/8/8A must run on other hardware.",
   "selected_base_model": null,
   "model_revision": null,
-  "hardware_profile": {},
+  "hardware_profile": {
+    "build_sandbox": {
+      "role": "authoring_only",
+      "measured": true,
+      "os": "Debian GNU/Linux 13 (trixie)",
+      "kernel": "6.1.155",
+      "arch": "x86_64",
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 2.50GHz",
+      "cpu_cores": 2,
+      "ram_total_gib": 0.96,
+      "ram_available_gib": 0.60,
+      "swap_gib": 0.12,
+      "disk_available_gib": 20,
+      "gpu": "none",
+      "can_run_inference": false,
+      "blocking_note": "Smallest in-scope artifact (~1.5B Q4_K_M = 0.85 GiB weights) exceeds available RAM."
+    },
+    "deployment_target": {
+      "role": "inference",
+      "measured": false,
+      "status": "UNKNOWN - awaiting user answer Q1",
+      "assumed_ram_gib": 16,
+      "assumed_cpu": "modern 6-8 core x86-64 or Apple Silicon",
+      "assumed_gpu": "none",
+      "assumed_context": 8192,
+      "label": "ASSUMPTION per SYSTEM_PROMPT.md Section 2 fallback"
+    }
+  },
   "active_mode": "ANALYSIS_ONLY",
   "live_trading_enabled": false,
-  "capability_manifest_version": null,
+  "capability_manifest_version": "0.1.0",
   "risk_policy_version": null,
   "market_data_providers": [],
   "broker_adapters": [],
   "tradingview_connector_level": 0,
+  "capability_summary": {
+    "available": [
+      "file_read",
+      "file_write",
+      "shell_exec",
+      "deterministic_calculation",
+      "web_search",
+      "document_fetch",
+      "sec_edgar_filings",
+      "package_install",
+      "github_vcs"
+    ],
+    "degraded": [
+      "host_ram",
+      "fred_macro_data"
+    ],
+    "unavailable": [
+      "local_llm_runtime",
+      "ml_training_stack",
+      "rag_vector_search",
+      "iran_market_data",
+      "market_quotes",
+      "broker_all",
+      "tradingview_all",
+      "secret_vault",
+      "mcp_server"
+    ]
+  },
   "artifacts": [
     "SYSTEM_PROMPT.md",
     "prompts/master-system-prompt-v2.0.md",
-    "PROJECT_STATE.json"
+    "README.md",
+    "PROJECT_STATE.json",
+    "DECISIONS.md",
+    "configs/capability-manifest.yaml",
+    "docs/phase-reports/phase-0.md",
+    "scripts/estimate_model_footprint.py"
   ],
   "decisions": [
-    "Master system prompt v2.0 committed as the canonical governing document."
+    "D-0001 Master prompt v2.0 is canonical",
+    "D-0002 Capability manifest is probe-derived only",
+    "D-0003 Sandbox is authoring-only; measurement deferred",
+    "D-0004 Acceptance thresholds pre-committed (proposed)",
+    "D-0005 SEC EDGAR retained after User-Agent re-probe",
+    "D-0006 Persian data access separated from Persian language capability",
+    "D-0007 No credentials until a secret vault exists",
+    "D-0008 Fine-tuning deferred pending demonstrated need"
   ],
   "open_questions": [
-    "Target hardware (RAM, CPU, OS) not yet supplied.",
-    "Desired context length not yet supplied.",
-    "Whether any broker/market-data provider accounts exist."
+    "Q1 Target deployment hardware (RAM, CPU, OS)",
+    "Q2 Desired context length (8K / 16K / 32K)",
+    "Q3 Persian-market data strategy: (a) descope, (b) user-supplied exports, (c) legal review of access path",
+    "Q4 Execution ambition: analysis-only / +backtest / +paper / +live",
+    "Q5 Where measurement phases 2/7/8/8A should run"
   ],
-  "risks": [],
-  "source_checks": [],
-  "benchmark_summary": {},
+  "risks": [
+    "R1 Sandbox RAM prevents all measurement (High, certain)",
+    "R2 Persian market data unobtainable (High, certain in this env)",
+    "R3 Estimated figures mistaken for measured (High, medium)",
+    "R4 Base-model license blocks commercial use (High, medium)",
+    "R5 Persian tokenizer inefficiency inflates context cost (Medium, medium)",
+    "R6 Credential introduced before vault exists (Critical, low)",
+    "R7 Quantization degrades Persian more than English (Medium, medium)",
+    "R8 Scope creep toward live trading (High, medium)",
+    "R9 Benchmark license/contamination issues (Medium, medium)"
+  ],
+  "source_checks": [
+    {
+      "source": "data.sec.gov",
+      "checked_at": "2026-08-10",
+      "result": "HTTP 200 with contact User-Agent; HTTP 403 without",
+      "license": "US government public domain; UA + 10 req/sec policy applies",
+      "trust_level": "VERIFIED_PRIMARY"
+    },
+    {
+      "source": "api.stlouisfed.org (FRED)",
+      "checked_at": "2026-08-10",
+      "result": "HTTP 400 - reachable, requires api_key",
+      "status": "DEGRADED, blocked on credential + vault"
+    },
+    {
+      "source": "codal.ir",
+      "checked_at": "2026-08-10",
+      "result": "DNS resolves 185.117.205.17; TCP:443 unreachable",
+      "status": "BLOCKED"
+    },
+    {
+      "source": "tsetmc.com",
+      "checked_at": "2026-08-10",
+      "result": "DNS resolves 94.182.113.115; TCP:443 unreachable",
+      "status": "BLOCKED"
+    },
+    {
+      "source": "huggingface.co",
+      "checked_at": "2026-08-10",
+      "result": "HTTP 200 - model research viable",
+      "status": "AVAILABLE"
+    },
+    {
+      "source": "tradingview.com",
+      "checked_at": "2026-08-10",
+      "result": "HTTP 200 - public website reachable only; NOT a connector",
+      "status": "connector_level_0"
+    }
+  ],
+  "acceptance_thresholds": {
+    "status": "PROPOSED - awaiting user approval",
+    "model_file_size_q4km_gib_max": 4.0,
+    "peak_rss_8k_gib_max": 6.0,
+    "generation_tokens_per_sec_min": 8,
+    "time_to_first_token_2k_sec_max": 3.0,
+    "deterministic_calc_correctness_pct_min": 100,
+    "unsupported_claim_rate_pct_max": 3,
+    "citation_correctness_pct_min": 95,
+    "correct_abstention_pct_min": 90,
+    "fabricated_financial_data_count_max": 0,
+    "persian_fluency_regression_pct_max": 2,
+    "tool_call_schema_validity_pct_min": 98,
+    "paper_live_confusion_count_max": 0
+  },
+  "benchmark_summary": {
+    "status": "NONE - no measurements possible in this environment",
+    "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED."
+  },
   "next_phase": 1,
+  "next_phase_name": "Hardware and Base-Model Selection",
+  "next_phase_viable_in_sandbox": true,
+  "next_phase_note": "Phase 1 is research (HuggingFace, licenses, sizing) and loads no model, so finding F1 does not block it.",
   "last_updated": "2026-08-10"
 }
