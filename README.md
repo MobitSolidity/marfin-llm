@@ -11,14 +11,21 @@ paper/live trading controls.
 |---|---|
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
-| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 1. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0012). |
+| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 2. |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0018). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
 | `scripts/size_from_config.py` | Memory sizing computed from the committed configs. |
 | `scripts/measure_tokenizer_efficiency.py` | Persian vs English tokenizer cost measurement. |
 | `scripts/estimate_model_footprint.py` | Generic sizing tool (superseded for Phase 1 by `size_from_config.py`). |
+| `scripts/throughput_ceiling.py` | Bandwidth-bound decode ceiling for the target RAM. |
+| `scripts/run_baseline.py` | On-target baseline harness (speed, RSS, eval set). |
+| `src/calc/returns_risk.py` | Deterministic returns/risk engine, stdlib only. |
+| `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
+| `src/tools/registry.py` | Whitelisted tool dispatch; no execution capability. |
+| `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
+| `tests/` | 99 tests plus a mutation battery. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
 ## What This Prompt Defines
@@ -54,46 +61,65 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **1 — Hardware and Base-Model Selection** |
-| Status | PASS (provisional on Phase 2 Persian generation test) |
-| Next | Phase 2 — Environment and Runtime Setup (awaiting approval) |
+| Current phase | **2 — Baseline and Deterministic Tools** |
+| Status | PASS (engine verified; model half is a verified plan) |
+| Next | Phase 3 — Data Pipeline and Financial RAG (awaiting approval) |
 | Active mode | `ANALYSIS_ONLY` |
-| Live trading | `DISABLED` |
+| Live trading | `DISABLED` (no execution code exists) |
 | TradingView connector level | 0 |
 
 ### Target (user-supplied)
 
-16 GiB RAM · Intel Core i5-12400 (6 cores / 12 threads, no GPU) · Windows 11 ·
-16K context · Iranian market data descoped · execution ambition through live
-trading (Phase 11).
+16 GiB **DDR4-3200** · Intel Core i5-12400 (6 cores / 12 threads, no GPU) ·
+Windows 11 · 16K context · Iranian market data descoped.
 
-### Selected baseline
+### Baseline model (pinned by commit SHA)
 
-| Role | Model | Licence | Total @16K |
+| Role | Model | Licence | SHA |
 |---|---|---|---|
-| **Primary** | `Qwen/Qwen3-4B-Instruct-2507` | apache-2.0 | 5.12 GiB (43% of budget) |
-| Alternative 1 | `microsoft/Phi-4-mini-instruct` | mit | 4.77 GiB |
-| Alternative 2 | `HuggingFaceTB/SmolLM3-3B` | apache-2.0 | 3.46 GiB |
-| Fallback | `Qwen/Qwen3-1.7B` | apache-2.0 | 3.50 GiB |
+| **Primary** | `Qwen/Qwen3-4B-Instruct-2507` | apache-2.0 | `cdbee75f` |
+| Fallback | `Qwen/Qwen3-1.7B` | apache-2.0 | `70d244cc` |
 
-`Qwen/Qwen2.5-3B-Instruct` was **disqualified**: its `qwen-research` licence is
-non-commercial only (D-0010). Llama-3.2 and Gemma-3 were excluded as
-manual-access gated.
+### Verification status
 
-Full reasoning: `docs/phase-reports/phase-1.md`.
+| Item | Status |
+|---|---|
+| Calculation engine (21 fns) | **VERIFIED** — 99 tests, 13/13 mutations killed |
+| Persian numeral parsing | **VERIFIED** by execution |
+| Chat template + tool schemas | **VERIFIED** by rendering |
+| No execution capability | **VERIFIED** by test |
+| Decode speed | **ESTIMATED** ~14.7 tok/s — not yet measured |
+| Persian generation quality | **UNKNOWN** — risk R10 |
 
-### Reproducing the Phase 1 numbers
+### Running the tests
+
+```bash
+./tests/run_all.sh              # 99 unit tests
+./tests/run_all.sh --mutate     # + 13 seeded-defect mutation battery
+```
+
+### Running the baseline (on the target machine, not here)
+
+```bash
+pip install llama-cpp-python psutil
+python scripts/run_baseline.py --model <path>.gguf --ctx 16384 --threads 6
+```
+
+This sandbox has 0.60 GiB available and cannot load any candidate model
+(Phase 0 finding F1), so no throughput figure is ever reported from here.
+
+### Reproducing the estimates
 
 ```bash
 python3 scripts/size_from_config.py --dir configs/model-cards --ram 16 --ctx 16384
+python3 scripts/throughput_ceiling.py --mem DDR4-3200
 python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
 ```
 
 ### Open questions
 
-- **Q6** — RAM type/speed (DDR4-3200 vs DDR5-4800)? ~1.5× tokens/sec swing on a
-  GPU-less box; blocks a defensible Phase 2 speed threshold.
-- **Q7** — Test Phi-4-mini's Persian in Phase 2 despite its undeclared support?
+- **Q8** — if measured decode is below 9 tok/s: fall back to Qwen3-1.7B, accept
+  slower output and lean on RAG, or re-quantize? Deferred until measured.
 
 ## Usage
 

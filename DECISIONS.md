@@ -204,3 +204,107 @@ baseline is locked.
 available). Asserting quality here would be fabrication.
 **Trade-off:** The Phase 1 recommendation is provisional and may be overturned.
 **Reversal:** n/a — this is the correct standing policy.
+
+---
+
+## D-0013 — Model revisions pinned by commit SHA
+**Date:** 2026-08-10 · **Phase:** 2 · **Status:** Active
+
+Baseline is pinned to exact HuggingFace commits, not to `main`:
+
+- `Qwen/Qwen3-4B-Instruct-2507` @ `cdbee75f17c01a7cc42f958dc650907174af0554`
+- `Qwen/Qwen3-1.7B` (fallback) @ `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e`
+
+**Why:** `main` is mutable. A silent re-upload of weights or a tokenizer fix
+would invalidate every measurement taken against it, and the change would be
+invisible in our logs. Section 0B's measurement discipline is meaningless if
+the measured artifact can change underneath it.
+**Trade-off:** Upstream fixes require a deliberate revision bump.
+**Reversal:** Bump the pin explicitly and re-run the baseline.
+
+---
+
+## D-0014 — Calculation engine is stdlib-only
+**Date:** 2026-08-10 · **Phase:** 2 · **Status:** Active
+
+`src/calc/` uses no third-party packages — no numpy, no scipy, no pandas.
+
+**Why:** The target is a Windows 11 machine with no build toolchain. A
+dependency that fails to compile is a broken tool, and the failure would land
+at the worst moment. The calculations here are O(n) over small series;
+vectorization buys nothing at this scale.
+**Trade-off:** Some routines are slower than a numpy equivalent and must be
+hand-written. Irrelevant for typical inputs.
+**Reversal:** If Phase 3+ needs large matrix work, isolate that in a separate
+module with its own dependency, leaving `src/calc/` clean.
+
+---
+
+## D-0015 — Tests must kill seeded defects, not merely pass
+**Date:** 2026-08-10 · **Phase:** 2 · **Status:** Active · **Severity:** High
+
+Every calculation test derives its expected value from a closed form, hand
+arithmetic, or an implementation-independent invariant — never by re-running
+the formula under test. A mutation battery (`tests/mutation_test.sh`) seeds 13
+realistic defects; all 13 must fail the suite.
+
+**Why:** The suite passed 53/53 on first run, which is exactly when a test
+suite is least trustworthy. Mutation testing found two real gaps:
+  1. The Sortino test did **not** catch the downside-count divisor bug — the
+     very bug the source comments claim to guard against.
+  2. Removing `abs()` from `position_size` went undetected, so a short trade
+     (stop above entry) would have returned a **negative** position size.
+Both were caught by seeding the defect, not by reading the code.
+**Trade-off:** Writing discriminating tests is slower than writing passing ones.
+**Reversal:** none — this is standing policy for all future calculation work.
+
+---
+
+## D-0016 — Persian numerals are parsed deterministically, never by the model
+**Date:** 2026-08-10 · **Phase:** 2 · **Status:** Active · **Severity:** High
+
+`src/calc/persian_num.py` converts Persian/Arabic-Indic digits and separators
+to machine numbers before any calculation. The model never converts a numeral.
+
+**Why:** Phase 1 MEASURED that the selected tokenizer spends 2 tokens per
+Persian digit and splits `۱٬۲۳۴٬۵۶۷` into 16 tokens. Digit fragmentation drives
+arithmetic error. Worse, U+066B (٫ decimal) and U+066C (٬ thousands) are
+visually near-identical: misreading one as the other turns 8.4 into 8400.
+**Trade-off:** Genuinely ambiguous input (e.g. `1,5`) is REFUSED rather than
+guessed, which will occasionally annoy a user. That is the correct failure
+direction for a financial tool.
+**Reversal:** none anticipated.
+
+---
+
+## D-0017 — Tool layer is whitelist-only and contains no execution capability
+**Date:** 2026-08-10 · **Phase:** 2 · **Status:** Active · **Severity:** Critical
+
+`src/tools/registry.py` dispatches only registered names. There is no `eval`,
+no dynamic import, and no order/broker/execution tool of any kind. A test
+asserts that none of `place_order`, `submit_order`, `buy`, `sell`,
+`execute_trade`, `cancel_order`, `broker_connect`, `enable_live_trading` is
+registered.
+
+**Why:** Section 10 requires live trading to be impossible, not merely
+disabled. The strongest guarantee is that no code path to an order exists.
+A flag can be flipped by a bug or an injection; an absent capability cannot.
+**Trade-off:** Phase 11 must add execution behind its own gates rather than
+un-commenting something here.
+**Reversal:** Only via the Phase 11 gate, with the two-phase preview→commit
+protocol, kill switch, and idempotency keys of Section 10.
+
+---
+
+## D-0018 — Tool failures propagate; the model may not substitute a number
+**Date:** 2026-08-10 · **Phase:** 2 · **Status:** Active
+
+`call_tool` returns `{"ok": false, "error": ..., "guidance": ...}` on failure.
+The guidance string explicitly instructs the model to report the refusal and
+NOT to substitute an estimated value.
+
+**Why:** The dangerous failure is not a crash — it is a tool erroring while the
+model quietly fills the gap with a plausible-looking number. That converts a
+loud failure into a silent fabrication, which Section 0B forbids.
+**Trade-off:** More refusals surface to the user.
+**Reversal:** none.

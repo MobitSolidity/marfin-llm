@@ -1,6 +1,6 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": 1,
+  "current_phase": 2,
   "phase_status": "PASS",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
@@ -96,8 +96,7 @@
     "D-0009 Q1-Q5 answered; scope set to full execution ambition, Iran data descoped, 16K context"
   ],
   "open_questions": [
-    "Q6: RAM type/speed DDR4-3200 vs DDR5-4800? ~1.5x tok/s swing; blocks Phase 2 threshold.",
-    "Q7: Test Phi-4-mini Persian in Phase 2 despite undeclared support? Recommended yes."
+    "Q8: if measured decode < 9 tok/s, prefer (a) fallback 1.7B, (b) accept slower + lean on RAG, or (c) re-quantize? Deferred until measured."
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -168,7 +167,7 @@
     "status": "NONE - no measurements possible in this environment",
     "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED."
   },
-  "next_phase": 2,
+  "next_phase": 3,
   "next_phase_name": "Baseline and Deterministic Tools",
   "next_phase_viable_in_sandbox": true,
   "next_phase_note": "Phase 1 is research (HuggingFace, licenses, sizing) and loads no model, so finding F1 does not block it.",
@@ -178,7 +177,9 @@
     "Q2": "16K context",
     "Q3": "(a) descope Iranian market data",
     "Q4": "all - analysis + backtest + paper + live (Phase 11)",
-    "Q5": "user machine AND this sandbox"
+    "Q5": "user machine AND this sandbox",
+    "Q6_ram_type": "DDR4-3200 (dual-channel, 51.2 GB/s theoretical peak)",
+    "Q7_test_phi4_persian": "No - leave Persian-alternative testing aside for now"
   },
   "phase_1": {
     "status": "PASS (provisional on Phase 2 Persian generation test)",
@@ -234,11 +235,83 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0012",
+  "decisions_logged": "D-0001..D-0018",
   "risks_new": [
-    "R10 primary Persian vendor-claimed not tested",
-    "R11 license must be audited per-model, not per-family",
-    "R12 RAM bandwidth unknown (Q6) blocks Phase 2 tok/s threshold"
+    "R10 Persian generation untested (OPEN)",
+    "R13 tests may not discriminate - MITIGATED by mutation battery",
+    "R14 SS.5.3 calculation coverage incomplete (OPEN)",
+    "R15 stale bytecode can invalidate verification - MITIGATED"
   ],
-  "awaiting_approval_for": "Phase 2 - Environment and Runtime Setup"
+  "awaiting_approval_for": "Phase 3 - Data Pipeline and Financial RAG",
+  "phase_2": {
+    "status": "PASS (deterministic half built+verified; model half is a verified plan)",
+    "model_revision_pinned": {
+      "primary": {
+        "repo": "Qwen/Qwen3-4B-Instruct-2507",
+        "sha": "cdbee75f17c01a7cc42f958dc650907174af0554"
+      },
+      "fallback": {
+        "repo": "Qwen/Qwen3-1.7B",
+        "sha": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+      }
+    },
+    "chat_template": "VALIDATED by rendering; tool-schema injection asserted in tests",
+    "calc_engine": {
+      "module": "src/calc/returns_risk.py",
+      "functions": 21,
+      "deps": "stdlib only",
+      "coverage": "returns+risk complete; valuation/technical/fixed-income/derivatives NOT built (R14)"
+    },
+    "persian_numerals": {
+      "module": "src/calc/persian_num.py",
+      "verified": "U+066B decimal vs U+066C thousands disambiguated; ambiguous input refused"
+    },
+    "tool_layer": {
+      "module": "src/tools/registry.py",
+      "tools": 21,
+      "whitelist_only": true,
+      "execution_capability": "NONE - asserted by test"
+    },
+    "tests": {
+      "calc": 57,
+      "tools": 42,
+      "total": 99,
+      "mutations_seeded": 13,
+      "mutations_killed": 13,
+      "gaps_found_by_mutation": [
+        "sortino downside-count divisor",
+        "position_size/risk_reward missing abs()"
+      ],
+      "hazard_recorded": "stale .pyc invalidated a mutation run; harness now clears cache"
+    },
+    "eval_set": {
+      "file": "evals/bilingual_eval_v1.jsonl",
+      "cases": 21,
+      "en": 10,
+      "fa": 10,
+      "mixed": 1
+    },
+    "throughput_estimate": {
+      "label": "ESTIMATED",
+      "mem": "DDR4-3200",
+      "peak_gbs": 51.2,
+      "primary_decode_tps_typical": 14.7,
+      "fallback_decode_tps_typical": 29.0
+    },
+    "thresholds_proposed": {
+      "decode_tps": 9.0,
+      "peak_rss_gib": 12.0
+    },
+    "baseline_harness": "scripts/run_baseline.py (run on target i5-12400)",
+    "not_measured": [
+      "decode_tps_actual",
+      "peak_rss_actual",
+      "persian_generation_quality",
+      "tool_calling_accuracy",
+      "eval_pass_rate"
+    ]
+  },
+  "risks_closed": [
+    "R12 RAM bandwidth unknown - closed by Q6 answer"
+  ]
 }
