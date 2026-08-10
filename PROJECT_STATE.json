@@ -1,9 +1,9 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": 0,
-  "phase_status": "CONDITIONAL_PASS",
+  "current_phase": 1,
+  "phase_status": "PASS",
   "user_approval_required": true,
-  "conditional_pass_reason": "Capability discovery complete and Phase 0 acceptance criteria met. Conditions: (1) user inputs Q1-Q5 outstanding; (2) finding F1 - sandbox has 0.60 GiB available RAM and cannot load any in-scope model, so measurement phases 2/7/8/8A must run on other hardware.",
+  "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
   "model_revision": null,
   "hardware_profile": {
@@ -16,7 +16,7 @@
       "cpu_model": "Intel(R) Xeon(R) Processor @ 2.50GHz",
       "cpu_cores": 2,
       "ram_total_gib": 0.96,
-      "ram_available_gib": 0.60,
+      "ram_available_gib": 0.6,
       "swap_gib": 0.12,
       "disk_available_gib": 20,
       "gpu": "none",
@@ -26,12 +26,17 @@
     "deployment_target": {
       "role": "inference",
       "measured": false,
-      "status": "UNKNOWN - awaiting user answer Q1",
-      "assumed_ram_gib": 16,
-      "assumed_cpu": "modern 6-8 core x86-64 or Apple Silicon",
-      "assumed_gpu": "none",
-      "assumed_context": 8192,
-      "label": "ASSUMPTION per SYSTEM_PROMPT.md Section 2 fallback"
+      "status": "USER_SUPPLIED (specs stated, not yet benchmarked)",
+      "ram_gib": 16,
+      "cpu_model": "Intel Core i5-12400",
+      "cpu_microarch": "Alder Lake (12th gen)",
+      "cpu_p_cores": 6,
+      "cpu_e_cores": 0,
+      "cpu_threads": 12,
+      "os": "Windows 11",
+      "gpu": "none",
+      "context_target": 16384,
+      "unknown_critical": "RAM type/speed (DDR4-3200 vs DDR5-4800) NOT stated - dominant factor for CPU tok/s"
     }
   },
   "active_mode": "ANALYSIS_ONLY",
@@ -87,14 +92,12 @@
     "D-0005 SEC EDGAR retained after User-Agent re-probe",
     "D-0006 Persian data access separated from Persian language capability",
     "D-0007 No credentials until a secret vault exists",
-    "D-0008 Fine-tuning deferred pending demonstrated need"
+    "D-0008 Fine-tuning deferred pending demonstrated need",
+    "D-0009 Q1-Q5 answered; scope set to full execution ambition, Iran data descoped, 16K context"
   ],
   "open_questions": [
-    "Q1 Target deployment hardware (RAM, CPU, OS)",
-    "Q2 Desired context length (8K / 16K / 32K)",
-    "Q3 Persian-market data strategy: (a) descope, (b) user-supplied exports, (c) legal review of access path",
-    "Q4 Execution ambition: analysis-only / +backtest / +paper / +live",
-    "Q5 Where measurement phases 2/7/8/8A should run"
+    "Q6: RAM type/speed DDR4-3200 vs DDR5-4800? ~1.5x tok/s swing; blocks Phase 2 threshold.",
+    "Q7: Test Phi-4-mini Persian in Phase 2 despite undeclared support? Recommended yes."
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -147,7 +150,7 @@
     }
   ],
   "acceptance_thresholds": {
-    "status": "PROPOSED - awaiting user approval",
+    "status": "APPROVED by user 2026-08-10",
     "model_file_size_q4km_gib_max": 4.0,
     "peak_rss_8k_gib_max": 6.0,
     "generation_tokens_per_sec_min": 8,
@@ -165,9 +168,77 @@
     "status": "NONE - no measurements possible in this environment",
     "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED."
   },
-  "next_phase": 1,
-  "next_phase_name": "Hardware and Base-Model Selection",
+  "next_phase": 2,
+  "next_phase_name": "Baseline and Deterministic Tools",
   "next_phase_viable_in_sandbox": true,
   "next_phase_note": "Phase 1 is research (HuggingFace, licenses, sizing) and loads no model, so finding F1 does not block it.",
-  "last_updated": "2026-08-10"
+  "last_updated": "2026-08-10",
+  "user_answers": {
+    "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
+    "Q2": "16K context",
+    "Q3": "(a) descope Iranian market data",
+    "Q4": "all - analysis + backtest + paper + live (Phase 11)",
+    "Q5": "user machine AND this sandbox"
+  },
+  "phase_1": {
+    "status": "PASS (provisional on Phase 2 Persian generation test)",
+    "primary_model": {
+      "repo": "Qwen/Qwen3-4B-Instruct-2507",
+      "license": "apache-2.0",
+      "gated": false,
+      "params": 4022468096,
+      "n_layer": 36,
+      "n_kv_head": 8,
+      "head_dim": 128,
+      "native_ctx": 262144,
+      "quant": "Q4_K_M",
+      "est_total_gib_at_16k": 5.12,
+      "pct_of_budget": 43,
+      "tokenizer_ratio_fa_en": 2.81
+    },
+    "alternative_1": {
+      "repo": "microsoft/Phi-4-mini-instruct",
+      "license": "mit",
+      "tokenizer_ratio_fa_en": 1.6,
+      "est_total_gib_at_16k": 4.77,
+      "caveat": "Persian NOT in declared language list"
+    },
+    "alternative_2": {
+      "repo": "HuggingFaceTB/SmolLM3-3B",
+      "license": "apache-2.0",
+      "tokenizer_ratio_fa_en": 1.61,
+      "est_total_gib_at_16k": 3.46,
+      "caveat": "Persian NOT in declared language list"
+    },
+    "fallback": {
+      "repo": "Qwen/Qwen3-1.7B",
+      "license": "apache-2.0",
+      "tokenizer_ratio_fa_en": 2.81,
+      "est_total_gib_at_16k": 3.5,
+      "note": "identical tokenizer to primary"
+    },
+    "disqualified": {
+      "repo": "Qwen/Qwen2.5-3B-Instruct",
+      "reason": "qwen-research license = NON-COMMERCIAL only",
+      "decision": "D-0010"
+    },
+    "excluded_gated": [
+      "meta-llama/Llama-3.2-3B-Instruct",
+      "google/gemma-3-4b-it"
+    ],
+    "first_measured_result": "Persian tokenizer efficiency; ratios 1.60-3.16; 135% spread",
+    "not_measured": [
+      "tokens_per_sec",
+      "persian_generation_quality",
+      "real_gguf_file_sizes",
+      "memory_under_load"
+    ]
+  },
+  "decisions_logged": "D-0001..D-0012",
+  "risks_new": [
+    "R10 primary Persian vendor-claimed not tested",
+    "R11 license must be audited per-model, not per-family",
+    "R12 RAM bandwidth unknown (Q6) blocks Phase 2 tok/s threshold"
+  ],
+  "awaiting_approval_for": "Phase 2 - Environment and Runtime Setup"
 }

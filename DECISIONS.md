@@ -127,3 +127,80 @@ fix and can mask.
 **Trade-off:** Delays any custom-model work by several phases.
 **Reversal:** Phase 4 evidence of failures that tools and RAG demonstrably
 cannot address.
+
+---
+
+## D-0009 — Deployment target fixed: i5-12400 / 16 GiB / Win11 / no GPU, 16K context
+**Date:** 2026-08-10 · **Phase:** 1 · **Status:** Active
+
+User-supplied answers to Phase 0 questions Q1–Q4 are now binding constraints:
+16 GiB RAM, Intel Core i5-12400 (Alder Lake, 6 P-cores / 12 threads, no
+E-cores), Windows 11, no GPU; 16K context; Iranian market data descoped;
+execution ambition extends through live trading (Phase 11).
+
+**Why:** Sizing, quantization, and model-size choices are meaningless without a
+fixed target. 6 real cores with no E-core scheduling noise is a favourable
+CPU-inference profile; the absence of a GPU makes memory bandwidth, not FLOPs,
+the limiting factor.
+**Trade-off:** 16K context costs materially more KV cache than 8K, which is why
+`num_key_value_heads` became a first-order selection criterion.
+**Reversal:** User changes hardware or context requirement.
+
+---
+
+## D-0010 — Qwen2.5-3B-Instruct disqualified on licence, not on merit
+**Date:** 2026-08-10 · **Phase:** 1 · **Status:** Active · **Severity:** High
+
+`Qwen/Qwen2.5-3B-Instruct` is removed from candidacy. Its licence is
+`qwen-research`, whose LICENSE file states: *"Non-Commercial shall mean for
+research or evaluation purposes only"* and grants rights **"FOR NON-COMMERCIAL
+PURPOSES ONLY"** (VERIFIED, clauses 1.i and 2.a of the vendor's own LICENSE).
+
+**Why:** It was otherwise a strong fit — uniquely, `num_key_value_heads: 2`
+gives it the smallest KV cache of any 3B-class candidate (0.56 GiB at 16K vs
+2.25 GiB for Qwen3-4B). A financial assistant is a plausible commercial artifact
+and the project cannot rest on a research-only licence.
+**Trade-off:** Loses the most memory-efficient 3B option.
+**Reversal:** User confirms in writing that use is permanently non-commercial
+research/evaluation, or Alibaba relicenses.
+
+Note: every other Qwen candidate examined (Qwen3-4B-Instruct-2507, Qwen3-1.7B,
+Qwen2.5-1.5B-Instruct) is Apache-2.0. This restriction is specific to certain
+Qwen2.5 sizes, not to Qwen generally.
+
+---
+
+## D-0011 — Tokenizer efficiency must not be selected on in isolation
+**Date:** 2026-08-10 · **Phase:** 1 · **Status:** Active · **Severity:** High
+
+Persian tokenizer efficiency was MEASURED and the spread is large (best 1.60,
+worst 3.16). The two most efficient tokenizers — Phi-4-mini (1.60) and SmolLM3
+(1.61) — belong to models that **do not list Persian as a supported language**
+(VERIFIED from each vendor's `language` card field). Tokenizer efficiency will
+therefore be treated as a *cost* metric, never as a proxy for Persian
+*competence*.
+
+**Why:** A model that encodes Persian cheaply but generates it poorly is worse
+than one that encodes it expensively and generates it well. Selecting on the
+measured number alone would have chosen a model with no declared Persian
+support — precisely the "measured but wrong metric" failure the prompt's
+labelling discipline exists to prevent.
+**Trade-off:** The stronger-Persian candidate carries ~76% higher Persian token
+cost, reducing effective 16K context from ~48.7K to ~27.8K Persian characters.
+**Reversal:** Phase 2 generation-quality testing shows a low-ratio model in fact
+produces competent Persian.
+
+---
+
+## D-0012 — Persian generation quality is a Phase 2 gate, not a Phase 1 assumption
+**Date:** 2026-08-10 · **Phase:** 1 · **Status:** Active
+
+No Persian *generation* quality claim is made in Phase 1. Selection rests on
+VERIFIED vendor language declarations plus MEASURED tokenizer cost. Actual
+Persian financial fluency must be tested on the target machine before the
+baseline is locked.
+
+**Why:** This sandbox cannot load any candidate (Phase 0 finding F1: 0.60 GiB
+available). Asserting quality here would be fabrication.
+**Trade-off:** The Phase 1 recommendation is provisional and may be overturned.
+**Reversal:** n/a — this is the correct standing policy.

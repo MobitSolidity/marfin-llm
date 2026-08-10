@@ -11,7 +11,14 @@ paper/live trading controls.
 |---|---|
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
-| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 0. |
+| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 1. |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0012). |
+| `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
+| `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
+| `docs/phase-reports/` | Per-phase review reports. |
+| `scripts/size_from_config.py` | Memory sizing computed from the committed configs. |
+| `scripts/measure_tokenizer_efficiency.py` | Persian vs English tokenizer cost measurement. |
+| `scripts/estimate_model_footprint.py` | Generic sizing tool (superseded for Phase 1 by `size_from_config.py`). |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
 ## What This Prompt Defines
@@ -47,18 +54,46 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **0 — Initialization and Capability Discovery** |
-| Status | BLOCKED — awaiting user inputs |
+| Current phase | **1 — Hardware and Base-Model Selection** |
+| Status | PASS (provisional on Phase 2 Persian generation test) |
+| Next | Phase 2 — Environment and Runtime Setup (awaiting approval) |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` |
 | TradingView connector level | 0 |
 
-Open questions blocking Phase 0 completion are tracked in
-`PROJECT_STATE.json`:
+### Target (user-supplied)
 
-- Target hardware (RAM, CPU model/cores, OS)
-- Desired context length
-- Whether broker or market-data provider accounts exist
+16 GiB RAM · Intel Core i5-12400 (6 cores / 12 threads, no GPU) · Windows 11 ·
+16K context · Iranian market data descoped · execution ambition through live
+trading (Phase 11).
+
+### Selected baseline
+
+| Role | Model | Licence | Total @16K |
+|---|---|---|---|
+| **Primary** | `Qwen/Qwen3-4B-Instruct-2507` | apache-2.0 | 5.12 GiB (43% of budget) |
+| Alternative 1 | `microsoft/Phi-4-mini-instruct` | mit | 4.77 GiB |
+| Alternative 2 | `HuggingFaceTB/SmolLM3-3B` | apache-2.0 | 3.46 GiB |
+| Fallback | `Qwen/Qwen3-1.7B` | apache-2.0 | 3.50 GiB |
+
+`Qwen/Qwen2.5-3B-Instruct` was **disqualified**: its `qwen-research` licence is
+non-commercial only (D-0010). Llama-3.2 and Gemma-3 were excluded as
+manual-access gated.
+
+Full reasoning: `docs/phase-reports/phase-1.md`.
+
+### Reproducing the Phase 1 numbers
+
+```bash
+python3 scripts/size_from_config.py --dir configs/model-cards --ram 16 --ctx 16384
+python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
+```
+
+### Open questions
+
+- **Q6** — RAM type/speed (DDR4-3200 vs DDR5-4800)? ~1.5× tokens/sec swing on a
+  GPU-less box; blocks a defensible Phase 2 speed threshold.
+- **Q7** — Test Phi-4-mini's Persian in Phase 2 despite its undeclared support?
 
 ## Usage
 
