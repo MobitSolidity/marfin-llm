@@ -1,0 +1,41 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+configs/broker-accounts.yaml
+
+# Sensitive runtime state
+state/audit/
+state/order_previews/
+state/reconciliation/
+
+# Data
+data/raw/
+data/interim/
+data/processed/
+*.gguf
+*.safetensors
+*.bin
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/

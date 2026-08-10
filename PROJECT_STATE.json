@@ -1,0 +1,34 @@
+{
+  "project_name": "marfin-llm",
+  "current_phase": 0,
+  "phase_status": "BLOCKED",
+  "user_approval_required": true,
+  "selected_base_model": null,
+  "model_revision": null,
+  "hardware_profile": {},
+  "active_mode": "ANALYSIS_ONLY",
+  "live_trading_enabled": false,
+  "capability_manifest_version": null,
+  "risk_policy_version": null,
+  "market_data_providers": [],
+  "broker_adapters": [],
+  "tradingview_connector_level": 0,
+  "artifacts": [
+    "SYSTEM_PROMPT.md",
+    "prompts/master-system-prompt-v2.0.md",
+    "PROJECT_STATE.json"
+  ],
+  "decisions": [
+    "Master system prompt v2.0 committed as the canonical governing document."
+  ],
+  "open_questions": [
+    "Target hardware (RAM, CPU, OS) not yet supplied.",
+    "Desired context length not yet supplied.",
+    "Whether any broker/market-data provider accounts exist."
+  ],
+  "risks": [],
+  "source_checks": [],
+  "benchmark_summary": {},
+  "next_phase": 1,
+  "last_updated": "2026-08-10"
+}
