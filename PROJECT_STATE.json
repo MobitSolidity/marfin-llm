@@ -82,7 +82,19 @@
     "DECISIONS.md",
     "configs/capability-manifest.yaml",
     "docs/phase-reports/phase-0.md",
-    "scripts/estimate_model_footprint.py"
+    "docs/phase-reports/phase-1.md",
+    "docs/phase-reports/phase-2.md",
+    "docs/phase-reports/phase-2a.md",
+    "src/calc/returns_risk.py",
+    "src/calc/valuation.py",
+    "src/calc/technicals.py",
+    "src/calc/fixed_income.py",
+    "src/calc/derivatives.py",
+    "src/calc/persian_num.py",
+    "src/tools/registry.py",
+    "evals/bilingual_eval_v1.jsonl",
+    "scripts/estimate_model_footprint.py",
+    "scripts/run_baseline.py"
   ],
   "decisions": [
     "D-0001 Master prompt v2.0 is canonical",
@@ -96,7 +108,8 @@
     "D-0009 Q1-Q5 answered; scope set to full execution ambition, Iran data descoped, 16K context"
   ],
   "open_questions": [
-    "Q8: if measured decode < 9 tok/s, prefer (a) fallback 1.7B, (b) accept slower + lean on RAG, or (c) re-quantize? Deferred until measured."
+    "Q8: if measured decode < 9 tok/s, prefer (a) fallback 1.7B, (b) accept slower + lean on RAG, or (c) re-quantize? Deferred until measured.",
+    "Q9: tool subsetting strategy for Phase 3 - by family, by router, or shortened descriptions? Forced by D-0023."
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -235,12 +248,14 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0018",
+  "decisions_logged": "D-0001..D-0025",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
-    "R13 tests may not discriminate - MITIGATED by mutation battery",
-    "R14 SS.5.3 calculation coverage incomplete (OPEN)",
-    "R15 stale bytecode can invalidate verification - MITIGATED"
+    "R13 tests may not discriminate - MITIGATED, battery 13->56 defects",
+    "R14 SS.5.3 calculation coverage incomplete - CLOSED 2026-08-10",
+    "R15 stale bytecode can invalidate verification - MITIGATED",
+    "R16 tool schemas cost 54.4% of 16K ctx; Phase 3 needs subsetting (High, OPEN)",
+    "R17 tool-selection accuracy across 84 tools unmeasured (Medium, OPEN)"
   ],
   "awaiting_approval_for": "Phase 3 - Data Pipeline and Financial RAG",
   "phase_2": {
@@ -257,10 +272,16 @@
     },
     "chat_template": "VALIDATED by rendering; tool-schema injection asserted in tests",
     "calc_engine": {
-      "module": "src/calc/returns_risk.py",
-      "functions": 21,
+      "modules": [
+        "returns_risk",
+        "valuation",
+        "technicals",
+        "fixed_income",
+        "derivatives"
+      ],
+      "functions": 84,
       "deps": "stdlib only",
-      "coverage": "returns+risk complete; valuation/technical/fixed-income/derivatives NOT built (R14)"
+      "coverage": "all five SS.5.3 families complete (R14 closed in Phase 2a)"
     },
     "persian_numerals": {
       "module": "src/calc/persian_num.py",
@@ -268,7 +289,7 @@
     },
     "tool_layer": {
       "module": "src/tools/registry.py",
-      "tools": 21,
+      "tools": 84,
       "whitelist_only": true,
       "execution_capability": "NONE - asserted by test"
     },
@@ -312,6 +333,60 @@
     ]
   },
   "risks_closed": [
-    "R12 RAM bandwidth unknown - closed by Q6 answer"
-  ]
+    "R12 RAM bandwidth unknown - closed by Q6 answer",
+    "R14 SS.5.3 coverage incomplete - closed by Phase 2a"
+  ],
+  "phase_2a": {
+    "name": "Completing Section 5.3 deterministic calculations (R14)",
+    "status": "PASS",
+    "trigger": "user instruction: 'build out R14'",
+    "modules_added": {
+      "src/calc/valuation.py": 26,
+      "src/calc/technicals.py": 13,
+      "src/calc/fixed_income.py": 11,
+      "src/calc/derivatives.py": 13
+    },
+    "deps": "stdlib only; one-way imports from returns_risk, no cycles",
+    "tools_before": 21,
+    "tools_after": 84,
+    "tests": {
+      "returns_risk": 57,
+      "valuation": 78,
+      "technicals": 81,
+      "fixed_income": 69,
+      "derivatives": 92,
+      "tools": 99,
+      "total": 476
+    },
+    "mutations": {
+      "seeded": 56,
+      "killed": 56,
+      "survived": 0,
+      "skipped": 0,
+      "first_run": "53/56 - 3 survived",
+      "gaps_found": [
+        "convexity: f^2 divisor unverified (all tests were relative)",
+        "delta: e^-qT unverified (all tests used q=0)",
+        "vega: sqrt(T) unverified (all tests used T=1.0)"
+      ],
+      "root_cause": "every test used a value where the missing factor equals 1"
+    },
+    "context_cost": {
+      "label": "MEASURED",
+      "method": "real Qwen3 tokenizer + real chat template",
+      "tokens_no_tools": 34,
+      "tokens_84_tools": 8954,
+      "tool_block_tokens": 8920,
+      "pct_of_16k": 54.4,
+      "mean_tokens_per_tool": 106.2,
+      "consequence": "tool subsetting REQUIRED for Phase 3 (D-0023)"
+    },
+    "execution_capability": "NONE - asserted across all 84 tools",
+    "not_measured": [
+      "persian_generation_quality",
+      "decode_tps_actual",
+      "tool_selection_accuracy_across_84_tools",
+      "numerical_behaviour_at_extremes"
+    ]
+  }
 }

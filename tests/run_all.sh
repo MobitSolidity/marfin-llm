@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run the full Phase 2 verification suite.
+# Run the full deterministic-calculation verification suite.
 #   ./tests/run_all.sh          unit tests only
 #   ./tests/run_all.sh --mutate unit tests + mutation battery (slower)
 cd "$(dirname "$0")/.."
@@ -8,28 +8,50 @@ cd "$(dirname "$0")/.."
 find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null
 
 fail=0
+total_pass=0
 echo "=============================================================="
-echo "PHASE 2 VERIFICATION SUITE"
+echo "DETERMINISTIC CALCULATION VERIFICATION SUITE"
 echo "=============================================================="
 
-for t in tests/test_returns_risk.py tests/test_tools.py; do
+SUITES="tests/test_returns_risk.py \
+tests/test_valuation.py \
+tests/test_technicals.py \
+tests/test_fixed_income.py \
+tests/test_derivatives.py \
+tests/test_tools.py"
+
+for t in $SUITES; do
   echo
   echo ">>> $t"
-  if python3 "$t" | tail -3 | grep -q "0 failed"; then
-    python3 "$t" 2>&1 | grep "^RESULT"
-  else
-    python3 "$t" 2>&1 | grep -E "^  FAIL|^RESULT"
+  # Run ONCE and keep the output. Running twice doubled the cost and could
+  # mask a nondeterministic failure by reporting a different run than it tested.
+  out=$(python3 "$t" 2>&1)
+  status=$?
+  echo "$out" | grep -E "^  FAIL|^  SKIP|^  INFO"
+  echo "$out" | grep "^RESULT"
+  n=$(echo "$out" | sed -n 's/^RESULT: \([0-9]*\) passed.*/\1/p')
+  total_pass=$((total_pass + ${n:-0}))
+  if [ $status -ne 0 ]; then
     fail=1
   fi
 done
+
+echo
+echo "  TOTAL: $total_pass assertions passed across 6 suites"
 
 if [ "$1" = "--mutate" ]; then
   echo
   echo ">>> mutation battery"
   out=$(./tests/mutation_test.sh 2>&1)
-  echo "$out" | grep -E "SURVIVED|SKIPPED" && fail=1
-  echo "  killed $(echo "$out" | grep -c killed)/13 seeded defects"
-  echo "$out" | grep "restored intact" || { echo "  ERROR: source not restored"; fail=1; }
+  mut_status=$?
+  # Read the counts the battery itself reports rather than hardcoding them;
+  # the previous hardcoded "/13" silently understated a 56-defect battery.
+  echo "$out" | grep -E "^ +(seeded|killed|survived|skipped):"
+  # A surviving or skipped mutant means the suite did not discriminate.
+  echo "$out" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$out" | grep -q "restored intact" || {
+    echo "  ERROR: source not restored to original state"; fail=1; }
+  [ $mut_status -ne 0 ] && fail=1
 fi
 
 echo

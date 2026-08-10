@@ -308,3 +308,137 @@ model quietly fills the gap with a plausible-looking number. That converts a
 loud failure into a silent fabrication, which Section 0B forbids.
 **Trade-off:** More refusals surface to the user.
 **Reversal:** none.
+
+## D-0019 — Section 5.3 completed as four separate modules, stdlib only
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active
+
+`valuation.py` (26 fn), `technicals.py` (13), `fixed_income.py` (11),
+`derivatives.py` (13) join `returns_risk.py` (21). All import `CalcResult` and
+the shared validators from `returns_risk`; the dependency graph is one-way with
+no cycles. No third-party numerics.
+
+**Why:** Section 5.3 enumerates five families; only one existed, which was risk R14.
+Separate modules keep each family's conventions (day counts, smoothing
+constants, Greeks) visible where they apply instead of buried in one file.
+Stdlib-only keeps the runtime installable on a Windows CPU box with no
+compiler toolchain.
+**Trade-off:** Hand-rolled `_norm_cdf` instead of `scipy.stats.norm`; mitigated
+by `math.erf`, which is exact to double precision.
+**Reversal:** Low cost — modules are independent.
+
+---
+
+## D-0020 — Indicators return the LATEST reading, not the full series
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active
+
+Each indicator has two layers: `_xxx_series()` returning a plain list, and
+`xxx()` returning a `CalcResult` holding only the most recent value.
+
+**Why:** A 500-bar RSI array is ~500 numbers the model must re-read on every
+turn. At 16K context that is unaffordable, and the model almost always reasons
+about the current reading. The series layer still exists so tests can verify
+every point, not just the last one.
+**Trade-off:** Divergence/crossover analysis over history needs the series
+layer, which is not exposed as a tool yet.
+**Reversal:** Add a `lookback` argument returning the final N values.
+
+---
+
+## D-0021 — Wilder smoothing (alpha = 1/n) is canonical for RSI, ATR and ADX
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active
+
+These three use `_wilder_smooth` (alpha = 1/n), not EMA (alpha = 2/(n+1)).
+`rsi()` is pinned to Wilder's own published dataset: 70.46413502109705.
+
+**Why:** This is the single most common source of "my indicator disagrees with
+my platform" disputes. Wilder's convention is what TradingView, MetaTrader and
+Bloomberg report, so matching it is what makes our numbers checkable against
+the user's screen.
+**Trade-off:** Differs from a naive EMA implementation; the discrepancy is
+intentional and documented in each function's notes.
+**Reversal:** none — changing it would break agreement with every platform.
+
+---
+
+## D-0022 — Bisection (not Newton) for YTM and implied volatility, plus a
+## plausibility gate on the solved root
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active · **Severity:** High
+
+`_solve_yield` and `implied_volatility` bisect over a bracketed interval.
+`_solve_yield` then REFUSES any root below `MIN_PLAUSIBLE_YIELD = -0.50`.
+
+**Why (method):** Newton needs a derivative that collapses toward zero for deep
+ITM/OTM options and can diverge or land on a spurious root. Price is monotonic
+in yield, so bisection cannot.
+**Why (the gate):** Found while investigating a failing test. A fat-fingered
+price of 1e9 IS solvable — at a yield of -99.52%. Bisection returned it with
+full confidence. The arithmetic was correct and the answer was meaningless: a
+laundered input error, exactly the silent-wrong-number failure this engine
+exists to prevent. The test that "failed" was itself wrong; the investigation
+still surfaced a real hazard.
+**Trade-off:** Genuine deep-negative yields are refused. Verified the gate does
+not over-reach: a real -0.4% sovereign yield still computes.
+**Reversal:** Raise the constant if a legitimate case appears.
+
+---
+
+## D-0023 — 84 tool schemas cost 8,920 tokens (54.4% of 16K); tool subsetting
+## is REQUIRED before Phase 3 adds retrieval
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active · **Severity:** High
+
+MEASURED with the real Qwen3 tokenizer against the real chat template: the
+rendered tool block costs 8,920 tokens, 106.2 tokens/tool. Two tests in
+`test_tools.py` guard this from both sides — it must stay under 70% of context,
+and it is asserted to be OVER 25% so the number cannot quietly stop mattering.
+
+**Why:** This is the first hard architectural constraint produced by measurement
+rather than estimation. Phase 3 adds retrieved documents to the same 16K window.
+Exposing all 84 tools plus RAG context plus conversation history does not fit.
+**Consequence for Phase 3:** tools must be selected per query (by family, or by
+a routing step) rather than broadcast wholesale. Descriptions may also need
+shortening — the five costliest tools are ~160 tokens each.
+**Trade-off:** Subsetting risks hiding the right tool from the model; the
+selector becomes a correctness-relevant component and needs its own tests.
+**Reversal:** Not needed if the context target is raised, but 16K is fixed by
+the user's 16 GB RAM (Q2).
+
+---
+
+## D-0024 — Margin and liquidation are labelled ESTIMATED, never COMPUTED
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active
+
+`margin_estimate` and `liquidation_estimate` carry `label="ESTIMATED"`; a test
+asserts the label survives the dispatch boundary.
+
+**Why:** Every other function here is exact given its inputs. These two are not:
+real margin depends on the broker's schedule, funding, fees and volatility
+add-ons. A trader who treats a computed liquidation price as exact gets
+liquidated slightly before it. Section 0B forbids presenting an estimate as a
+measurement, and the label is the mechanism that enforces it.
+**Trade-off:** none.
+**Reversal:** Only with a real broker margin schedule, which is Phase 11.
+
+---
+
+## D-0025 — Mutation battery extended to 56 defects across five modules
+**Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active · **Severity:** High
+
+First run: 53/56 killed, 3 survived. After closing the gaps: 56/56, 0 skipped,
+all sources restored intact.
+
+All three survivors shared one root cause — **each test happened to use a value
+where the missing factor equals 1**:
+- `convexity` with `f^2` deleted survived because every convexity test was
+  RELATIVE (longer > shorter). A uniform scaling error preserves all orderings.
+  Closed with absolute closed-form anchors at TWO different frequencies.
+- `delta` with `e^-qT` deleted survived because every delta test used `q=0`.
+  Closed with a finite-difference check at `q=0.05` and dividend-delta parity.
+- `vega` with `sqrt(T)` replaced by `T` survived because every vega test used
+  `T=1.0`. Closed with FD checks at `T=4` and `T=0.25`.
+
+**Why this matters more than the score:** a 100% pass rate on 311 tests told me
+nothing; the mutation battery found three formulas that were right but
+UNVERIFIED, and would have stayed unverified indefinitely. The lesson is now a
+standing rule: never verify a factor at the value where it disappears.
+**Trade-off:** ~18 s per full battery run.
+**Reversal:** none.

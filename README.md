@@ -21,11 +21,15 @@ paper/live trading controls.
 | `scripts/estimate_model_footprint.py` | Generic sizing tool (superseded for Phase 1 by `size_from_config.py`). |
 | `scripts/throughput_ceiling.py` | Bandwidth-bound decode ceiling for the target RAM. |
 | `scripts/run_baseline.py` | On-target baseline harness (speed, RSS, eval set). |
-| `src/calc/returns_risk.py` | Deterministic returns/risk engine, stdlib only. |
+| `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
+| `src/calc/valuation.py` | DCF, DDM, multiples, margins, leverage (26 fns). |
+| `src/calc/technicals.py` | RSI, MACD, ATR, Bollinger, ADX, VWAP … (13 fns). |
+| `src/calc/fixed_income.py` | Bond pricing, YTM, duration, convexity, DV01 (11 fns). |
+| `src/calc/derivatives.py` | Black-Scholes, binomial, implied vol, Greeks (13 fns). |
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
-| `src/tools/registry.py` | Whitelisted tool dispatch; no execution capability. |
+| `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 99 tests plus a mutation battery. |
+| `tests/` | 476 assertions across 6 suites, plus a 56-defect mutation battery. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
 ## What This Prompt Defines
@@ -61,7 +65,7 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **2 — Baseline and Deterministic Tools** |
+| Current phase | **2a — Section 5.3 calculation coverage complete (R14 closed)** |
 | Status | PASS (engine verified; model half is a verified plan) |
 | Next | Phase 3 — Data Pipeline and Financial RAG (awaiting approval) |
 | Active mode | `ANALYSIS_ONLY` |
@@ -84,18 +88,38 @@ Windows 11 · 16K context · Iranian market data descoped.
 
 | Item | Status |
 |---|---|
-| Calculation engine (21 fns) | **VERIFIED** — 99 tests, 13/13 mutations killed |
+| Calculation engine (84 fns, 5 families) | **VERIFIED** — 476 assertions, 56/56 mutations killed |
 | Persian numeral parsing | **VERIFIED** by execution |
-| Chat template + tool schemas | **VERIFIED** by rendering |
+| Chat template + 84 tool schemas | **VERIFIED** by rendering |
 | No execution capability | **VERIFIED** by test |
+| Tool-schema context cost | **MEASURED** — 8,920 tokens = 54.4% of 16K |
 | Decode speed | **ESTIMATED** ~14.7 tok/s — not yet measured |
 | Persian generation quality | **UNKNOWN** — risk R10 |
+| Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 |
+
+The mutation battery matters more than the pass count: the suites were at
+311/311 green when it found three formulas that were correct but **unverified**
+(`convexity` `f²`, `delta` `e^-qT`, `vega` `sqrt(T)`). Each had been tested only
+at a value where the missing factor equals 1. See
+`docs/phase-reports/phase-2a.md`.
 
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 99 unit tests
-./tests/run_all.sh --mutate     # + 13 seeded-defect mutation battery
+./tests/run_all.sh              # 476 assertions across 6 suites
+./tests/run_all.sh --mutate     # + 56 seeded-defect mutation battery (~18 s)
+
+python3 tests/test_valuation.py   # or any single suite
+```
+
+The token-cost check in `test_tools.py` needs the real tokenizer; without it
+that one assertion SKIPs rather than guessing:
+
+```bash
+curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer.json \
+  -o /tmp/qwen3_tokenizer.json
+curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer_config.json \
+  -o /tmp/qwen3_tokcfg.json
 ```
 
 ### Running the baseline (on the target machine, not here)
@@ -120,6 +144,9 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
 
 - **Q8** — if measured decode is below 9 tok/s: fall back to Qwen3-1.7B, accept
   slower output and lean on RAG, or re-quantize? Deferred until measured.
+- **Q9** — how should tools be subset for Phase 3? All 84 schemas consume 54.4%
+  of the 16K window before any user input, and RAG needs the same space.
+  By family, by a routing step, or by shortening descriptions? (D-0023)
 
 ## Usage
 
