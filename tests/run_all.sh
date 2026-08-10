@@ -18,7 +18,8 @@ tests/test_valuation.py \
 tests/test_technicals.py \
 tests/test_fixed_income.py \
 tests/test_derivatives.py \
-tests/test_tools.py"
+tests/test_tools.py \
+tests/test_selector.py"
 
 for t in $SUITES; do
   echo
@@ -37,7 +38,7 @@ for t in $SUITES; do
 done
 
 echo
-echo "  TOTAL: $total_pass assertions passed across 6 suites"
+echo "  TOTAL: $total_pass assertions passed across 7 suites"
 
 if [ "$1" = "--mutate" ]; then
   echo
@@ -52,6 +53,14 @@ if [ "$1" = "--mutate" ]; then
   echo "$out" | grep -q "restored intact" || {
     echo "  ERROR: source not restored to original state"; fail=1; }
   [ $mut_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> selector mutation battery"
+  sel=$(python3 tests/mutate_selector.py 2>&1)
+  sel_status=$?
+  echo "$sel" | grep -E "^ +(seeded|killed|survived|skipped):"
+  echo "$sel" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  [ $sel_status -ne 0 ] && fail=1
 fi
 
 echo

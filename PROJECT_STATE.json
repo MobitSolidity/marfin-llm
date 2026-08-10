@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": 2,
-  "phase_status": "PASS",
+  "current_phase": 3,
+  "phase_status": "IN_PROGRESS",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -108,8 +108,7 @@
     "D-0009 Q1-Q5 answered; scope set to full execution ambition, Iran data descoped, 16K context"
   ],
   "open_questions": [
-    "Q8: if measured decode < 9 tok/s, prefer (a) fallback 1.7B, (b) accept slower + lean on RAG, or (c) re-quantize? Deferred until measured.",
-    "Q9: tool subsetting strategy for Phase 3 - by family, by router, or shortened descriptions? Forced by D-0023."
+    "Q8: if measured decode < 9 tok/s, prefer (a) fallback 1.7B, (b) accept slower + lean on RAG, or (c) re-quantize? Deferred until measured."
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -181,7 +180,7 @@
     "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED."
   },
   "next_phase": 3,
-  "next_phase_name": "Baseline and Deterministic Tools",
+  "next_phase_name": "Data Pipeline and Financial RAG",
   "next_phase_viable_in_sandbox": true,
   "next_phase_note": "Phase 1 is research (HuggingFace, licenses, sizing) and loads no model, so finding F1 does not block it.",
   "last_updated": "2026-08-10",
@@ -248,16 +247,17 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0025",
+  "decisions_logged": "D-0001..D-0029",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
-    "R13 tests may not discriminate - MITIGATED, battery 13->56 defects",
+    "R13 tests may not discriminate - MITIGATED, 71 seeded defects across 6 modules",
     "R14 SS.5.3 calculation coverage incomplete - CLOSED 2026-08-10",
     "R15 stale bytecode can invalidate verification - MITIGATED",
-    "R16 tool schemas cost 54.4% of 16K ctx; Phase 3 needs subsetting (High, OPEN)",
-    "R17 tool-selection accuracy across 84 tools unmeasured (Medium, OPEN)"
+    "R16 tool schemas cost 54.4% of 16K ctx - MITIGATED by selector (mean 15.6%)",
+    "R17 tool-selection accuracy across 84 tools - PARTIALLY MITIGATED: router recall 24/24 measured offline; MODEL-side selection still unmeasured",
+    "R18 router keyword lists need maintenance as tools are added (Medium, OPEN)"
   ],
-  "awaiting_approval_for": "Phase 3 - Data Pipeline and Financial RAG",
+  "awaiting_approval_for": "Phase 3A - Market Data, TradingView, and Broker Design (after Phase 3 completes)",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -388,5 +388,44 @@
       "tool_selection_accuracy_across_84_tools",
       "numerical_behaviour_at_extremes"
     ]
+  },
+  "q9_resolution": {
+    "question": "How should tools be subset for Phase 3?",
+    "answer": "Deterministic bilingual family router, recall-first (D-0026)",
+    "module": "src/tools/selector.py",
+    "rejected": {
+      "shorten_descriptions": "descriptions are only 1199/8920 tokens = 13%; parameters are 5602 = 63%",
+      "model_based_router": "needs a model call and its own context budget"
+    },
+    "measured": {
+      "label": "MEASURED",
+      "all_tools_tokens": 8920,
+      "mean_subset_tokens": 2552,
+      "mean_pct_of_16k": 15.6,
+      "worst_case_tokens": 4479,
+      "mean_saving_tokens": 6368,
+      "recall_eval_set": "10/10",
+      "recall_held_out": "14/14",
+      "estimate_bias": "conservative; over-predicts by <=154 tokens, never under"
+    },
+    "defects_found_by_held_out_testing": [
+      "'iv' matched inside 'relative' (word-boundary bug)",
+      "jargon-free phrasing invisible ('what is this company worth')",
+      "Persian ZWNJ compounds never matched (one-sided normalisation)"
+    ],
+    "mutations": {
+      "seeded": 15,
+      "killed": 15,
+      "survived": 0,
+      "skipped": 0
+    }
+  },
+  "phase_2b": {
+    "name": "Q9 resolution: tool subsetting",
+    "status": "PASS",
+    "tests_total": 545,
+    "suites": 7,
+    "mutations_total": 71,
+    "mutations_killed": 71
   }
 }

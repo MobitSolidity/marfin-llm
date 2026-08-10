@@ -442,3 +442,98 @@ UNVERIFIED, and would have stayed unverified indefinitely. The lesson is now a
 standing rule: never verify a factor at the value where it disappears.
 **Trade-off:** ~18 s per full battery run.
 **Reversal:** none.
+
+## D-0026 — Q9 RESOLVED: deterministic bilingual family router, recall-first
+**Date:** 2026-08-10 · **Phase:** 2b (Q9) · **Status:** Active · **Severity:** High
+
+`src/tools/selector.py` selects tools per query by keyword-scoring five
+families. Chosen over the two alternatives I offered, both now ruled out **by
+measurement rather than preference**:
+
+| Option | Verdict |
+|---|---|
+| Shorten descriptions | **Rejected.** Descriptions are only 1,199 of 8,920 tokens (13%). Parameters are 5,602 (63%). Deleting every description entirely would not solve it. |
+| Model-based router | **Rejected.** Needs a model call and its own context — spending the budget this exists to protect. |
+| **Family routing** | **Adopted.** MEASURED mean 2,552 tokens (15.6% of 16K) vs 8,920; worst realistic case 4,479. |
+
+**Recall over precision.** The two errors are not symmetric: an unnecessary tool
+costs ~106 tokens and is recoverable; a MISSING tool leaves the model unable to
+compute and liable to fabricate — exactly what §0B forbids. So scoring is
+additive only, `returns_risk` is always included (§6.3 makes risk checks
+mandatory), a no-match query returns the CORE set rather than nothing, and
+confidence is reported so the caller can widen or abstain.
+
+Deterministic keyword matching, not embeddings: inspectable, testable offline,
+zero token cost, identical treatment for Persian and English.
+
+**Measured result:** 24/24 recall (10 eval cases + 14 held-out paraphrases),
+mean saving 6,368 tokens. Estimates verified conservative — they over-predict
+actual rendered cost by ≤154 tokens, never under-predict.
+**Trade-off:** keyword lists need maintenance as tools are added; the
+unclassified-tool net and the eval-drift test both fail loudly if that lapses.
+**Reversal:** `select_tools()` is the only entry point; swapping in a different
+strategy touches one module.
+
+---
+
+## D-0027 — Held-out testing found three router defects a self-graded suite missed
+**Date:** 2026-08-10 · **Phase:** 2b (Q9) · **Status:** Active · **Severity:** High
+
+The router scored 10/10 on the eval set — the same set whose vocabulary
+informed the keywords. Against 14 **held-out** paraphrases it scored 11/14.
+
+1. **`"iv"` matched inside "relat-iv-e"**, routing a valuation question to
+   derivatives. Bare abbreviations (`iv`, `var`, `par`, `call`) need word
+   boundaries. Fixed for Latin script; Persian keeps substring matching because
+   its affixes attach to the stem and boundaries would LOSE hits.
+2. **Jargon-free phrasing was invisible.** Real users ask "what is this company
+   worth", never "compute the enterprise value". Added plain-language terms in
+   both languages.
+3. **Persian ZWNJ compounds never matched.** `ارزش‌گذاری` normalises to
+   `ارزش گذاری`, but the keyword list stored the ZWNJ form — so the query was
+   normalised and the keyword was not. **Both sides must be normalised.** Found
+   by mutation, not by the passing suite.
+
+**Why this is logged:** grading a router on the data used to build it measures
+nothing. The held-out probes are now permanent tests precisely because they
+broke it once.
+**Reversal:** none.
+
+---
+
+## D-0028 — Selector has its own mutation battery, in Python not bash
+**Date:** 2026-08-10 · **Phase:** 2b (Q9) · **Status:** Active
+
+`tests/mutate_selector.py`, 15 seeded defects: 15 killed, 0 survived, 0 skipped.
+
+Python rather than bash because the selector source contains regexes, quotes
+and Persian text that shell quoting mangles. A mangled pattern reports SKIP,
+which at a glance is indistinguishable from a real result — the first bash
+attempt silently "skipped" 6 of 8 mutants and would have overstated coverage.
+
+The first honest run left **3 survivors, all the same blind spot as R14**:
+each guard was tested in a state where it never engages.
+- the unclassified-tool net was **dormant** (nothing is unclassified), so
+  deleting it broke nothing → now tested with a simulated orphan tool
+- truncation kept `returns_risk` only because it happened to rank top-2 → now
+  tested with a query that has zero risk vocabulary and `max_families=1`
+- ZWNJ normalisation was never exercised → now tested across all three Persian
+  spellings
+
+**Standing rule reaffirmed:** never verify a guard in a state where it cannot
+fire.
+
+---
+
+## D-0029 — Eval/registry name drift is now a test failure
+**Date:** 2026-08-10 · **Phase:** 2b (Q9) · **Status:** Active
+
+`evals/bilingual_eval_v1.jsonl` expected `price_to_earnings`; the registry
+registers `pe_ratio`. Written in Phase 2 before `valuation.py` existed, and
+nothing compared the two, so it sat undetected across three commits.
+
+Renamed the eval entries, and `test_selector.py` now asserts every
+`expected_tool` exists in the registry.
+**Why:** a benchmark referring to tools that do not exist reports a failure the
+model did not cause, or hides one it did.
+**Reversal:** none.
