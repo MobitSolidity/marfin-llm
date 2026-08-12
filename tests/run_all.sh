@@ -45,6 +45,20 @@ echo
 n_suites=$(echo $SUITES | wc -w)
 echo "  TOTAL: $total_pass assertions passed across $n_suites suites"
 
+# The TradingView wall is the one thing in this project whose failure mode is
+# legal rather than numerical, so its adversarial probe runs on every pass rather
+# than by hand. It is offline (no network) and takes milliseconds.
+echo
+echo ">>> TradingView display-only wall (adversarial probe)"
+tvout=$(python3 tests/probe_tradingview.py 2>&1)
+tv_status=$?
+echo "$tvout" | grep -E "^ +(\*\* ALLOWED|!! CRASHED)"
+echo "$tvout" | grep -E "^attempts="
+if [ $tv_status -ne 0 ]; then
+  echo "  ERROR: a machine use of TradingView content was not refused"
+  fail=1
+fi
+
 if [ "$1" = "--mutate" ]; then
   echo
   echo ">>> mutation battery"

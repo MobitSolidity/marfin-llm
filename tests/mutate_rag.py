@@ -19,6 +19,18 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "src", "rag")
+# Phase 3A added src/market/tradingview.py, which this battery must also mutate.
+# A module name is written "market/tradingview.py" and resolved against src/, so
+# the battery is not silently confined to one package. Getting this wrong would
+# not fail loudly -- every market mutation would SKIP as "pattern absent", and a
+# SKIP already proved once in this project that it can hide a real survivor.
+SRC_ROOT = os.path.join(ROOT, "src")
+
+
+def module_path(module):
+    """Resolve a mutation's module name to a file under src/."""
+    return os.path.join(SRC_ROOT, module) if "/" in module \
+        else os.path.join(SRC, module)
 
 # Mutations that CANNOT be killed because a second layer independently enforces
 # the same rule. Listed explicitly, with the layer that catches them, so that
@@ -329,6 +341,80 @@ MUTATIONS = [
     ("ingest.py", "XBRL licence text no longer read from the registry",
      "                accession=accn,\n                licence=src.licence,",
      '                accession=accn,\n                licence="public domain",'),
+
+    # --- TradingView display-only wall (Phase 3A, SS.7) --------------------
+    # These matter more than most. The whole phase rests on one legal finding,
+    # and a wall nothing tests is a wall made of prose. Each mutation is a way a
+    # future contributor could reopen machine use -- deliberately or by
+    # "cleaning up" something that looked redundant.
+    ("market/tradingview.py", "the licence verdict is flipped to permitted",
+     "MACHINE_USE_PERMITTED = False",
+     "MACHINE_USE_PERMITTED = True"),
+    ("market/tradingview.py", "assert_display_only_use silently permits use",
+     "    raise TradingViewLicenceError(",
+     "    return None\n    raise TradingViewLicenceError("),
+    ("market/tradingview.py", "the wall consults a mutable flag instead of "
+                              "always refusing",
+     '    if not isinstance(purpose, str) or not purpose.strip():',
+     '    if MACHINE_USE_PERMITTED:\n        return None\n    if not isinstance(purpose, str) or not purpose.strip():'),
+    ("market/tradingview.py", "an unlabelled refusal is accepted",
+     "        raise ValueError(\"purpose must be a non-empty string describing the \"",
+     "        purpose = \"unspecified\"\n        _ = (\"purpose must be a non-empty string describing the \""),
+    ("market/tradingview.py", "mechanism records become mutable",
+     "        if getattr(self, \"_frozen\", False):\n            raise ValueError(\n                \"mechanism records are immutable",
+     "        if False:\n            raise ValueError(\n                \"mechanism records are immutable"),
+    ("market/tradingview.py", "a mechanism may be deleted",
+     "    def __delattr__(self, name):\n        raise ValueError(\"mechanism records are immutable: refusing to delete \"",
+     "    def __delattr__(self, name):\n        object.__delattr__(self, name)\n        _ = (\"mechanism records are immutable: refusing to delete \""),
+    ("market/tradingview.py", "a mechanism may claim machine usability",
+     "        if usable_for_machine_data:",
+     "        if False:"),
+    ("market/tradingview.py", "a mechanism may be registered with no reason",
+     "        if not note:",
+     "        if False:"),
+    ("market/tradingview.py", "MECHANISMS is a writable dict, not a proxy",
+     "MECHANISMS: Mapping[str, Mechanism] = MappingProxyType(_MECHANISMS)",
+     "MECHANISMS: Mapping[str, Mechanism] = _MECHANISMS"),
+    ("market/tradingview.py", "a verified mechanism record may be overwritten",
+     "    if mech.key in _MECHANISMS:",
+     "    if False:"),
+    ("market/tradingview.py", "_add accepts any object as a mechanism",
+     "    if not isinstance(mech, Mechanism):",
+     "    if False:"),
+    ("market/tradingview.py", "an unknown mechanism is assumed permitted",
+     "        raise ValueError(\n            \"unknown TradingView mechanism %r.",
+     "        return None\n        raise ValueError(\n            \"unknown TradingView mechanism %r."),
+    ("market/tradingview.py", "the prohibited-use list becomes editable",
+     "PROHIBITED_USES: Tuple[str, ...] = (",
+     "PROHIBITED_USES: Tuple[str, ...] = list_ = ["),
+    # NOTE ON A NO-OP MUTATION I ALMOST SHIPPED. The first version of this used
+    # `usable_for_machine_data=bool([])`, believing it looked like an obfuscated
+    # True. bool([]) is False. The mutation changed nothing and "survived"
+    # trivially -- the "factor equals 1" blind spot for the fifth time in this
+    # project. A mutation whose replacement is semantically identical to the
+    # original tests the battery's optimism, not the code. Verified by hand:
+    # bool([1]) is True.
+    ("market/tradingview.py", "the webhook mechanism is quietly marked usable",
+     '    key="webhooks",\n    name="Webhook alerts",\n    exists=True,\n    direction="outbound HTTP POST to a URL we control",\n    usable_for_machine_data=False,',
+     '    key="webhooks",\n    name="Webhook alerts",\n    exists=True,\n    direction="outbound HTTP POST to a URL we control",\n    usable_for_machine_data=bool([1]),'),
+    ("market/tradingview.py", "the desktop app is claimed to expose a local API",
+     '    note="NO LOCAL API IS DOCUMENTED.',
+     '    note="Exposes a local automation API on localhost.'),
+    ("market/tradingview.py", "the broker REST API is described as an inbound "
+                              "feed we can consume",
+     '    direction="INBOUND to the broker -- TradingView calls the broker\'s endpoints",',
+     '    direction="outbound data feed we can poll",'),
+
+    # --- the registry-level block on TradingView ---------------------------
+    ("sources.py", "TradingView is re-enabled for machine ingestion",
+     '    key="tradingview",\n    name="TradingView (display-only; machine use prohibited)",\n    base_url="https://www.tradingview.com",\n    trust_level="UNVERIFIED",\n    enabled=False,',
+     '    key="tradingview",\n    name="TradingView (display-only; machine use prohibited)",\n    base_url="https://www.tradingview.com",\n    trust_level="UNVERIFIED",\n    enabled=True,'),
+    ("sources.py", "TradingView is given borrowed authority",
+     '    trust_level="UNVERIFIED",\n    enabled=False,\n    licence="Display-only.',
+     '    trust_level="EXCHANGE",\n    enabled=False,\n    licence="Display-only.'),
+    ("sources.py", "the TradingView refusal no longer names the licence",
+     '    descope_reason="Machine use is PROHIBITED BY LICENCE, not by our choice. "',
+     '    descope_reason="Not currently used. "'),
 ]
 
 
@@ -356,16 +442,27 @@ def main():
         return 1
     print("baseline: suite passes, %d mutations to apply\n" % len(MUTATIONS))
 
+    # Back up EVERY module any mutation touches, not just src/rag/. If a
+    # market/*.py mutation were applied without a backup entry, the per-mutation
+    # `finally` would still restore it, but a crash between write and restore
+    # would leave a sabotaged file on disk -- and the next run's baseline check
+    # would fail mysteriously rather than naming the cause.
     backup = tempfile.mkdtemp(prefix="rag_orig_")
+    _backed_up = {}
     for name in os.listdir(SRC):
         if name.endswith(".py"):
             shutil.copy2(os.path.join(SRC, name), os.path.join(backup, name))
+            _backed_up[name] = os.path.join(SRC, name)
+    for module in sorted({m for (m, _, _, _) in MUTATIONS if "/" in m}):
+        flat = module.replace("/", "__")
+        shutil.copy2(module_path(module), os.path.join(backup, flat))
+        _backed_up[flat] = module_path(module)
 
     killed = survived = skipped = equivalent = 0
     survivors, skips, unexpected_kills = [], [], []
     try:
         for i, (module, desc, find, repl) in enumerate(MUTATIONS, 1):
-            path = os.path.join(SRC, module)
+            path = module_path(module)
             with open(path, "r", encoding="utf-8") as fh:
                 original = fh.read()
             if find not in original:
@@ -400,8 +497,8 @@ def main():
                 with open(path, "w", encoding="utf-8") as fh:
                     fh.write(original)
     finally:
-        for name in os.listdir(backup):
-            shutil.copy2(os.path.join(backup, name), os.path.join(SRC, name))
+        for name, dest in _backed_up.items():
+            shutil.copy2(os.path.join(backup, name), dest)
         shutil.rmtree(backup, ignore_errors=True)
 
     intact, _ = run_tests()

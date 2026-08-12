@@ -33,6 +33,7 @@ from rag.ingest import (_is_heading, chunk_document, detect_scale,  # noqa: E402
                         detect_currency, facts_from_xbrl_companyconcept,
                         ingest_document, provenance_for, split_blocks,
                         unresolved_scale_passages)
+from market import tradingview as tv                                # noqa: E402
 from rag.normalize import compound_variants, fold, index_terms, tokenize  # noqa
 from rag.rerank import (W_AUTHORITY, W_RECENCY,                     # noqa: E402
                         _normalize_scores, rerank)
@@ -683,9 +684,10 @@ section("source registry: terms are enforced, not merely declared")
 # The module had been written and committed to disk without ever being run;
 # three of the four findings below were live exploits.
 
-check("5 sources registered", len(SOURCES), 5, 0, "(C)")
+check("6 sources registered", len(SOURCES), 6, 0, "(C)")
 check("3 enabled", len(enabled_sources()), 3, 0, "(C)")
-check("2 descoped (Phase 0 Q3)", len(descoped_sources()), 2, 0, "(C)")
+check("3 descoped (2x Q3 scope, 1x TradingView licence)",
+      len(descoped_sources()), 3, 0, "(C)")
 check_true("registry key always matches source.key",
            all(k == v.key for k, v in SOURCES.items()), "(C)")
 check_true("every source records a doc_url or a descope_reason",
@@ -871,5 +873,121 @@ if os.path.exists(_XBRL):
                _lf[0].provenance.licence == SOURCES["fred"].licence
                != SOURCES["sec_edgar_xbrl"].licence,
                "(C) the two registered licences differ")
+
+
+# ---------------------------------------------------------------------------
+section("TradingView: display-only, enforced rather than documented")
+# ---------------------------------------------------------------------------
+# SS.7 requires the terms to be verified at execution time. They were, by live
+# probe on 2026-08-12, and the finding was not ambiguity: TradingView licenses
+# its content for "exclusive display-only use" and "explicitly prohibits any
+# form of non-display usage", naming automated trading, price referencing, order
+# verification, algorithmic decision-making, smart order routing and "risk
+# management programs" -- and naming charts, alerts and webhooks specifically.
+#
+# So these assertions test a WALL, not a feature. Each one is a route by which a
+# TradingView number could reach a calculation.
+
+check_true("machine use is not permitted", tv.MACHINE_USE_PERMITTED is False,
+           "(V) Terms of Use s3, probed 2026-08-12")
+check("no mechanism is machine-usable", len(tv.machine_usable_mechanisms()), 0, 0,
+      "(C) 7 mechanisms verified to exist; none usable for data")
+check("7 mechanisms inventoried", len(tv.MECHANISMS), 7, 0, "(V) all HTTP 200")
+
+# The acceptance criterion "no unsupported Desktop API claimed" -- as an assertion,
+# because a criterion nothing tests is a hope.
+check_true("desktop app is recorded as existing but with no local API",
+           tv.get_mechanism("desktop_app").exists is True
+           and "NO LOCAL API IS DOCUMENTED" in tv.get_mechanism("desktop_app").note,
+           "(V) probed: localhost x0, 'local API' x0, plugin x0, automation x0")
+check_true("broker REST API is recorded as INBOUND to the broker",
+           "INBOUND" in tv.get_mechanism("broker_rest_api").direction,
+           "(V) 'lets brokers connect their backend systems to the TradingView "
+           "interface' -- we are not a broker")
+
+# Every machine purpose must be refused. Not warned about -- refused.
+for _purpose in ("automated trading", "price referencing", "order verification",
+                 "algorithmic decision-making", "smart order routing",
+                 "risk management", "persisting a quote as a fact"):
+    check_raises("refused for %r" % _purpose,
+                 lambda p=_purpose: tv.assert_display_only_use(p),
+                 tv.TradingViewLicenceError)
+
+# There must be no override. An override is the first thing reached for under
+# deadline, and the terms admit no exception this project can satisfy.
+check_raises("no permit= escape hatch",
+             lambda: tv.assert_display_only_use("automated trading", permit=True),
+             TypeError)
+check_raises("an unlabelled refusal is itself refused",
+             lambda: tv.assert_display_only_use(""))
+
+# The wall must not consult mutable state. PROBED: rebinding the module globals
+# does not open it, because assert_display_only_use always raises rather than
+# looking anything up. Asserted here so a future "optimisation" that adds a
+# lookup gets caught.
+def _flip_and_retry():
+    _saved_flag, _saved_list = tv.MACHINE_USE_PERMITTED, tv.PROHIBITED_USES
+    tv.MACHINE_USE_PERMITTED, tv.PROHIBITED_USES = True, ()
+    try:
+        tv.assert_display_only_use("automated trading")
+    finally:
+        tv.MACHINE_USE_PERMITTED, tv.PROHIBITED_USES = _saved_flag, _saved_list
+
+
+check_raises("flipping MACHINE_USE_PERMITTED and emptying PROHIBITED_USES "
+             "does not open the wall", _flip_and_retry,
+             tv.TradingViewLicenceError)
+
+# Capability records must be immutable, for the reason Phase 3 established: one
+# line would otherwise undo the module.
+check_raises("cannot mark a mechanism machine-usable at runtime",
+             lambda: setattr(tv.MECHANISMS["webhooks"],
+                             "usable_for_machine_data", True))
+check_raises("cannot delete a mechanism's verdict",
+             lambda: delattr(tv.MECHANISMS["webhooks"],
+                             "usable_for_machine_data"))
+check_raises("cannot inject a mechanism through MECHANISMS[...]",
+             lambda: operator.setitem(tv.MECHANISMS, "x", None))
+check_raises("cannot CONSTRUCT a mechanism claiming machine usability",
+             lambda: tv.Mechanism("x", "X", True, "outbound",
+                                  usable_for_machine_data=True, note="fine"))
+check_raises("cannot register a mechanism with no stated reason",
+             lambda: tv.Mechanism("x", "X", True, "outbound", False, note=""))
+check_raises("cannot overwrite a verified mechanism record",
+             lambda: tv._add(tv.Mechanism("webhooks", "v2", True, "out", False,
+                                          "replaced")))
+# MUTATION SURVIVOR: removing _add's isinstance guard survived, because this
+# assertion existed only in probe_tradingview.py and the battery runs the SUITE.
+# A probe I ran by hand once is not a regression test. Without the guard a dict
+# reaches `mech.key` and raises AttributeError -- a CRASH, which the strengthened
+# harness correctly reports as a failure rather than accepting as a refusal.
+check_raises("_add refuses an object that is not a Mechanism",
+             lambda: tv._add({"key": "fake", "usable_for_machine_data": True}))
+check_raises("an unknown mechanism is not assumed permitted",
+             lambda: tv.get_mechanism("desktop_local_api"))
+
+# Tuples, not lists: the prohibited-use list must not be editable in place.
+check_raises("PROHIBITED_USES is not editable in place",
+             lambda: operator.setitem(tv.PROHIBITED_USES, 0, "fine"), TypeError)
+check_raises("PERMITTED_USES is not editable in place",
+             lambda: operator.setitem(tv.PERMITTED_USES, 0,
+                                      "automated trading"), TypeError)
+
+# --- and the registry-level block, which is what actually stops ingestion -----
+check_raises("check_access('tradingview') is refused",
+             lambda: check_access("tradingview", user_agent=CONTACT_UA),
+             AccessError)
+check_raises("ingesting a TradingView document is refused",
+             lambda: ingest_document("AAPL 250.10", "tradingview", "tv1",
+                                     user_agent=CONTACT_UA), AccessError)
+check_raises("building TradingView provenance is refused",
+             lambda: provenance_for("tradingview", user_agent=CONTACT_UA),
+             AccessError)
+check_true("the refusal names the licence, not a scope decision",
+           "PROHIBITED BY LICENCE" in SOURCES["tradingview"].descope_reason,
+           "(C) distinguishes it from the Q3 scope descope of Codal/TSETMC")
+check_true("TradingView carries no borrowed authority",
+           SOURCES["tradingview"].authority == 0,
+           "(C) UNVERIFIED -- a licence refusal, not a quality judgement")
 
 sys.exit(summary())

@@ -224,6 +224,49 @@ _register(Source(
     descope_reason="Same Phase 0 Q3 descope as Codal.",
 ))
 
+# TradingView is registered DISABLED for a different reason than Codal/TSETMC, and
+# the distinction matters. Codal is descoped by user scope decision (Q3) and could
+# be re-enabled by the user tomorrow. TradingView is disabled because its terms
+# forbid the use -- no decision of ours can re-enable it.
+#
+# Note the trust level: UNVERIFIED. That is NOT a claim that TradingView's data is
+# poor. It is deliberately meaningless here, because this is a LICENCE refusal, not
+# a quality one, and the two must not be conflated. A source can be perfectly
+# accurate and still legally unusable. If trust level were set high, a future
+# maintainer would reasonably read "authority 80, disabled" as an oversight worth
+# correcting. "UNVERIFIED, disabled, reason: prohibited" cannot be misread that way.
+#
+# Registering it at all (rather than omitting it) is the same argument as Codal:
+# an absent source looks forgotten, a disabled one with a recorded reason looks
+# decided. And it means ingest_document(source_key="tradingview") REFUSES rather
+# than raising a confusing "unknown source" -- the error names the actual problem.
+_register(Source(
+    key="tradingview",
+    name="TradingView (display-only; machine use prohibited)",
+    base_url="https://www.tradingview.com",
+    trust_level="UNVERIFIED",
+    enabled=False,
+    licence="Display-only. Terms of Use s3 licenses content for 'exclusive "
+            "display-only use' and 'explicitly prohibits any form of "
+            "non-display usage', naming automated trading, price referencing, "
+            "order verification, algorithmic decision-making, smart order "
+            "routing and risk management programs. Extends to third-party "
+            "products that facilitate such use. No commercial usage without a "
+            "separate agreement (this project has none).",
+    verified_on="2026-08-12",
+    verified_status="VERIFIED by live probe: HTTP 200, 12/12 relied-upon "
+                    "prohibition clauses present; clause block sha256 "
+                    "78d348b1...679a. Re-check with "
+                    "tools/verify_tradingview_terms.py.",
+    descope_reason="Machine use is PROHIBITED BY LICENCE, not by our choice. "
+                   "See docs/legal/tradingview-terms-review.md. Ingestion, "
+                   "fact extraction, price referencing and risk use are all "
+                   "refused. A human may still read a TradingView chart or "
+                   "alert on screen -- that is outside this registry, which "
+                   "governs only what enters the machine.",
+    doc_url="https://www.tradingview.com/policies/",
+))
+
 
 class AccessError(RuntimeError):
     """Raised when a request would violate a source's stated terms."""
