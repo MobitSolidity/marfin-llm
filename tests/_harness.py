@@ -62,12 +62,38 @@ def check_true(name, cond, method=""):
         _bad(name, "condition false")
 
 
-def check_raises(name, fn, exc=Exception):
-    """(D) The call MUST raise. Silence here is a defect, not a pass."""
+# Exceptions that represent a DELIBERATE refusal. Every `raise` in src/ is one
+# of these (MEASURED: 172 ValueError, 13 TypeError, 11 ZeroDivisionError).
+REFUSALS = (ValueError, TypeError, ZeroDivisionError)
+
+# Exceptions that mean the code CRASHED on its way to somewhere else. These are
+# not refusals, however much they look like one from the outside.
+CRASHES = (AttributeError, IndexError, KeyError, NameError, UnboundLocalError,
+           RecursionError)
+
+
+def check_raises(name, fn, exc=REFUSALS):
+    """
+    (D) The call MUST refuse. Silence here is a defect, not a pass.
+
+    The default used to be `Exception`, which accepted ANY failure -- including
+    an AttributeError raised three frames deeper because a guard had been
+    deleted. A mutation battery caught exactly that: removing rerank's type
+    check left the test green, because a bare list then crashed instead of
+    being refused, and the assertion could not tell the difference.
+
+    So the default now accepts only exceptions that a deliberate guard raises,
+    and names crash-type exceptions as failures. A test that genuinely wants a
+    crash type must say so explicitly.
+    """
     try:
         fn()
     except exc:
         _ok(name, "(D) correctly raised")
+        return
+    except CRASHES as e:
+        _bad(name, "CRASHED rather than refused: %s: %s"
+                   % (type(e).__name__, e))
         return
     except Exception as e:  # noqa: BLE001
         _bad(name, "wrong exception: %r" % (e,))

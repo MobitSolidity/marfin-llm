@@ -19,7 +19,8 @@ tests/test_technicals.py \
 tests/test_fixed_income.py \
 tests/test_derivatives.py \
 tests/test_tools.py \
-tests/test_selector.py"
+tests/test_selector.py \
+tests/test_rag.py"
 
 for t in $SUITES; do
   echo
@@ -38,7 +39,11 @@ for t in $SUITES; do
 done
 
 echo
-echo "  TOTAL: $total_pass assertions passed across 7 suites"
+# Count the suites rather than hardcoding a number; a hardcoded "/13" already
+# understated one battery, and a stale suite count hides a suite that stopped
+# running entirely.
+n_suites=$(echo $SUITES | wc -w)
+echo "  TOTAL: $total_pass assertions passed across $n_suites suites"
 
 if [ "$1" = "--mutate" ]; then
   echo
@@ -61,6 +66,16 @@ if [ "$1" = "--mutate" ]; then
   echo "$sel" | grep -E "^ +(seeded|killed|survived|skipped):"
   echo "$sel" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
   [ $sel_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> RAG mutation battery"
+  rag=$(python3 tests/mutate_rag.py 2>&1)
+  rag_status=$?
+  echo "$rag" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$rag" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  # An "equivalent" mutant that starts dying invalidates its own note.
+  echo "$rag" | grep -E "^ +RECHECK:" && fail=1
+  [ $rag_status -ne 0 ] && fail=1
 fi
 
 echo
