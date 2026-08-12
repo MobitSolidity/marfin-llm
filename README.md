@@ -65,9 +65,9 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **2a — Section 5.3 calculation coverage complete (R14 closed)** |
-| Status | PASS (engine verified; model half is a verified plan) |
-| Next | Phase 3 — Data Pipeline and Financial RAG (awaiting approval) |
+| Current phase | **3 — Data Pipeline and Financial RAG** |
+| Status | PASS — awaiting Phase 3A approval |
+| Next | Phase 3A — Market Data, TradingView, and Broker Design (**not started**) |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` (no execution code exists) |
 | TradingView connector level | 0 |
@@ -88,7 +88,10 @@ Windows 11 · 16K context · Iranian market data descoped.
 
 | Item | Status |
 |---|---|
-| Calculation engine (84 fns, 5 families) | **VERIFIED** — 476 assertions, 56/56 mutations killed |
+| Calculation engine (84 fns, 5 families) | **VERIFIED** — 56/56 mutations killed |
+| Financial RAG pipeline (9 modules) | **VERIFIED** — 194 assertions, 80 mutations, 0 survivors |
+| Source access terms | **ENFORCED** — `check_access()` gates every ingestion entry point |
+| EDGAR period-mixing / restatement hazards | **MEASURED** on live data (117 facts, 46 restated) |
 | Persian numeral parsing | **VERIFIED** by execution |
 | Chat template + 84 tool schemas | **VERIFIED** by rendering |
 | No execution capability | **VERIFIED** by test |
@@ -96,12 +99,44 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Decode speed | **ESTIMATED** ~14.7 tok/s — not yet measured |
 | Persian generation quality | **UNKNOWN** — risk R10 |
 | Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 |
+| Dense vector retrieval | **DOES NOT EXIST** — lexical + structured only (D-0030) |
+| RAG behaviour with a live model | **UNKNOWN** — risk R21 |
 
-The mutation battery matters more than the pass count: the suites were at
-311/311 green when it found three formulas that were correct but **unverified**
-(`convexity` `f²`, `delta` `e^-qT`, `vega` `sqrt(T)`). Each had been tested only
-at a value where the missing factor equals 1. See
-`docs/phase-reports/phase-2a.md`.
+### Financial RAG (Phase 3)
+
+`src/rag/` — nine stdlib-only modules: source registry, bilingual
+normalization, structure-aware ingestion, hybrid retrieval, feature-based
+reranking, claim-level citations, conflict/staleness resolution, abstention gate.
+
+**Named accurately, per §0B:** "hybrid retrieval" is lexical BM25 + structured
+identity lookup, **not** dense vectors. The reranker is feature-based, **not** a
+cross-encoder. No embedding model exists on this machine.
+
+Nine real defects were found by adversarial probing — including a chunker that
+silently produced **zero passages**, a reranker that was a **no-op**, a citation
+tolerance that accepted a **wrong number**, and access terms that were
+**declared but never enforced**. See `docs/phase-reports/phase-3.md`.
+
+### Why the mutation count is the number that matters
+
+**739 assertions pass across 8 suites. That is not the claim.** A passing suite
+proves nothing on its own. The claim is **151 seeded defects, 0 survivors,
+0 skips** — every guard was deliberately broken and the suite caught it.
+
+The batteries have repeatedly found tests that could not fail:
+
+- At 311/311 green, three formulas were correct but **unverified** (`convexity`
+  `f²`, `delta` `e^-qT`, `vega` `sqrt(T)`) — each tested only at a value where
+  the missing factor equals 1.
+- `check_raises()` defaulted to `Exception`, accepting a **crash** as a refusal.
+  **106 of 113** assertions across all suites relied on that default (D-0036).
+- Asserting rank order could not distinguish a reranking **weight** from the
+  sort's secondary **tie-break** key.
+- An access gate was tested only on the code path that re-checks it downstream,
+  never on the path a real caller uses.
+
+Reproduce: `./tests/run_all.sh --mutate`
+See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 
 ### Running the tests
 
@@ -144,9 +179,9 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
 
 - **Q8** — if measured decode is below 9 tok/s: fall back to Qwen3-1.7B, accept
   slower output and lean on RAG, or re-quantize? Deferred until measured.
-- **Q9** — how should tools be subset for Phase 3? All 84 schemas consume 54.4%
-  of the 16K window before any user input, and RAG needs the same space.
-  By family, by a routing step, or by shortening descriptions? (D-0023)
+- **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
+  recall-first. MEASURED — mean subset 2,552 tokens (15.6% of 16K) versus 8,920
+  for all 84 schemas; recall 24/24 across the eval and held-out sets.
 
 ## Usage
 

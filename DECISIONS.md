@@ -537,3 +537,136 @@ Renamed the eval entries, and `test_selector.py` now asserts every
 **Why:** a benchmark referring to tools that do not exist reports a failure the
 model did not cause, or hides one it did.
 **Reversal:** none.
+
+---
+
+## D-0030 — "Hybrid retrieval" means lexical + structured, not vectors
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+§5.2 asks for hybrid retrieval. What exists is BM25 lexical search plus
+structured identity lookup over facts. There is **no dense vector search**: no
+embedding model exists on this machine, and the capability manifest lists
+`rag_vector_search` as unavailable.
+
+Documented under its accurate name in the module docstring and the phase report.
+**Why:** §0B forbids inventing capabilities. Calling this "hybrid semantic
+search" would misrepresent it to the one reader who most needs the truth — the
+person deciding whether to trust a retrieved number.
+**Reversal:** if an embedding model is ever added, a dense channel joins the
+hybrid façade and this decision is superseded, not silently outgrown.
+
+---
+
+## D-0031 — Reranking is feature-based, not a cross-encoder
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+`rerank.py` combines normalized lexical score with source authority, recency,
+units presence and table-ness. It is not a learned reranker.
+
+Scores are normalized **divide-by-max**, not min-max. Min-max was a real defect:
+it maps the lowest score to 0 and the highest to 1 regardless of how close they
+were, which amplified a 0.25% BM25 gap into the maximum possible gap and made
+the reranker a no-op.
+**Why:** the feature weights are inspectable and explainable per hit
+(`.explain()`), which a cross-encoder would not be, and citations must be
+defensible.
+**Reversal:** none pending.
+
+---
+
+## D-0032 — Citation tolerance is half-ULP of the claim's own precision
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+A fixed 0.5% tolerance accepted "109.5 billion" as support for 109.417 — a wrong
+number, admitted with a real citation attached. Tolerance is now half a unit in
+the last place of the claim's **own** stated digits: "109.4 billion" ⇒ ±0.05 B,
+"109,417 million" ⇒ ±0.5 M.
+**Why:** rounding allowance is a property of how precisely the claim was
+*stated*, not a percentage someone tuned until the tests passed. There is no
+magic constant to drift.
+**Reversal:** none.
+
+---
+
+## D-0033 — Unscaled evidence cannot support a scaled claim
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+A bare table number rejected the scaled reading of a claim but **accepted** the
+unscaled one, silently assuming base units — exactly the 10⁶ error the citation
+layer exists to catch. `verify_claim` now refuses before the match loop when the
+evidence declares no scale and the claim states one.
+**Why:** MEASURED — EDGAR XBRL returns 109417000000 where the filing text says
+109417. The two readings of one fact differ by a million, and guessing between
+them is not verification.
+**Reversal:** none.
+
+---
+
+## D-0034 — Source access terms are enforceable data, and enforced
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+`sources.py` holds each source's terms as data (`requires_contact_ua`,
+`requires_api_key`, `rate_limit_qps`, `licence`, `enabled`) and `check_access()`
+**refuses** rather than warns.
+
+Three defects were found on the module's first ever execution:
+- terms were **mutable at runtime** — one line re-enabled a descoped source,
+  dropped the contact-UA requirement, or set a trust level that made
+  `.authority` raise `KeyError` (a crash, not a refusal). Sources are now frozen
+  after construction; the registry is a read-only mapping.
+- the UA check was a bare `"@"` substring test, so `"@"`, `"me@"` and
+  `"@example.com"` passed. A placeholder that satisfies the guard and then earns
+  a 403 is worse than no guard.
+- **nothing called `check_access()` at all.** The terms were documented, not
+  enforced.
+
+`check_access()` now gates every ingestion entry point, and trust level and
+licence are read **from** the registry and may not be passed in by a caller.
+**Why:** the acceptance criterion is "restricted data handled correctly." A
+module that states the rules while nothing calls it satisfies the wording and
+none of the intent. Terms a caller can edit at runtime are not terms.
+**Reversal:** none.
+
+---
+
+## D-0035 — Descoped sources stay registered as disabled
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+Codal and TSETMC remain in the registry with `enabled=False` and the Phase 0 Q3
+descope reason recorded, and a source disabled with no recorded reason is
+refused at construction.
+**Why:** a descoped source that is silently absent is indistinguishable from one
+that was forgotten. A later reader can see it was considered and why it is off.
+**Reversal:** if the user re-scopes Iranian market data, terms must be verified
+by live probe before `enabled` flips.
+
+---
+
+## D-0036 — A crash is not a refusal (systemic harness fix)
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+`check_raises()` defaulted to `exc=Exception`, so it accepted an incidental
+`AttributeError` thrown three frames deeper after a guard was deleted. A
+mutation survivor exposed it. **106 of 113 assertions** across all eight suites
+were relying on that default.
+
+The default is now `REFUSALS = (ValueError, TypeError, ZeroDivisionError)` —
+MEASURED as the only exception types deliberately raised in `src/` (172/13/11) —
+and `CRASHES` are reported as failures.
+**Why:** a test that cannot distinguish "refused correctly" from "crashed on the
+way somewhere" is not verifying the guard it names.
+**Reversal:** none. A test that genuinely wants a crash type must say so.
+
+---
+
+## D-0037 — Documents and time series are separate stores
+**Date:** 2026-08-12 · **Phase:** 3 · **Status:** Active
+
+`PassageIndex` is searched lexically and has no period-identity query.
+`FactStore` is queried by identity only and has **no text search method at
+all**. `HybridRetriever` returns them under separate keys, each tagged with its
+own `mode`.
+**Why:** scoring a numeric fact by text similarity is how a system becomes
+confident about the wrong period. MEASURED: one revenue tag returns 117 facts
+across four period lengths, and 46 periods are reported by more than one filing.
+**Reversal:** none.
