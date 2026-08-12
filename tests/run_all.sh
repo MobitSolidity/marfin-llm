@@ -20,7 +20,8 @@ tests/test_fixed_income.py \
 tests/test_derivatives.py \
 tests/test_tools.py \
 tests/test_selector.py \
-tests/test_rag.py"
+tests/test_rag.py \
+tests/test_market.py"
 
 for t in $SUITES; do
   echo
@@ -59,6 +60,22 @@ if [ $tv_status -ne 0 ]; then
   fail=1
 fi
 
+# The market-data layer's adversarial probe. Runs unconditionally for the same
+# reason as the TradingView wall: its failure mode is a plausible-looking wrong
+# price rather than a crash. Two defects here (last=0.0 and last=inf, both
+# ACCEPTED) survived a probe that reported 45/45 refused, so this gate is what
+# stops the next one from surviving a whole session.
+echo
+echo ">>> market data quote guards (adversarial probe)"
+mqout=$(python3 tests/probe_quotes.py 2>&1)
+mq_status=$?
+echo "$mqout" | grep -E "^ +(\*\* ALLOWED|!! CRASHED)"
+echo "$mqout" | grep -E "^attempts="
+if [ $mq_status -ne 0 ]; then
+  echo "  ERROR: an unusable quote was accepted by the market data layer"
+  fail=1
+fi
+
 if [ "$1" = "--mutate" ]; then
   echo
   echo ">>> mutation battery"
@@ -90,6 +107,19 @@ if [ "$1" = "--mutate" ]; then
   # An "equivalent" mutant that starts dying invalidates its own note.
   echo "$rag" | grep -E "^ +RECHECK:" && fail=1
   [ $rag_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> market data mutation battery"
+  # Oracles are test_market.py AND probe_quotes.py together: one catches
+  # mutations that make the layer accept garbage, the other catches mutations
+  # that make it refuse everything. Running only one lets half the classes
+  # through -- MEASURED, not assumed.
+  mkt=$(python3 tests/mutate_market.py 2>&1)
+  mkt_status=$?
+  echo "$mkt" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$mkt" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$mkt" | grep -E "^ +RECHECK:" && fail=1
+  [ $mkt_status -ne 0 ] && fail=1
 fi
 
 echo
