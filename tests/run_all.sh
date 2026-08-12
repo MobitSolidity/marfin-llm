@@ -21,7 +21,8 @@ tests/test_derivatives.py \
 tests/test_tools.py \
 tests/test_selector.py \
 tests/test_rag.py \
-tests/test_market.py"
+tests/test_market.py \
+tests/test_execution.py"
 
 for t in $SUITES; do
   echo
@@ -120,6 +121,20 @@ if [ "$1" = "--mutate" ]; then
   echo "$mkt" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
   echo "$mkt" | grep -E "^ +RECHECK:" && fail=1
   [ $mkt_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> execution mode / broker mutation battery"
+  # The battery that matters most: every other module can at worst produce a
+  # wrong number for a human to read, while this one decides whether an order can
+  # be submitted with real money. It found 17 survivors on a suite that passed
+  # 93/93, including a docstring claiming live trading was unreachable when a
+  # two-line config file reached it.
+  exe=$(python3 tests/mutate_execution.py 2>&1)
+  exe_status=$?
+  echo "$exe" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$exe" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$exe" | grep -E "^ +RECHECK:" && fail=1
+  [ $exe_status -ne 0 ] && fail=1
 fi
 
 echo
