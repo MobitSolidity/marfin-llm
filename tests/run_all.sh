@@ -23,7 +23,8 @@ tests/test_selector.py \
 tests/test_rag.py \
 tests/test_market.py \
 tests/test_execution.py \
-tests/test_csv_import.py"
+tests/test_csv_import.py \
+tests/test_webhooks.py"
 
 for t in $SUITES; do
   echo
@@ -94,6 +95,26 @@ csvout_bad=$(echo "$csvout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* NO FINDING|\
 echo "$csvout" | grep -E "^(class A|class B|invariants)"
 if [ $csv_status -ne 0 ]; then
   echo "  ERROR: a defective CSV was accepted, or a finding was not enforced"
+  fail=1
+fi
+
+# The webhook probe. This is the only module in the project that takes input from
+# a party outside it, so it is the one boundary where an attacker chooses the
+# bytes. Its failure mode is the worst available here: a payload field taken as
+# an ORDER. Three defects survived a clean adversarial sweep in this module --
+# a type named ValidatedEvent that validated nothing, an origin label that would
+# have been "fixed" by deleting a working guard, and an exact-match blocklist
+# that let "disable_risk_checks" through while listing "disable_risk". None was
+# found by a test failing; all three were found by attacking the passes.
+echo
+echo ">>> webhook receiver validation (adversarial probe)"
+whout=$(python3 tests/probe_webhooks.py 2>&1)
+wh_status=$?
+whout_bad=$(echo "$whout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* WRONG EXC|\*\* WRONG GUARD|\*\* DEFECT")
+[ -n "$whout_bad" ] && echo "$whout_bad"
+echo "$whout" | grep -E "^(attacks|structural checks):"
+if [ $wh_status -ne 0 ]; then
+  echo "  ERROR: a webhook attack was accepted, or refused by the wrong guard"
   fail=1
 fi
 
@@ -176,6 +197,28 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: csv_import.py not restored, or its oracles are not green"
     fail=1; }
   [ $csvm_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> webhook receiver mutation battery"
+  # Two oracles, and the pairing is required rather than tidy: test_webhooks.py
+  # catches mutations that make the receiver ACCEPT an attack, probe_webhooks.py
+  # catches mutations that make it refuse everything. This battery went from 13
+  # survivors to 0 without one line of the module changing -- every one was a
+  # gap in the TESTS, and most were a second guard answering in place of the one
+  # under test (an http:// refusal that came from the generic scheme check, a
+  # duplicate refused by append() when receive()'s check was gone, a
+  # UnicodeDecodeError counted as a refusal because it subclasses ValueError).
+  # Exactly one mutant is documented as equivalent, with the eight measurements
+  # that failed to reach it; RECHECK below fires if it ever starts dying.
+  whm=$(python3 tests/mutate_webhooks.py 2>&1)
+  whm_status=$?
+  echo "$whm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$whm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$whm" | grep -E "^ +RECHECK:" && fail=1
+  echo "$whm" | grep -q "source restored and oracles green: True" || {
+    echo "  ERROR: webhooks.py not restored, or its oracles are not green"
+    fail=1; }
+  [ $whm_status -ne 0 ] && fail=1
 fi
 
 echo
