@@ -22,7 +22,8 @@ tests/test_tools.py \
 tests/test_selector.py \
 tests/test_rag.py \
 tests/test_market.py \
-tests/test_execution.py"
+tests/test_execution.py \
+tests/test_csv_import.py"
 
 for t in $SUITES; do
   echo
@@ -74,6 +75,25 @@ echo "$mqout" | grep -E "^ +(\*\* ALLOWED|!! CRASHED)"
 echo "$mqout" | grep -E "^attempts="
 if [ $mq_status -ne 0 ]; then
   echo "  ERROR: an unusable quote was accepted by the market data layer"
+  fail=1
+fi
+
+# The CSV ingestion probe. Its failure mode is the quietest one in the project:
+# parse_csv returns a REPORT rather than raising, so a defective file does not
+# announce itself -- the worst case found here was a file with every close blank
+# that carried no finding at all and was therefore usable for a material
+# calculation. "Did it refuse?" is the wrong question for such a module, so this
+# probe asserts two different things: structural attacks must raise, and semantic
+# defects must be RECORDED at the right severity AND actually enforced.
+echo
+echo ">>> CSV ingestion validation (adversarial probe)"
+csvout=$(python3 tests/probe_csv_import.py 2>&1)
+csv_status=$?
+csvout_bad=$(echo "$csvout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* NO FINDING|\*\* WRONG SEVERITY|\*\* NOT ENFORCED|\*\* FALSE REASON")
+[ -n "$csvout_bad" ] && echo "$csvout_bad"
+echo "$csvout" | grep -E "^(class A|class B|invariants)"
+if [ $csv_status -ne 0 ]; then
+  echo "  ERROR: a defective CSV was accepted, or a finding was not enforced"
   fail=1
 fi
 
@@ -135,6 +155,27 @@ if [ "$1" = "--mutate" ]; then
   echo "$exe" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
   echo "$exe" | grep -E "^ +RECHECK:" && fail=1
   [ $exe_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> CSV ingestion mutation battery"
+  # This battery earned its place twice over. It reported 23 survivors on a suite
+  # that printed "218 passed, 0 failed" -- and 20 of them were one defect in the
+  # SUITE, not the module: it ended with a bare summary(), which RETURNS an exit
+  # code rather than raising, so the suite always exited 0 and could not report
+  # failure at all. A suite that cannot fail manufactures confidence, and only a
+  # mutation battery can detect one. The remaining 3 were real test gaps,
+  # including a null-close guard shadowed by an earlier guard.
+  csvm=$(python3 tests/mutate_csv_import.py 2>&1)
+  csvm_status=$?
+  echo "$csvm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$csvm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$csvm" | grep -E "^ +RECHECK:" && fail=1
+  # A SKIP is worse than a survivor: an ambiguous pattern tests nothing while
+  # still counting in "seeded", so it looks like a non-event.
+  echo "$csvm" | grep -q "source restored and oracles green: True" || {
+    echo "  ERROR: csv_import.py not restored, or its oracles are not green"
+    fail=1; }
+  [ $csvm_status -ne 0 ] && fail=1
 fi
 
 echo
