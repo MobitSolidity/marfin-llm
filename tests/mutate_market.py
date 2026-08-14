@@ -80,8 +80,15 @@ MUTATIONS = [
     ("market/quotes.py", "assert_provider_usable no longer refuses PROHIBITED",
      "    if p.permits_machine_use is False:",
      "    if False:"),
+    # This mutation SKIPPED on 2026-08-14 and the skip was the finding, not the
+    # mutation: its find-string was `if p.permits_machine_use is None:` on one
+    # line, and when the USER_ACCEPTED_RISK route was added the guard became a
+    # two-line condition. MEASURED with `grep -Fc`: the old string occurs ZERO
+    # times, so this entry had quietly stopped testing anything while still
+    # printing a line. Re-pointed at the code as it now reads.
     ("market/quotes.py", "assert_provider_usable treats UNVERIFIED as permitted",
-     "    if p.permits_machine_use is None:",
+     '    if p.permits_machine_use is None \\\n'
+     '            and p.activation_basis != "USER_ACCEPTED_RISK":',
      "    if False:"),
     ("market/quotes.py", "a registered-but-disabled provider is usable",
      "    if not p.enabled:",
@@ -270,6 +277,109 @@ MUTATIONS = [
      "            \"n_prohibited\": sum(1 for p in PROVIDERS.values()\n"
      "                                if p.permits_machine_use is False),",
      "            \"n_prohibited\": 0,"),
+
+    # --- the USER_ACCEPTED_RISK activation route (added 2026-08-14) ---------
+    # Every mutation below targets code written TODAY, on the day the first real
+    # provider was switched on. Without these the new guards have zero mutation
+    # coverage, which in this project means untested: the guards are exactly the
+    # kind that pass a refusal-only suite while doing nothing.
+    #
+    # The order of the two licence checks is itself the design, so it is
+    # mutated: a PROHIBITION consented away is a breach of someone else's
+    # contract, not an accepted risk.
+    ("market/quotes.py",
+     "a PROHIBITED provider may be enabled by accepting the risk",
+     "            if permits_machine_use is False:",
+     "            if False:"),
+    ("market/quotes.py",
+     "assert_provider_usable checks the UNKNOWN case before the PROHIBITION",
+     '    p = get_provider(key)\n'
+     '    if p.permits_machine_use is False:\n'
+     '        raise MarketDataError(\n'
+     '            "provider %r PROHIBITS machine use: %s" % (key, p.status))\n'
+     '    if p.permits_machine_use is None \\\n'
+     '            and p.activation_basis != "USER_ACCEPTED_RISK":',
+     '    p = get_provider(key)\n'
+     '    if p.permits_machine_use is None \\\n'
+     '            and p.activation_basis != "USER_ACCEPTED_RISK":'),
+    # The escape hatch itself: if any basis unlocks the gate, then the vocabulary
+    # is decoration and LICENCE_EXPLICIT could be typed in with nothing read.
+    ("market/quotes.py", "any activation_basis unlocks an unlicensed provider",
+     '            if activation_basis != "USER_ACCEPTED_RISK":',
+     "            if activation_basis is None and False:"),
+    ("market/quotes.py",
+     "an enabled provider need not record WHY it is on",
+     "        if enabled and activation_basis is None:",
+     "        if False:"),
+    ("market/quotes.py",
+     "a disabled provider may carry a leftover activation basis",
+     "        if not enabled and activation_basis is not None:",
+     "        if False:"),
+    ("market/quotes.py", "an accepted risk may be an empty list",
+     "            if not accepted_risks:",
+     "            if False:"),
+    ("market/quotes.py", "an accepted risk needs no owner and no date",
+     "            if not decided_by or not decided_on:",
+     "            if False:"),
+    # `or` instead of `and` still looks like a guard and still refuses SOME
+    # inputs -- the failure mode a refusal-only assertion cannot see.
+    ("market/quotes.py", "an accepted risk needs only ONE of owner or date",
+     "            if not decided_by or not decided_on:",
+     "            if not decided_by and not decided_on:"),
+    ("market/quotes.py",
+     "activation_basis accepts any string, not just the vocabulary",
+     "        if activation_basis is not None and activation_basis not in ACTIVATION_BASES:",
+     "        if False:"),
+    # accepted_risks is stored as a tuple on purpose: a frozen object that hands
+    # out a mutable list lets the record be edited after it was approved.
+    ("market/quotes.py", "accepted_risks is stored as a mutable list",
+     "        self.accepted_risks = tuple(accepted_risks or ())",
+     "        self.accepted_risks = list(accepted_risks or ())"),
+    ("market/quotes.py",
+     "user_accepted_risk_providers cannot see the weakly-authorized ones",
+     '    return [p for p in PROVIDERS.values()\n'
+     '            if p.enabled and p.activation_basis == "USER_ACCEPTED_RISK"]',
+     "    return []"),
+
+    # --- the MEASURED free-tier limits (regulatory, not cosmetic) -----------
+    # "Realtime and 15-minute delayed US market data is regulated by the stock
+    # exchanges, FINRA, and the SEC" -- premium-only. A tier gate that passes
+    # everything produces a quote labelled REALTIME that is end-of-day data.
+    ("market/quotes.py", "the free tier is allowed to supply any delay_status",
+     "    if delay_status not in allowed:",
+     "    if False:"),
+    ("market/quotes.py", "an unknown provider key silently permits every tier",
+     '    if delay_status not in DELAY_STATUS:',
+     '    if False and delay_status not in DELAY_STATUS:'),
+    ("market/quotes.py", "the free tier is silently widened to REALTIME",
+     '        "permitted_delay_status": ("END_OF_DAY", "UNKNOWN"),',
+     '        "permitted_delay_status": ("END_OF_DAY", "UNKNOWN", "REALTIME",\n'
+     '                                  "DELAYED"),'),
+    ("market/quotes.py", "the measured daily request budget is inflated",
+     '        "requests_per_day": 25,',
+     '        "requests_per_day": 2500,'),
+
+    # --- the LATENT DEFECT found by enabling the first provider -------------
+    # MEASURED on 2026-08-14: this gate read `origin` only, so all six trust
+    # levels passed, including UNVERIFIED, which rag.documents defines as "never
+    # citable as fact". It was unreachable while every provider was disabled.
+    # These mutations restore the defect on purpose, so that its absence is a
+    # tested property rather than a fix nobody watches.
+    ("market/quotes.py",
+     "an UNVERIFIED quote is again sole evidence for a material calculation",
+     "            if TRUST_LEVELS.get(self.trust_level, 0) <= 0:",
+     "            if False:"),
+    ("market/quotes.py", "the trust gate is off by one and admits UNVERIFIED",
+     "            if TRUST_LEVELS.get(self.trust_level, 0) <= 0:",
+     "            if TRUST_LEVELS.get(self.trust_level, 0) < 0:"),
+    # A missing trust level scoring as permitted is the fail-open direction: an
+    # unrecognised label would be treated better than one known to be weak.
+    ("market/quotes.py", "an unrecognised trust level defaults to permitted",
+     "            if TRUST_LEVELS.get(self.trust_level, 0) <= 0:",
+     "            if TRUST_LEVELS.get(self.trust_level, 100) <= 0:"),
+    ("market/quotes.py", "the trust gate reads the origin instead of the trust",
+     "            if TRUST_LEVELS.get(self.trust_level, 0) <= 0:",
+     "            if self.origin in WEAK_ORIGINS:"),
 ]
 
 

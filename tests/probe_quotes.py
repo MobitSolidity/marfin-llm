@@ -66,9 +66,25 @@ def main():
 
     print("\n1. Provider licensing: can an uncleared provider be used?")
     print("   registered=%d enabled=%d" % (len(q.PROVIDERS), len(q.enabled_providers())))
+    # Until 2026-08-14 every provider was disabled, so this loop could demand
+    # that ALL of them be refused. Alpha Vantage is now enabled on
+    # USER_ACCEPTED_RISK, and weakening the loop to "some may pass" would have
+    # thrown away the check. Instead the two cases are separated and each is
+    # asserted on its own terms: a DISABLED provider must be refused, and an
+    # ENABLED one must be refused for everything its tier cannot lawfully do.
     for key in sorted(q.PROVIDERS):
-        out.append(attempt("assert_provider_usable(%r)" % key,
-                           lambda k=key: q.assert_provider_usable(k)))
+        p = q.get_provider(key)
+        if not p.enabled:
+            out.append(attempt("assert_provider_usable(%r)" % key,
+                               lambda k=key: q.assert_provider_usable(k)))
+            continue
+        # An enabled provider is allowed through this gate BY DESIGN. What must
+        # still be impossible is using it beyond its licence, so the attack
+        # moves to the tier boundary -- which is where the real risk now lives.
+        for bad in ("REALTIME", "DELAYED"):
+            out.append(attempt(
+                "%s tier asked for %s data" % (key, bad),
+                lambda k=key, d=bad: q.assert_tier_supports(k, d)))
     out.append(attempt("get_provider('bloomberg') (unregistered)",
                        lambda: q.get_provider("bloomberg")))
     out.append(attempt("fetch_quote()", lambda: q.fetch_quote()))
@@ -172,12 +188,35 @@ def main():
 
     print("\n8. Invariants.")
     ok = True
+    # This invariant used to be "enabled == 0", which was true and meaningful
+    # while every candidate was blocked. It is now the wrong shape rather than
+    # merely the wrong number, so it is replaced by the property that actually
+    # matters: every ENABLED provider must record WHY, and anything enabled
+    # without a licence must carry the weakest trust label plus an owned,
+    # dated, non-empty list of what the user accepted.
     n_enabled = len(q.enabled_providers())
-    print("   enabled_providers()          -> %d (must be 0)" % n_enabled)
-    ok = ok and n_enabled == 0
+    risk_based = q.user_accepted_risk_providers()
+    print("   enabled_providers()          -> %d (%d on USER_ACCEPTED_RISK)"
+          % (n_enabled, len(risk_based)))
+    for p in q.enabled_providers():
+        ok = ok and p.activation_basis in q.ACTIVATION_BASES
+        if p.activation_basis == "USER_ACCEPTED_RISK":
+            # permits_machine_use must stay None. Flipping it to True to unlock
+            # the enable guard would record a permission no document grants.
+            good_record = (p.permits_machine_use is None
+                           and p.trust_level == "UNVERIFIED"
+                           and len(p.accepted_risks) >= 3
+                           and bool(p.decided_by) and bool(p.decided_on))
+            print("   %-14s basis=%s machine_use=%s trust=%s risks=%d "
+                  "owner=%s -> %s"
+                  % (p.key, p.activation_basis, p.permits_machine_use,
+                     p.trust_level, len(p.accepted_risks),
+                     bool(p.decided_by), "ok" if good_record else "BROKEN"))
+            ok = ok and good_record
     m = q.manifest()
     print("   prohibited=%d unverified=%d of %d"
           % (m["n_prohibited"], m["n_unverified"], len(q.PROVIDERS)))
+    # No provider may claim a cleared licence unless one was actually read.
     ok = ok and m["n_prohibited"] + m["n_unverified"] == len(q.PROVIDERS)
     gq = good()
     print("   good quote is_live=%s is_weak=%s" % (gq.is_live, gq.is_weak))

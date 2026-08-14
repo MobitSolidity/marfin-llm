@@ -82,6 +82,22 @@ VALUE_ORIGINS = ("PROVIDER_API", "USER_SUPPLIED", "CSV_EXPORT",
 WEAK_ORIGINS = ("VISUALLY_EXTRACTED", "USER_SUPPLIED", "UNKNOWN")
 
 
+#: WHY a provider is switched on. This exists because the user chose to enable
+#: Alpha Vantage, and collapsing that into `permits_machine_use=True` would have
+#: written a falsehood into the record: the Alpha Vantage terms contain the token
+#: `non-display` ZERO times (MEASURED 2026-08-12, re-probed 2026-08-14 --
+#: sha256_16 2282b2a77e9fa981, byte-identical, so the analysis still holds).
+#: Silence is not a grant. There is a real difference between
+#:
+#:   LICENCE_EXPLICIT   the terms affirmatively license machine use
+#:   USER_ACCEPTED_RISK the terms are SILENT, and a named human decided to
+#:                      proceed anyway, having been told what is unknown
+#:
+#: Both produce a working connector. Only the second one carries a risk the user
+#: owns, and a system that cannot tell them apart cannot warn anyone later.
+ACTIVATION_BASES = ("LICENCE_EXPLICIT", "USER_ACCEPTED_RISK")
+
+
 class MarketDataError(ValueError):
     """A quote is unusable, or is being used for something it cannot support."""
 
@@ -307,6 +323,32 @@ class Quote(object):
                     "material calculation (SS.7.1 Level 3). Corroborate it with "
                     "a provider or CSV value, or present the result as "
                     "approximate." % (self.provider, self.symbol, self.origin))
+            # A LATENT DEFECT, found by enabling the first real provider on
+            # 2026-08-14 and MEASURED before being fixed: this branch checked
+            # `origin` only, so a quote with origin=PROVIDER_API passed
+            # regardless of trust_level -- including trust_level=UNVERIFIED,
+            # whose own definition in rag.documents.TRUST_LEVELS reads
+            # "never citable as fact". All six trust levels passed. The gate was
+            # unreachable while every provider was disabled, which is exactly
+            # how it survived: an untaken code path is an untested one.
+            #
+            # origin and trust are deliberately separate axes (see VALUE_ORIGINS)
+            # and a gate that reads one of them enforces half a rule. The Alpha
+            # Vantage connector is the concrete case: origin PROVIDER_API, an
+            # honest API call, but trust UNVERIFIED because the licence position
+            # is UNKNOWN and its timestamp is constructed rather than observed.
+            from rag.documents import TRUST_LEVELS
+            if TRUST_LEVELS.get(self.trust_level, 0) <= 0:
+                raise MarketDataError(
+                    "%s/%s carries trust_level=%s (score %d), which "
+                    "rag.documents.TRUST_LEVELS defines as 'never citable as "
+                    "fact'. It may not be the SOLE evidence for a material "
+                    "calculation however it arrived -- origin=%s says the path "
+                    "was clean, not that the source is authoritative. "
+                    "Corroborate it, or present the result as approximate and "
+                    "labelled."
+                    % (self.provider, self.symbol, self.trust_level,
+                       TRUST_LEVELS.get(self.trust_level, 0), self.origin))
         elif purpose == "display":
             return          # anything may be shown to a human, with its labels
         else:
@@ -336,12 +378,15 @@ class Provider(object):
 
     _FIELDS = ("key", "name", "base_url", "terms_url", "enabled",
                "permits_machine_use", "status", "trust_level", "licence_note",
-               "blocking_question", "reviewed_on")
+               "blocking_question", "reviewed_on", "activation_basis",
+               "accepted_risks", "decided_by", "decided_on")
     __slots__ = _FIELDS + ("_frozen",)
 
     def __init__(self, key, name, base_url, terms_url, enabled,
                  permits_machine_use, status, trust_level, licence_note,
-                 blocking_question="", reviewed_on="2026-08-12"):
+                 blocking_question="", reviewed_on="2026-08-12",
+                 activation_basis=None, accepted_risks=(), decided_by="",
+                 decided_on=""):
         object.__setattr__(self, "_frozen", False)
         if not key or not isinstance(key, str):
             raise MarketDataError("provider key must be a non-empty string")
@@ -350,16 +395,66 @@ class Provider(object):
                 "permits_machine_use must be True, False or None (UNKNOWN), "
                 "got %r. Anything else erases the difference between 'checked "
                 "and forbidden' and 'could not check'." % (permits_machine_use,))
-        if enabled and permits_machine_use is not True:
-            # The whole point of the review. A provider may not be switched on
-            # while its licence position is prohibited or unknown.
+        if activation_basis is not None and activation_basis not in ACTIVATION_BASES:
             raise MarketDataError(
-                "refusing to enable provider %r: machine use is %s. SS.5.5 "
-                "requires a licensed or otherwise authorized provider for "
-                "machine-use market data. See "
-                "docs/legal/market-data-providers.md."
-                % (key, {False: "PROHIBITED", None: "UNVERIFIED"}[
-                    permits_machine_use]))
+                "activation_basis must be one of %s or None, got %r"
+                % (", ".join(ACTIVATION_BASES), activation_basis))
+        if enabled and activation_basis is None:
+            raise MarketDataError(
+                "refusing to enable provider %r with no activation_basis: an "
+                "enabled provider must record WHY it is on, otherwise a licence "
+                "grant and a human's accepted risk look identical in the record."
+                % (key,))
+        if not enabled and activation_basis is not None:
+            raise MarketDataError(
+                "provider %r is disabled but records activation_basis=%r. A "
+                "basis for switching something on that is off is a leftover "
+                "from an edit, and the next reader would take it as live."
+                % (key, activation_basis))
+        # SS.5.5 requires a licensed or OTHERWISE AUTHORIZED provider. The
+        # original guard read `permits_machine_use is not True`, which allowed
+        # exactly one route in. That was right while nobody had decided anything;
+        # it is too narrow now, because the spec's "otherwise authorized" is a
+        # real second route and the user has taken it for Alpha Vantage.
+        #
+        # What must NOT happen is the lazy repair: setting
+        # permits_machine_use=True to get past the guard. That would record that
+        # the LICENCE permits machine use, which is false and unmeasurable --
+        # `non-display` appears 0 times in those terms. So the tri-state keeps
+        # telling the truth about the DOCUMENT, and authorization is carried by a
+        # separate field that says a human decided.
+        if enabled and permits_machine_use is not True:
+            if activation_basis != "USER_ACCEPTED_RISK":
+                raise MarketDataError(
+                    "refusing to enable provider %r: machine use is %s and "
+                    "activation_basis is %r. SS.5.5 requires a licensed or "
+                    "otherwise authorized provider for machine-use market data. "
+                    "See docs/legal/market-data-providers.md."
+                    % (key, {False: "PROHIBITED", None: "UNVERIFIED"}[
+                        permits_machine_use], activation_basis))
+            if permits_machine_use is False:
+                # A user may accept an UNKNOWN. A user may not accept a
+                # PROHIBITION: TradingView's terms forbid the category outright,
+                # so consent does not create a permission. This is the line
+                # between assuming a risk and breaching a contract.
+                raise MarketDataError(
+                    "refusing to enable provider %r: its terms PROHIBIT machine "
+                    "use (%s). USER_ACCEPTED_RISK covers terms that are SILENT, "
+                    "not terms that forbid. A user cannot consent on the "
+                    "counterparty's behalf." % (key, status))
+            if not accepted_risks:
+                raise MarketDataError(
+                    "refusing to enable provider %r on USER_ACCEPTED_RISK with "
+                    "no accepted_risks recorded. The whole basis of this route "
+                    "is that the user was told what is unknown; an empty list "
+                    "means nobody can later check what they were told."
+                    % (key,))
+            if not decided_by or not decided_on:
+                raise MarketDataError(
+                    "refusing to enable provider %r on USER_ACCEPTED_RISK "
+                    "without decided_by and decided_on. An accepted risk with "
+                    "no owner and no date is indistinguishable from a default."
+                    % (key,))
         if not enabled and not status:
             raise MarketDataError("provider %r is disabled but records no "
                                   "status" % (key,))
@@ -378,6 +473,13 @@ class Provider(object):
         self.licence_note = licence_note
         self.blocking_question = blocking_question
         self.reviewed_on = reviewed_on
+        self.activation_basis = activation_basis
+        # A tuple, not the caller's list: a mutable accepted-risks list would let
+        # the record of what the user was told be edited after the fact, and this
+        # object is frozen precisely so that cannot happen.
+        self.accepted_risks = tuple(accepted_risks or ())
+        self.decided_by = decided_by
+        self.decided_on = decided_on
         object.__setattr__(self, "_frozen", True)
 
     def __setattr__(self, name, value):
@@ -441,22 +543,55 @@ register_provider(Provider(
     name="Alpha Vantage",
     base_url="https://www.alphavantage.co",
     terms_url="https://www.alphavantage.co/terms_of_service/",
-    enabled=False,
+    enabled=True,
+    # STILL None, and that is the point. The terms are SILENT on machine use:
+    # the token `non-display` appears 0 times. Setting this True to unlock the
+    # enable guard would have recorded a permission no document grants. The
+    # authorization comes from activation_basis instead.
     permits_machine_use=None,
-    status="FALLBACK CANDIDATE, PROVISIONAL -- not active",
-    trust_level="PERMITTED_RESEARCH",
+    status="ENABLED on USER_ACCEPTED_RISK -- terms silent on machine use; "
+           "free tier only; NOT licensed for realtime or 15-min delayed data",
+    # Not PERMITTED_RESEARCH. A source whose licence position is unverified must
+    # not outrank one whose position was actually read, so it sits at the bottom
+    # of the ladder and cannot be cited as fact on its own.
+    trust_level="UNVERIFIED",
     licence_note="Grants use 'for personal, non-commercial use'. Contains NO "
                  "non-display clause (searched: non-display, redistribut, "
                  "cache, store, derived -- 0 occurrences each), so machine "
-                 "processing is not prohibited. But its exclusions turn on the "
-                 "USER: using it 'on behalf of a corporation', or being "
-                 "'employed or affiliated with a financial planning advisor, "
-                 "insurance company, investment advisor, investment bank' puts "
-                 "the user outside personal use. Absence of a prohibition is "
-                 "not an affirmative grant, hence None.",
-    blocking_question="Is the user employed by or affiliated with a financial "
-                      "advisor, investment adviser, bank or insurer? If yes, "
-                      "personal-use terms do not apply."))
+                 "processing is not prohibited -- but silence is not a grant, "
+                 "hence permits_machine_use stays None. Exclusion criterion "
+                 "(iv) -- 'employed or have an active affiliation with a "
+                 "financial planning advisor, insurance company, investment "
+                 "advisor, investment bank' -- was ANSWERED by the user on "
+                 "2026-08-14: no affiliation with any institution or person, "
+                 "building this project alone. That clears (iv) and the "
+                 "'on behalf of a corporation' exclusion. Terms re-probed "
+                 "2026-08-14: HTTP 200, 127,102 bytes, sha256_16 "
+                 "2282b2a77e9fa981 -- byte-identical to the 2026-08-12 review, "
+                 "so that analysis still applies.",
+    blocking_question="",
+    activation_basis="USER_ACCEPTED_RISK",
+    accepted_risks=(
+        "The terms are SILENT on non-display/machine use (0 occurrences of "
+        "'non-display'); absence of a prohibition is not an affirmative grant, "
+        "so machine processing is UNKNOWN-leaning-permitted, not permitted.",
+        "MEASURED 2026-08-14 from alphavantage.co/support/: the free tier is "
+        "'25 API requests per day'. Not 25 per minute. This is a hard design "
+        "constraint, not a footnote.",
+        "MEASURED 2026-08-14, quoted: 'Realtime and 15-minute delayed US "
+        "market data is regulated by the stock exchanges, FINRA, and the SEC' "
+        "and is premium-only. The free tier therefore CANNOT supply realtime "
+        "or 15-minute-delayed quotes -- a regulatory limit, not a paywall to "
+        "be worked around.",
+        "Whether a local analytical assistant counts as 'personal, "
+        "non-commercial use' if its output were ever sold or published is a "
+        "lawyer's question and is NOT resolved. If this project stops being "
+        "personal, this activation must be revisited.",
+        "Cache/storage timeframes: UNKNOWN for this provider too. Market data "
+        "remains non-persistable until read.",
+    ),
+    decided_by="project owner (sole individual, no institutional affiliation)",
+    decided_on="2026-08-14"))
 
 register_provider(Provider(
     key="tradingview",
@@ -506,22 +641,57 @@ def get_provider(key: str) -> Provider:
 
 def enabled_providers():
     """
-    Returns [] as of 2026-08-12 -- deliberately, and that is the finding.
+    Returned [] from 2026-08-12 to 2026-08-14; now returns [alpha_vantage].
 
-    Every candidate is blocked on a question a human must answer. Until then the
-    system runs at SS.7.1 Level 0 (user supplies OHLCV) or Level 2 (CSV export),
-    neither of which needs a data licence.
+    That history matters, so it is recorded rather than overwritten. The empty
+    list was the honest state while both candidates were blocked on questions a
+    human had to answer. On 2026-08-14 the user answered both:
+
+      - not employed by or affiliated with any advisor, bank or insurer, and
+        building the project alone      -> clears Alpha Vantage criterion (iv)
+      - unwilling to pay for a tier     -> closes Twelve Data, which sells
+                                           non-display use by tier
+
+    So Alpha Vantage is enabled on USER_ACCEPTED_RISK, not on a licence grant:
+    its terms are SILENT on machine use. It is trust_level UNVERIFIED and its
+    free tier is limited to 25 requests/day with NO realtime or 15-minute data
+    (both MEASURED). Levels 0 and 2 therefore remain first-class paths rather
+    than fallbacks -- for anything intraday they are the ONLY paths.
     """
     return [p for p in PROVIDERS.values() if p.enabled]
 
 
+def user_accepted_risk_providers():
+    """
+    The enabled providers whose authorization is a human decision, not a licence.
+
+    Exists so a report can say so out loud. A provider on this list produces
+    usable data whose legal basis is weaker than a licence, and a system that
+    cannot enumerate them cannot warn anyone.
+    """
+    return [p for p in PROVIDERS.values()
+            if p.enabled and p.activation_basis == "USER_ACCEPTED_RISK"]
+
+
 def assert_provider_usable(key: str) -> Provider:
-    """Refuse a fetch from a provider whose licence is not cleared."""
+    """
+    Refuse a fetch from a provider whose licence is not cleared.
+
+    The ORDER of these checks is the design. A PROHIBITION is checked first and
+    is absolute: no amount of user consent reaches past it, because the user is
+    not the party granting the licence. Only then is the UNKNOWN case
+    considered, and it is where USER_ACCEPTED_RISK applies -- a human may decide
+    to proceed under silent terms, having been told what is unknown.
+
+    Reversing these two would let a documented prohibition be consented away,
+    which is the difference between assuming a risk and breaching a contract.
+    """
     p = get_provider(key)
     if p.permits_machine_use is False:
         raise MarketDataError(
             "provider %r PROHIBITS machine use: %s" % (key, p.status))
-    if p.permits_machine_use is None:
+    if p.permits_machine_use is None \
+            and p.activation_basis != "USER_ACCEPTED_RISK":
         raise MarketDataError(
             "provider %r has UNVERIFIED licence status for machine use (%s). "
             "Blocking question: %s" % (key, p.status, p.blocking_question))
@@ -529,6 +699,54 @@ def assert_provider_usable(key: str) -> Provider:
         raise MarketDataError("provider %r is registered but not enabled: %s"
                               % (key, p.status))
     return p
+
+
+#: MEASURED free-tier limits, enforced rather than documented.
+#:
+#: Phase 3's finding was that a declared rule which nothing checks drifts from
+#: reality. So these are not comments: assert_tier_supports() refuses, and the
+#: numbers came from alphavantage.co/support/ on 2026-08-14, quoted in
+#: docs/legal/market-data-providers.md.
+FREE_TIER_LIMITS: Mapping[str, Any] = MappingProxyType({
+    "alpha_vantage": MappingProxyType({
+        "requests_per_day": 25,
+        # Quoted: "Realtime and 15-minute delayed US market data is regulated by
+        # the stock exchanges, FINRA, and the SEC" -- premium-only. So the free
+        # tier can supply END_OF_DAY only. This is a REGULATORY boundary; there
+        # is no clever request that gets around it, and pretending otherwise
+        # would produce a quote labelled REALTIME that is nothing of the kind.
+        "permitted_delay_status": ("END_OF_DAY", "UNKNOWN"),
+        "source": "alphavantage.co/support/ probed 2026-08-14, HTTP 200",
+    }),
+})
+
+
+def assert_tier_supports(key: str, delay_status: str) -> None:
+    """
+    Refuse a request for data the user's tier is not licensed to receive.
+
+    This runs BEFORE any fetch, because the failure it prevents is not a network
+    error: it is a quote that arrives labelled REALTIME from a tier that cannot
+    lawfully supply realtime data. That value would look better than the
+    END_OF_DAY it really is, and every downstream calculation would inherit the
+    mislabelling silently.
+    """
+    if delay_status not in DELAY_STATUS:
+        raise MarketDataError("unknown delay_status %r; allowed: %s"
+                              % (delay_status, ", ".join(DELAY_STATUS)))
+    limits = FREE_TIER_LIMITS.get(key)
+    if limits is None:
+        return
+    allowed = limits["permitted_delay_status"]
+    if delay_status not in allowed:
+        raise MarketDataError(
+            "provider %r on its free tier is not licensed to supply %s data "
+            "(permitted: %s). Quoted from %s: 'Realtime and 15-minute delayed "
+            "US market data is regulated by the stock exchanges, FINRA, and the "
+            "SEC' and is premium-only. This is a regulatory limit, not a rate "
+            "limit -- requesting it anyway would either fail or return a value "
+            "whose label is wrong."
+            % (key, delay_status, ", ".join(allowed), limits["source"]))
 
 
 def fetch_quote(*args, **kwargs):
