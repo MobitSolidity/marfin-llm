@@ -141,11 +141,25 @@ LIVE_PREREQUISITES: Mapping[str, Tuple[bool, str]] = MappingProxyType({
                "execution/brokers.py, where every adapter is disabled"),
     "verified live account alias": (
         False, "no account alias has been registered or verified"),
+    # AMENDED 2026-08-14. The verdict is unchanged (False) but the reason it
+    # was written for is gone: the two questions that used to hold Alpha
+    # Vantage open are now ANSWERED, and the answers did not produce a licence.
+    # Alpha Vantage is now ENABLED, on activation_basis USER_ACCEPTED_RISK --
+    # its terms are SILENT on machine use (MEASURED: "non-display" occurs 0
+    # times), and silence is not a grant, so permits_machine_use stays None and
+    # a named human carries the risk instead. ENABLED-ON-ACCEPTED-RISK is not
+    # LICENSED, so this prerequisite is still unmet, and a reader who saw
+    # market data start working must not conclude live trading came closer.
+    # Twelve Data, which was the one provider that licensed the category, is
+    # CLOSED: the user decided to pay nothing, and its machine-use tier is
+    # paid. TradingView still PROHIBITS it, which no consent can override.
     "independent licensed market data": (
-        False, "NO market-data provider is licensed for machine use. Twelve Data "
-               "licenses the category but no tier is verified; Alpha Vantage's "
-               "personal-use terms turn on facts about the user; TradingView "
-               "PROHIBITS it outright. See docs/legal/market-data-providers.md"),
+        False, "NO market-data provider is LICENSED for machine use. Alpha "
+               "Vantage is enabled on USER_ACCEPTED_RISK, not on a licence: "
+               "its terms are silent, and an accepted risk is not a grant. "
+               "Twelve Data licensed the category but is closed by the "
+               "no-payment decision; TradingView prohibits it outright. See "
+               "docs/legal/market-data-providers.md SS.7 (2026-08-14)"),
     "pre-trade risk engine": (
         False, "not built; SS.6.3 lists 21 mandatory controls"),
     "audit logging": (False, "not built"),
