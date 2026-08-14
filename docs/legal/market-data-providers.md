@@ -2,6 +2,12 @@
 
 **Review type:** §5.5 "Use licensed or otherwise authorized providers for machine-use market data"
 **Reviewed on:** 2026-08-12 (UTC), by live probe
+**Amended on:** 2026-08-14 (UTC) — see **§7**, which supersedes the conclusion in
+§5. One provider (Alpha Vantage) is now **enabled**, on a recorded
+`USER_ACCEPTED_RISK` basis rather than on a found permission. §§1–6 are left
+exactly as written on 2026-08-12: they are the record of what was known then, and
+rewriting them to match the current state would destroy the evidence that the
+decision was made under acknowledged uncertainty.
 **Purpose:** §7 requires that when TradingView use is not permitted, market data be
 obtained from "an independently authorized provider". This is the search for that
 provider, and the record of what each one's terms actually say.
@@ -186,6 +192,11 @@ quotes. So it does not solve the market-data problem; it solves a different one.
 
 ## 5. What this means for Phase 3A (the honest conclusion)
 
+> **SUPERSEDED 2026-08-14 by §7.** Both blocking questions below were answered by
+> the user, and one provider is now enabled. This section is preserved unedited
+> because it states the position *before* those answers, and because its second
+> question turned out to be the one that mattered.
+
 **No market-data provider is enabled at the end of this review.** That is the
 correct outcome, not a failure to finish:
 
@@ -216,3 +227,207 @@ exported CSV. §7.1 Level 0 explicitly contemplates exactly this.
 - "Alpha Vantage permits personal machine use": **COMPUTED** from the absence of a non-display clause plus the personal-use grant — *not* an affirmative permission
 - Cache/storage timeframes, pricing, professional-use status: **UNKNOWN** — not probed
 - Stooq, Tiingo, EODHD terms: **UNKNOWN** — could not be read
+
+---
+
+## 7. Amendment, 2026-08-14 — the two blocking questions, answered
+
+Recorded on the day the answers were given, and separated into what the **user
+stated**, what was **re-measured**, and what was **decided** as a consequence.
+Those three are different kinds of fact and are labelled as such throughout.
+
+### 7.1 The terms were re-probed BEFORE the old analysis was relied on
+
+The 2026-08-12 reading is only usable if the document it read has not changed.
+Re-probed on 2026-08-14:
+
+| Item | 2026-08-12 | 2026-08-14 | Verdict |
+|---|---|---|---|
+| Alpha Vantage terms, sha256 (first 16) | `2282b2a77e9fa981` | `2282b2a77e9fa981` | **byte-identical** |
+| `non-display` occurrences | 0 | 0 | unchanged |
+
+**VERIFIED.** The clause-level analysis in §3 therefore still applies to the
+document actually published today, rather than to a remembered version of it. Had
+the hash moved, the whole of §3 would have had to be re-read before any decision.
+
+### 7.2 Question 2 (user affiliation) — answered, and it unblocks
+
+**User's answer, quoted:** no affiliation with any institution or person; building
+the project alone.
+
+This is the answer criterion (iv) needs. Verbatim from the terms, usage falls
+outside "personal" if *"You are currently employed or have an active affiliation
+with a financial planning advisor, insurance company, investment advisor,
+investment bank…"* — and criteria (ii) and (iii) likewise turn on acting for an
+organisation or providing access to others.
+
+**Status: VERIFIED as a statement by the user** — not independently verifiable by
+this system, and it does not need to be. It is a fact about the user, which is why
+§3 recorded that it *must be asked and not assumed*. The eligibility conclusion is
+**COMPUTED** from that statement plus the quoted clauses:
+
+- (ii) not acting as or for a corporation, firm, partnership or trust → satisfied
+- (iii) no commercial activity giving others access to the data → satisfied
+- (iv) no employment or active affiliation with an advisor, bank or insurer → satisfied
+
+So the *personal, non-commercial* grant in §2.a fits this user. **This is the one
+question that was genuinely blocking, and it is now closed.**
+
+### 7.3 Question 1 (paying for a Twelve Data tier) — answered: no
+
+**User's answer, quoted (Persian):** «فقط از بخش رایگان استفاده کن و هزینه ای نکن
+یعنی از Alpha Vantage استفاده کن» — *use only the free part, spend nothing, i.e.
+use Alpha Vantage.*
+
+**Consequence, and it is a real loss rather than a formality:** Twelve Data was the
+*stronger* candidate on licence grounds — §2 recorded it as having an **explicit**
+non-display permission at some tier, which is affirmative authorisation of exactly
+the kind this project prefers. Alpha Vantage has no such clause; it is merely
+**silent**. Choosing the free option therefore means accepting **weaker legal
+ground in exchange for zero cost**, and that trade is the user's to make and is
+recorded here as theirs.
+
+**Twelve Data is closed** for the duration of this decision — not disqualified. If
+the user ever chooses to pay, §2's blocking item (verify *which* tier carries the
+non-display right, in writing) is still the correct next step.
+
+### 7.4 What is still NOT permitted, and why silence did not become permission
+
+The user's answers resolve *who may use* Alpha Vantage. They do **not** create a
+machine-use grant, because no such grant exists in the document:
+
+- `non-display` still occurs **0 times** (MEASURED, twice, two days apart).
+- Therefore `permits_machine_use` is recorded as **`None` (UNKNOWN)** in the
+  provider registry — *not* `True`.
+
+This is enforced in code and not merely written here. `Provider.__init__` refuses a
+provider whose `permits_machine_use` is `None` unless a **separate**
+`activation_basis` field carries an explicit decision; the authorisation is *not*
+smuggled into the permission field. The distinction is the whole point:
+
+> **A provider that is silent stays silent in the registry. What changes is that a
+> named person has accepted the risk of proceeding anyway.**
+
+Two limits are absolute and unaffected by any user consent:
+
+1. **A PROHIBITION cannot be consented past.** `assert_provider_usable` checks for
+   prohibition *before* it checks for an accepted risk, so no `USER_ACCEPTED_RISK`
+   flag can enable TradingView. A user may accept an UNKNOWN; a user may **not**
+   authorise what a licence forbids. This ordering is mutation-tested.
+2. **Storage timeframes remain UNKNOWN**, so fetched market data stays
+   **non-persistable**. The in-memory request budget is explicitly *not* a cache,
+   and says so in its own docstring.
+
+### 7.5 The free tier's MEASURED limits — enforced, not documented
+
+Probed 2026-08-14 and recorded in `FREE_TIER_LIMITS`, which is *executable* rather
+than advisory:
+
+| Limit | Value | Status |
+|---|---|---|
+| Requests per **day** | **25** | MEASURED |
+| Permitted delay status | `END_OF_DAY`, `UNKNOWN` | MEASURED |
+| Realtime / 15-minute delayed | **premium only** | VERIFIED, quoted |
+
+Quoted from the support page: *"Realtime and 15-minute delayed US market data is
+regulated by the stock exchanges, FINRA, and the SEC"* — and is premium-only. This
+is a **regulatory** boundary, not a rate limit: there is no clever request that
+gets around it, and pretending otherwise would produce a quote labelled `REALTIME`
+that is nothing of the kind. `assert_tier_supports` refuses such a request
+**before** the budget is spent, so asking for data the tier cannot lawfully supply
+does not cost one of the 25.
+
+### 7.6 The five risks accepted, with an owner and a date
+
+Recorded in the registry itself (`decided_by`, `decided_on`), not only in prose,
+because Phase 3 established that unenforced declarations drift:
+
+- **decided_by:** project owner (sole individual, no institutional affiliation)
+- **decided_on:** 2026-08-14
+
+Quoted **verbatim from `accepted_risks` in the registry**, in registry order, so
+that this document cannot drift from the code it describes. (An earlier draft of
+this section paraphrased them and got the order wrong; the paraphrase was replaced
+with the actual strings after reading them back out of `PROVIDERS`.)
+
+1. *"The terms are SILENT on non-display/machine use (0 occurrences of
+   'non-display'); absence of a prohibition is not an affirmative grant, so machine
+   processing is UNKNOWN-leaning-permitted, not permitted."*
+2. *"MEASURED 2026-08-14 from alphavantage.co/support/: the free tier is '25 API
+   requests per day'. Not 25 per minute. This is a hard design constraint, not a
+   footnote."*
+3. *"MEASURED 2026-08-14, quoted: 'Realtime and 15-minute delayed US market data is
+   regulated by the stock exchanges, FINRA, and the SEC' and is premium-only. The
+   free tier therefore CANNOT supply realtime or 15-minute-delayed quotes -- a
+   regulatory limit, not a paywall to be worked around."*
+4. *"Whether a local analytical assistant counts as 'personal, non-commercial use'
+   if its output were ever sold or published is a lawyer's question and is NOT
+   resolved. If this project stops being personal, this activation must be
+   revisited."*
+5. *"Cache/storage timeframes: UNKNOWN for this provider too. Market data remains
+   non-persistable until read."*
+
+Two further constraints are enforced in code but are **not** in that list, because
+they are labels rather than accepted risks: every quote is stamped
+`delay_status="END_OF_DAY"` (risk 3 makes anything else unavailable), and every
+quote carries `trust_level="UNVERIFIED"` — usable for analysis, **never citable as
+fact**, and refused outright for a material calculation.
+
+Each quote produced by the connector carries this in its own `licence` field:
+`"Alpha Vantage free tier, personal non-commercial use; terms SILENT on machine
+use; enabled on USER_ACCEPTED_RISK (see docs/legal/market-data-providers.md)"` —
+so a number that travels away from this document still carries the caveat, and
+every clause of that string is separately asserted in the test suite.
+
+### 7.7 What the connector measured about the API itself
+
+Recorded here because two of these findings bear directly on whether a *licence*
+is being respected, not merely on whether the code works.
+
+1. **Every failure returns HTTP 200.** Bad symbol, unknown function, missing
+   parameter and demo-key misuse: four probes, four HTTP 200s, one identical
+   `Information` body. Refusal keys on the **shape of the body**; a status-code
+   check would treat all four as success.
+2. **An invalid API key still returns real data.** `apikey=INVALIDKEY999` returned
+   a full 100-day IBM series. A successful response therefore proves **nothing**
+   about authorisation — which is precisely why the licence gate lives in the code
+   and cannot be inferred from the API's behaviour.
+3. **A defect was found and fixed:** `adjusted=True` returned the *unadjusted*
+   close while labelling the quote `ADJUSTED`. On IBM's 100-day window 96 of 100
+   days differ, the relative gap peaking at **1.4351%** (largest absolute gap
+   3.6692 on 2026-04-21: raw 255.6800 vs adjusted 252.0108), caused by two real
+   dividend events. A wrong price wearing a correct-looking label is the exact
+   failure this layer exists to prevent.
+4. **A suspected second defect was measured and was not one.** Both
+   `TIME_SERIES_DAILY` and `TIME_SERIES_DAILY_ADJUSTED` return the same container
+   key, `"Time Series (Daily)"`. "Fixing" the identical-looking branches to the
+   tidier `"Time Series (Daily Adjusted)"` would have broken every adjusted call.
+
+### 7.8 Status labels for this amendment
+
+- Terms hash unchanged, `non-display` count, all HTTP statuses, the 25/day limit,
+  the four HTTP-200 failure bodies, the adjusted-close divergence: **MEASURED /
+  VERIFIED** (2026-08-14)
+- "This user qualifies as *personal, non-commercial*": **COMPUTED** from the user's
+  stated non-affiliation plus the quoted clauses — *not* independently verified
+- "Alpha Vantage permits machine use": **UNKNOWN**, unchanged, and deliberately
+  left so in the registry
+- Permitted storage timeframes, professional-use status, pricing: **UNKNOWN** —
+  hence non-persistable data
+- Twelve Data's specific non-display tier: **UNKNOWN** — closed by the
+  no-payment decision, not resolved by it
+
+### 7.9 Revisit conditions
+
+This authorisation is not permanent. It must be re-examined if **any** of these
+change:
+
+- The user takes employment with, or an affiliation with, an advisor, bank,
+  insurer or investment firm → criterion (iv) fails and the provider must be
+  **disabled**, not re-argued.
+- The project stops being a single individual's personal tool, or any output is
+  provided to another person or entity → criteria (ii) and (iii) fail.
+- The terms document's hash changes → §3 must be re-read from the new text before
+  the provider is used again.
+- The user decides to pay for data → Twelve Data's explicit non-display tier is the
+  better ground and should be preferred over this accepted risk.
