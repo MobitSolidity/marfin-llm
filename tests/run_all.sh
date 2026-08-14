@@ -24,7 +24,8 @@ tests/test_rag.py \
 tests/test_market.py \
 tests/test_execution.py \
 tests/test_csv_import.py \
-tests/test_webhooks.py"
+tests/test_webhooks.py \
+tests/test_alpha_vantage.py"
 
 for t in $SUITES; do
   echo
@@ -115,6 +116,28 @@ whout_bad=$(echo "$whout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* WRONG EXC|\*\*
 echo "$whout" | grep -E "^(attacks|structural checks):"
 if [ $wh_status -ne 0 ]; then
   echo "  ERROR: a webhook attack was accepted, or refused by the wrong guard"
+  fail=1
+fi
+
+# The Alpha Vantage connector probe. This is the first module in the project that
+# talks to a real third-party API, and the measurement that shaped it is the
+# reason this gate exists: EVERY failure that API has arrives as HTTP 200 with an
+# explanatory string and no data. Bad symbol, unknown function, missing
+# parameter, demo-key misuse -- four probes, four HTTP 200s, one identical body
+# shape. A connector that checked the status code would treat all four as
+# success. Worse, an INVALID key still returns a full real series, so a
+# successful response proves nothing about authorisation either. The probe runs
+# entirely from saved payloads and spends none of the 25-per-day allowance.
+echo
+echo ">>> Alpha Vantage connector guards (adversarial probe)"
+avout=$(python3 tests/probe_alpha_vantage.py 2>&1)
+av_status=$?
+avout_bad=$(echo "$avout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* BROKEN")
+[ -n "$avout_bad" ] && echo "$avout_bad"
+echo "$avout" | grep -E "^attempts="
+if [ $av_status -ne 0 ]; then
+  echo "  ERROR: an unusable Alpha Vantage response was accepted, or a"
+  echo "         structural guarantee of the connector no longer holds"
   fail=1
 fi
 
@@ -219,6 +242,34 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: webhooks.py not restored, or its oracles are not green"
     fail=1; }
   [ $whm_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> Alpha Vantage connector mutation battery"
+  # Two oracles again, and the pairing was VERIFIED rather than assumed: seeding
+  # the real adjusted-close defect produced 5 test failures, while disabling the
+  # HTTP-200 error-key guard produced 3 probe ALLOWEDs and no test failure at
+  # all. Each oracle caught what the other missed.
+  #
+  # This battery reported 8 survivors and 1 SKIP against a suite printing
+  # "131 passed, 0 failed". Every one was a gap in the TESTS, closed without
+  # changing the module and without relaxing an assertion -- and seven were the
+  # same shape seen in every battery before it: a SECOND guard answered in place
+  # of the one under test. A series that was a non-empty list; a coerced empty
+  # price caught by the zero-price guard instead of the numeric one; a
+  # case-sensitised demo check whose uppercase form was caught by the 8-64
+  # character length regex; two gates that always say yes because this provider
+  # is enabled and its tier does permit end-of-day. The SKIP was the worst of
+  # the nine: its find-string occurred TWICE in the module, so it had silently
+  # stopped testing anything while still printing a line.
+  avm=$(python3 tests/mutate_alpha_vantage.py 2>&1)
+  avm_status=$?
+  echo "$avm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$avm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$avm" | grep -E "^ +RECHECK:" && fail=1
+  echo "$avm" | grep -q "source restored and oracles green: True" || {
+    echo "  ERROR: alpha_vantage.py not restored, or its oracles are not green"
+    fail=1; }
+  [ $avm_status -ne 0 ] && fail=1
 fi
 
 echo

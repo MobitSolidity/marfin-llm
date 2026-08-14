@@ -90,6 +90,21 @@ PROVIDER_KEY = "alpha_vantage"
 #: arrive as an "Information" string that looks like a data problem.
 PERMITTED_FUNCTIONS = ("TIME_SERIES_DAILY", "TIME_SERIES_DAILY_ADJUSTED")
 
+#: The container both permitted functions put their rows in. MEASURED 2026-08-14
+#: against the live API: TIME_SERIES_DAILY and TIME_SERIES_DAILY_ADJUSTED BOTH
+#: return top-level keys ['Meta Data', 'Time Series (Daily)']. The adjusted
+#: endpoint does not say "Adjusted" in the key, which is counter-intuitive
+#: enough that assuming it would have broken every adjusted call.
+SERIES_KEY = "Time Series (Daily)"
+
+#: Which field carries the close, per function. Written as a mapping because the
+#: adjusted payload contains BOTH, and reading the wrong one is not a rounding
+#: error: MEASURED on IBM's 100-day window (re-derived from the saved fixture,
+#: not quoted from memory), 96 of 100 days differ, the relative gap peaking at
+#: 1.4351% and the largest absolute gap being 3.6692 on 2026-04-21 (raw 255.6800
+#: vs adjusted 252.0108), because of two dividend events.
+CLOSE_FIELD = {False: "4. close", True: "5. adjusted close"}
+
 BASE_URL = "https://www.alphavantage.co/query"
 
 #: Alpha Vantage states the daily series is stamped in US/Eastern. The exchange
@@ -450,8 +465,15 @@ def fetch_daily(symbol: str, exchange: str = "UNKNOWN",
     b.spend("%s %s" % (function, str(symbol).upper()))
 
     payload = _http_get(url, key, timeout=timeout)
-    series_key = ("Time Series (Daily)" if not adjusted
-                  else "Time Series (Daily)")
+    # Both functions return the SAME container name. That looked like a
+    # copy-paste bug in this file (two identical branches of a conditional) and
+    # it was checked rather than "fixed": MEASURED 2026-08-14, TIME_SERIES_DAILY
+    # and TIME_SERIES_DAILY_ADJUSTED both return top-level keys
+    # ['Meta Data', 'Time Series (Daily)'] -- the adjusted endpoint does NOT say
+    # "Adjusted" anywhere in the key. Guessing the tidier-looking
+    # "Time Series (Daily Adjusted)" would have produced a refusal on every
+    # adjusted call. Kept as a single constant now that it is measured.
+    series_key = SERIES_KEY
     series = assert_usable_response(
         payload, series_key,
         context="symbol=%s function=%s" % (str(symbol).upper(), function))
@@ -467,15 +489,34 @@ def fetch_daily(symbol: str, exchange: str = "UNKNOWN",
             raise AlphaVantageError(
                 "the entry for %s is %s, not an object"
                 % (date_str, type(row).__name__))
-        close = None
-        for field in ("4. close", "5. adjusted close", "close"):
-            if field in row:
-                close = _num(row[field], field, date_str)
-                break
-        if close is None:
+        # A DEFECT, MEASURED on 2026-08-14 before being fixed. This loop tried
+        # "4. close" first for both functions, and the ADJUSTED payload contains
+        # BOTH "4. close" and "5. adjusted close" -- so adjusted=True read the
+        # unadjusted number and the Quote was still labelled ADJUSTED.
+        #
+        # MEASURED on the IBM 100-day window, re-derived from the saved fixture
+        # rather than quoted from memory: 96 of 100 days differ. The largest
+        # ABSOLUTE gap is 3.6692 on 2026-04-21 (raw 255.6800 vs adjusted
+        # 252.0108) and the RELATIVE gap peaks at 1.4351% -- flat across the
+        # differing days, as a multiplicative adjustment factor should be. The
+        # cause is two real dividend events (2026-05-08 and 2026-08-10, 1.69
+        # each). So this was not a rounding difference; it was a wrong price
+        # wearing a correct-looking label,
+        # which is the exact failure this layer exists to prevent.
+        #
+        # The field required is now decided by what was ASKED FOR, and its
+        # absence is a refusal rather than a silent fallback to a number that
+        # means something else.
+        want = CLOSE_FIELD[bool(adjusted)]
+        if want not in row:
             raise AlphaVantageError(
-                "no close field for %s; keys present: %s"
-                % (date_str, sorted(row)[:8]))
+                "the entry for %s has no %r field, so the %s close cannot be "
+                "read; keys present: %s. Falling back to another field would "
+                "return a number that means something different under a label "
+                "saying otherwise."
+                % (date_str, want, "adjusted" if adjusted else "unadjusted",
+                   sorted(row)[:10]))
+        close = _num(row[want], want, date_str)
         stamp, assumption = _session_close_utc(date_str)
         quotes.append(Quote(
             provider=PROVIDER_KEY, symbol=str(symbol).strip().upper(),
