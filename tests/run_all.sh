@@ -25,7 +25,8 @@ tests/test_market.py \
 tests/test_execution.py \
 tests/test_csv_import.py \
 tests/test_webhooks.py \
-tests/test_alpha_vantage.py"
+tests/test_alpha_vantage.py \
+tests/test_broker_tools.py"
 
 for t in $SUITES; do
   echo
@@ -138,6 +139,24 @@ echo "$avout" | grep -E "^attempts="
 if [ $av_status -ne 0 ]; then
   echo "  ERROR: an unusable Alpha Vantage response was accepted, or a"
   echo "         structural guarantee of the connector no longer holds"
+  fail=1
+fi
+
+# The broker tool surface is where a defect stops being an analytical error and
+# becomes a financial one, so its adversarial probe runs on every pass. It tries
+# to reach a write through every route: a preview escalated with its own id, a
+# synthetic VERIFIED live-capable adapter, immutable tables edited at runtime.
+# Offline, no credential, milliseconds.
+echo
+echo ">>> broker tool surface (adversarial probe)"
+btout=$(python3 tests/probe_broker_tools.py 2>&1)
+bt_status=$?
+btout_bad=$(echo "$btout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* BROKEN")
+[ -n "$btout_bad" ] && echo "$btout_bad"
+echo "$btout" | grep -E "^  attempts:|^  structural:"
+if [ $bt_status -ne 0 ]; then
+  echo "  ERROR: a broker write or unauthorised read was ALLOWED, or a"
+  echo "         structural guarantee of the tool surface no longer holds"
   fail=1
 fi
 
@@ -270,6 +289,30 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: alpha_vantage.py not restored, or its oracles are not green"
     fail=1; }
   [ $avm_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> broker tools mutation battery"
+  # 86 mutations against the SS.8.4/8.5/8.6 surface, oracles test_broker_tools.py
+  # AND probe_broker_tools.py together. Six survived the first run and every one
+  # was a finding about the TESTS. Five were the shape this project keeps
+  # meeting: a SECOND guard answering for the one under test -- an empty result
+  # set that is also a partial one, and four portfolio_risk validation guards
+  # standing behind a terminal refusal of the same exception type, so relaxing
+  # any of them changed nothing a type-only assertion could see. Two were simply
+  # untested entry-point guards in preview_order. The sixth, record()'s status
+  # check, is genuinely unreachable by input because verdict_for re-checks every
+  # status -- it was NOT filed as equivalent, because that equivalence rests on
+  # record() having no external caller today, so its independent existence is
+  # asserted structurally instead.
+  btm=$(python3 tests/mutate_broker_tools.py 2>&1)
+  btm_status=$?
+  echo "$btm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$btm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$btm" | grep -E "^ +RECHECK:" && fail=1
+  echo "$btm" | grep -q "source restored and oracles green: True" || {
+    echo "  ERROR: broker_tools.py not restored, or its oracles are not green"
+    fail=1; }
+  [ $btm_status -ne 0 ] && fail=1
 fi
 
 echo

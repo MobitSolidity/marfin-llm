@@ -468,9 +468,28 @@ def position_size(account_equity: Any, risk_budget: Any, entry: Any, stop: Any,
     # A stop of exactly zero is refused rather than treated as "no stop": a stop
     # at zero implies risking the entire position value, which is a legitimate
     # thing to want and an illegitimate thing to express by omission.
+    #
+    # DEFECT FIXED 2026-08-14. This guard read `if stop_p < 0` while the comment
+    # above it claimed zero was refused, so the comment described a guard that
+    # did not exist. MEASURED before the fix: position_size(100000, 1000, 100, 0)
+    # returned quantity 10.0 instead of refusing -- it had quietly priced the
+    # risk per unit at the FULL entry price of 100, where a real stop at 95 gives
+    # 200.0. The direction of that error is the dangerous one only in reverse: a
+    # caller whose `stop` field was missing and defaulted to 0 got a position
+    # twenty times too SMALL, silently, and a caller who meant "no stop" got a
+    # number that looked like a risk-managed size. Both read as answers.
     stop_p = _finite_number(stop, "stop")
     if stop_p < 0:
         raise BrokerToolError("stop must not be negative, got %r" % (stop_p,))
+    if stop_p == 0:
+        raise BrokerToolError(
+            "stop is exactly zero, which this function refuses rather than "
+            "interpreting. It has two plausible meanings -- 'no stop, risk the "
+            "whole position value' and 'the stop field was never filled in' -- "
+            "and they differ by the entire size of the trade. If total-loss risk "
+            "is genuinely intended, pass the instrument's real floor price "
+            "explicitly so it appears in the returned inputs and a reader can "
+            "see it was chosen.")
     fee = _finite_number(fees, "fees")
     slip = _finite_number(slippage, "slippage")
     if fee < 0 or slip < 0:
@@ -594,6 +613,59 @@ def portfolio_risk(positions: Any, prices: Any, base_currency: str = "USD",
         "computed from unverified inputs would be a risk measurement in name "
         "only." % (method, conf, int(horizon), base_currency.strip(),
                    len(positions), len(prices)))
+
+
+def verdict_for(results: Mapping[str, Mapping[str, str]]) -> str:
+    """
+    PASS only if every one of the sixteen checks PASSed. Otherwise REFUSE.
+
+    WHY THIS IS A SEPARATE FUNCTION AND NOT AN INLINE EXPRESSION
+    -----------------------------------------------------------
+    It was inline, and that made the single most important rule in this module
+    UNTESTABLE. MEASURED on 2026-08-14: seeding the mutant
+
+        verdict = "PASS" if n_fail == 0 else "REFUSE"
+
+    -- which is exactly the "an UNKNOWN check is good enough" bug this module was
+    written to prevent -- did not fail a single one of the 54 adversarial probe
+    attempts. The reason is the pattern that dominates this project's mutation
+    findings: A SECOND GUARD ANSWERS IN PLACE OF THE ONE UNDER TEST.
+    `kill_switch_status` is unconditionally FAIL, so `n_fail` is never zero, so
+    the mutant returned REFUSE in every state a caller can construct. The rule
+    and its mutant were indistinguishable through the public entry point, not
+    because they mean the same thing, but because the one input that separates
+    them -- fifteen PASSes and one UNKNOWN -- cannot occur while the kill switch
+    is absent.
+
+    Pulling the rule out does not weaken it. It makes the rule reachable with a
+    synthetic result set, so a test can state directly that ONE UNKNOWN among
+    fifteen PASSes is a REFUSE. When a kill switch is eventually built and
+    `kill_switch_status` can PASS, that assertion is already in place instead of
+    being written for the first time on the day it starts to matter.
+    """
+    if not results:
+        raise BrokerToolError(
+            "refusing to judge an empty result set. No checks run is not the "
+            "same as no checks failed, and returning PASS here would be the "
+            "worst possible reading of 'nothing went wrong'.")
+    missing = [c for c in RISK_CHECKS if c not in results]
+    if missing:
+        raise BrokerToolError(
+            "refusing to judge a partial result set: %d of the %d SS.8.5 checks "
+            "are absent (%s)" % (len(missing), len(RISK_CHECKS),
+                                 ", ".join(missing)))
+    for name, entry in results.items():
+        status = entry["status"]
+        if status not in CHECK_STATUS:
+            raise BrokerToolError(
+                "check %r reported status %r, which is not one of %s. An "
+                "unrecognised status must not be silently treated as a pass."
+                % (name, status, "|".join(CHECK_STATUS)))
+    # The rule, stated positively and only once: every check must have PASSed.
+    # Written against the STATUSES rather than a count of failures, because a
+    # count of failures cannot distinguish UNKNOWN from PASS.
+    return "PASS" if all(e["status"] == "PASS" for e in results.values()) \
+        else "REFUSE"
 
 
 def pre_trade_risk_check(account_id: Any, environment: Any,
@@ -758,7 +830,7 @@ def pre_trade_risk_check(account_id: Any, environment: Any,
     n_pass = sum(1 for r in results.values() if r["status"] == "PASS")
     n_fail = sum(1 for r in results.values() if r["status"] == "FAIL")
     n_unknown = sum(1 for r in results.values() if r["status"] == "UNKNOWN")
-    verdict = "PASS" if n_pass == len(RISK_CHECKS) else "REFUSE"
+    verdict = verdict_for(results)
 
     return {
         "tool": "pre_trade_risk_check",
