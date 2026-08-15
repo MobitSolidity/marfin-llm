@@ -65,12 +65,19 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **3 — Data Pipeline and Financial RAG** |
-| Status | PASS — awaiting Phase 3A approval |
-| Next | Phase 3A — Market Data, TradingView, and Broker Design (**not started**) |
+| Current phase | **3A — Market Data, TradingView, and Broker Design** |
+| Status | PASS — **awaiting Phase 4 approval** |
+| Next | Phase 4 — RAG and Tool-Enabled Evaluation (**not started; NOT startable in this sandbox**) |
 | Active mode | `ANALYSIS_ONLY` |
-| Live trading | `DISABLED` (no execution code exists) |
-| TradingView connector level | 0 |
+| Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |
+| TradingView connector level | 0 (display only; extraction refused) |
+| Market data provider | Alpha Vantage **free tier only** (D-0040) — no paid feed |
+
+**Why Phase 4 cannot start here:** it compares a plain baseline against RAG+tools,
+which requires a running model. MEASURED in this sandbox: no model file on disk,
+`llama_cpp` absent, **0.96 GiB RAM available** against a 0.85 GiB minimum weights
+footprint before any runtime overhead. This is stated rather than silently
+skipped; see `docs/phase-reports/phase-3a.md` §7.
 
 ### Target (user-supplied)
 
@@ -101,6 +108,36 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 |
 | Dense vector retrieval | **DOES NOT EXIST** — lexical + structured only (D-0030) |
 | RAG behaviour with a live model | **UNKNOWN** — risk R21 |
+| Market data layer (quotes, CSV, webhooks, AV) | **VERIFIED** — 294 mutations, 0 survivors |
+| Execution layer (mode, brokers, broker tools) | **VERIFIED** — 139 mutations, 0 survivors |
+| Level 3 visual surface (screenshot) | **VERIFIED** — 89 mutations, 0 survivors |
+| Live broker write reachable by any route | **NO** — 62 adversarial attempts, 62 refused |
+| Screen capture / OCR in this runtime | **DOES NOT EXIST** — 12-entry capability probe |
+| Alpha Vantage against the real API | **UNKNOWN** — no live fetch was ever performed |
+| Permitted market-data storage timeframe | **UNKNOWN** — risk R22; data treated as non-persistable |
+
+### Phase 3A — market data, licences, and the broker wall
+
+`src/market/` and `src/execution/` — the surface where this project stops
+reasoning about text and starts touching money and other people's licensed
+property. Almost entirely refusals, which is exactly the code a passing suite is
+worst at verifying: **a refusal that stops refusing looks like nothing at all.**
+
+Six real defects were found, none visible to a green test run:
+
+- The **TradingView licence wall was unreachable.** The docstring claimed
+  extraction was refused, the refusal function existed, and **nothing called
+  it** — a TradingView window returned a usable `Quote`.
+- **Live trading was reachable by editing a config**, despite a docstring stating
+  it was not. The prose was decoration.
+- **Consent was bounded at one end only** — an approval dated *tomorrow* was
+  honoured *today*. A clock skew is enough; no forgery required.
+- **The consent TTL ceiling was writable at class level**, widening every future
+  approval at once: a 138-hour standing consent passed validation.
+- A missing `stop_p == 0` division guard in the broker risk tools.
+- **Three declared forbidden capture targets had no enforcement at all.**
+
+See `docs/phase-reports/phase-3a.md`.
 
 ### Financial RAG (Phase 3)
 
@@ -119,9 +156,11 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**739 assertions pass across 8 suites. That is not the claim.** A passing suite
-proves nothing on its own. The claim is **151 seeded defects, 0 survivors,
-0 skips** — every guard was deliberately broken and the suite caught it.
+**2,187 assertions pass across 15 suites. That is not the claim.** A passing
+suite proves nothing on its own. The claim is **692 seeded defects across 10
+batteries, 0 survivors, 0 skips** — every guard was deliberately broken and the
+suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
+0 crashed.**
 
 The batteries have repeatedly found tests that could not fail:
 
@@ -134,6 +173,19 @@ The batteries have repeatedly found tests that could not fail:
   sort's secondary **tie-break** key.
 - An access gate was tested only on the code path that re-checks it downstream,
   never on the path a real caller uses.
+- **The dominant pattern, seen in nine survivors across Phase 3A:** a *second*
+  guard answers in place of the one under test. Where several guards raise the
+  same exception class, `check_raises(..., SomeError)` cannot tell which one
+  fired — relaxing the guard under test simply lets the bad argument flow into an
+  identical refusal downstream. The fix is to assert on refusal **content**, plus
+  a negative assertion that the neighbour did **not** answer.
+
+**A survivor is not always a weak test** (D-0043). Measure the mutant before
+changing anything: one Phase 3A survivor was a **no-op mutation I had written**
+(it moved two statements but not the `raise`), and two probe "findings" were the
+**probe** misreading a docstring that promised an absence as evidence of a
+presence. Three causes — weak test, wrong mutation, wrong code — and this phase
+produced all three.
 
 Reproduce: `./tests/run_all.sh --mutate`
 See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
@@ -141,10 +193,13 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 476 assertions across 6 suites
-./tests/run_all.sh --mutate     # + 56 seeded-defect mutation battery (~18 s)
+./tests/run_all.sh              # 2,187 assertions across 15 suites + 2 probes (~5 s)
+./tests/run_all.sh --mutate     # + 692 seeded defects across 10 batteries (~105 s)
 
-python3 tests/test_valuation.py   # or any single suite
+python3 tests/test_valuation.py       # or any single suite
+python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
+python3 tests/probe_screenshot.py     # adversarial: try to forge consent / launder a licence
+python3 tests/mutate_screenshot.py    # a single battery on its own
 ```
 
 The token-cost check in `test_tools.py` needs the real tokenizer; without it

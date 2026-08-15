@@ -670,3 +670,113 @@ own `mode`.
 confident about the wrong period. MEASURED: one revenue tag returns 117 facts
 across four period lengths, and 46 periods are reported by more than one filing.
 **Reversal:** none.
+
+---
+
+## D-0038 — A crash is not a refusal; probes name the designed exception
+**Date:** 2026-08-14 · **Phase:** 3A · **Status:** Active
+
+Adversarial probes split their accepted outcomes into `REFUSALS` (the pass) and
+`CRASHES` (a finding). `AttributeError`, `KeyError`, `IndexError`,
+`UnboundLocalError` and friends mean a guard was reached by accident rather than
+by design: the input got further than intended and fell over on the way.
+
+One narrow exception is allowed and is implemented as a **second helper**,
+`attempt_immutable()`, rather than by widening the crash set: an `AttributeError`
+raised by a `mappingproxy`, a tuple, or a `__slots__` object IS the designed
+refusal — immutability enforced by type instead of by a written guard. Widening
+`attempt()` to accept it would have blinded the probe everywhere else.
+
+**Why:** `check_raises` once defaulted to `Exception` and therefore accepted
+crashes as refusals across 106 assertions. The suite was green and was not
+testing what it claimed.
+**Reversal:** none. A test that genuinely expects a crash must name that type.
+
+---
+
+## D-0039 — `TradingViewLicenceError` is a `RuntimeError`, not a `MarketDataError`
+**Date:** 2026-08-14 · **Phase:** 3A · **Status:** Active
+
+The licence wall raises outside the market-data exception hierarchy, so
+`except MarketDataError` cannot catch it.
+
+**Why:** routine market-data error handling exists to fall back to another
+source. There is no other source for TradingView content and no fallback — the
+refusal is legal, not numerical, and it must not be swallowed by a handler
+written to be resilient. Callers must name it explicitly.
+**Reversal:** none while the terms prohibit non-display machine use.
+
+---
+
+## D-0040 — Alpha Vantage free tier only; no paid provider
+**Date:** 2026-08-15 · **Phase:** 3A · **Status:** Active
+
+User instruction (verbatim): «فقط از بخش رایگان استفاده کن و هزینه ای نکن یعنی از
+Alpha Vantage استفاده کن». Alpha Vantage free tier is the only registered market
+data provider. Twelve Data is **closed**, not deferred.
+
+**Why:** the user is building this project alone with no institutional
+affiliation and no budget. A design that assumes a paid feed is a design they
+cannot run.
+**Reversal:** requires an explicit user decision to spend money.
+
+---
+
+## D-0041 — Market data is non-persistable while its storage terms are UNKNOWN
+**Date:** 2026-08-15 · **Phase:** 3A · **Status:** Active
+
+Alpha Vantage responses are used in-memory and are not written to a durable
+store. The permitted storage timeframe under the free tier is **UNKNOWN** (U),
+not zero and not unlimited.
+
+**Why:** the honest label for an unread term is UNKNOWN, and the safe behaviour
+under an unknown retention right is not to retain. Recording it as a risk (R22)
+keeps it visible instead of letting a convenient assumption harden into a cache.
+**Reversal:** read and record the actual terms, then decide.
+
+---
+
+## D-0042 — Consent is bounded at both ends and its limits are sealed
+**Date:** 2026-08-15 · **Phase:** 3A · **Status:** Active
+
+`CaptureApproval` refuses an approval used **before** its `granted_at` as well as
+after its TTL, and `DEFAULT_TTL_SECONDS` / `MAX_TTL_SECONDS` / `_FIELDS` cannot be
+rebound or deleted on the class (`_SealedLimits` metaclass).
+
+**Why:** both were MEASURED defects, and neither was visible to 162 passing unit
+assertions.
+  1. `is_expired()` asked only whether the TTL had run out, so an approval
+     stamped tomorrow was honoured today. A clock skew produces that without
+     anyone forging anything. A one-sided bound is not a window.
+  2. Every attempt to widen ONE approval was refused by `__slots__`, but
+     `CaptureApproval.MAX_TTL_SECONDS = 999999` succeeded and widened EVERY
+     approval granted afterwards — a 138-hour standing consent passed
+     validation. Guarding the instances while leaving the limit they are checked
+     against writable protects the copies and not the original.
+**Reversal:** none.
+
+---
+
+## D-0043 — A survivor is diagnosed by measuring the mutant
+**Date:** 2026-08-15 · **Phase:** 3A · **Status:** Active
+
+When a mutant survives, apply it, run it, and read what it actually does before
+changing anything. A survivor has three possible causes and this phase produced
+all three:
+
+  1. **The tests are too weak** — the common case, and almost always the same
+     shape: a second guard answers in place of the one under test, invisible to a
+     type-only assertion where several guards raise the same class. Fix by
+     asserting on refusal CONTENT plus a negative assertion that the neighbouring
+     guard did not answer.
+  2. **The mutation is wrong** — "content screened before consent" moved two
+     statements but not the `raise`, so consent still answered first and no input
+     could distinguish the mutant. A no-op that would have counted as a survivor
+     forever.
+  3. **The code is wrong** — the real defects listed in D-0042.
+
+A fourth, related rule: never adjust an assertion to make it pass. Measure the
+real wording and correct the test.
+**Why:** "strengthen the tests" applied reflexively to case 2 produces tests that
+chase a difference that does not exist, and applied to case 3 hides a defect.
+**Reversal:** none.
