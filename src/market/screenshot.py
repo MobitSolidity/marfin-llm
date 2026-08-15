@@ -196,7 +196,38 @@ STRUCTURALLY_PREVENTED: Mapping[str, str] = MappingProxyType({
 # Consent -- an approval that cannot be inferred.
 # ---------------------------------------------------------------------------
 
-class CaptureApproval(object):
+class _SealedLimits(type):
+    """
+    Refuse rebinding of the consent limits on the CLASS itself.
+
+    PROBE FINDING 2026-08-15, MEASURED: every attempt to widen ONE approval was
+    refused by __slots__ and __setattr__, but
+    `CaptureApproval.MAX_TTL_SECONDS = 999999` succeeded and silently raised the
+    ceiling for EVERY approval created afterwards -- a 138-hour standing consent
+    passed validation. Guarding the instances while leaving the limit they are
+    checked against writable protects the copies and not the original.
+    """
+
+    _SEALED = frozenset(("DEFAULT_TTL_SECONDS", "MAX_TTL_SECONDS", "_FIELDS"))
+
+    def __setattr__(cls, name, value):
+        if name in _SealedLimits._SEALED:
+            raise ScreenshotError(
+                "refusing to rebind %s.%s: the consent limits are sealed. "
+                "Raising the ceiling at runtime would widen every approval "
+                "granted afterwards at once, which is a policy change wearing "
+                "the clothes of an assignment." % (cls.__name__, name))
+        type.__setattr__(cls, name, value)
+
+    def __delattr__(cls, name):
+        if name in _SealedLimits._SEALED:
+            raise ScreenshotError(
+                "refusing to delete %s.%s: removing a limit is not a way to "
+                "satisfy it." % (cls.__name__, name))
+        type.__delattr__(cls, name)
+
+
+class CaptureApproval(object, metaclass=_SealedLimits):
     """
     One explicit, narrow, expiring approval to capture one window.
 
@@ -316,6 +347,18 @@ class CaptureApproval(object):
         now = now or datetime.datetime.now(datetime.timezone.utc)
         return now >= self.expires_at
 
+    def is_not_yet_valid(self, now=None) -> bool:
+        """
+        True if this approval is dated AFTER the moment it is being used.
+
+        PROBE FINDING 2026-08-15, MEASURED: is_expired() checked only the upper
+        bound, so an approval stamped tomorrow was honoured today -- consent
+        used before it was given. The window is bounded at BOTH ends because a
+        one-sided bound is not a window.
+        """
+        now = now or datetime.datetime.now(datetime.timezone.utc)
+        return now < self.granted_at
+
     def assert_covers(self, window_title: str, now=None) -> None:
         """
         Refuse unless this approval covers exactly this window and is unexpired.
@@ -333,6 +376,14 @@ class CaptureApproval(object):
                 "than widened: the user selected one window, and an adjacent "
                 "one may be a login dialog or an unrelated application."
                 % (self.window_title, window_title.strip()))
+        if self.is_not_yet_valid(now):
+            raise ScreenshotError(
+                "approval for %r is dated %s, which is AFTER the moment it is "
+                "being used (%s). Refusing rather than treating a future "
+                "consent as a present one: a clock skew or a forged timestamp "
+                "must not become a capture."
+                % (self.window_title, self.granted_at.isoformat(),
+                   (now or datetime.datetime.now(datetime.timezone.utc)).isoformat()))
         if self.is_expired(now):
             raise ScreenshotError(
                 "approval for %r expired at %s (granted %s, ttl %ds). Ask "

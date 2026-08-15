@@ -26,7 +26,8 @@ tests/test_execution.py \
 tests/test_csv_import.py \
 tests/test_webhooks.py \
 tests/test_alpha_vantage.py \
-tests/test_broker_tools.py"
+tests/test_broker_tools.py \
+tests/test_screenshot.py"
 
 for t in $SUITES; do
   echo
@@ -157,6 +158,25 @@ echo "$btout" | grep -E "^  attempts:|^  structural:"
 if [ $bt_status -ne 0 ]; then
   echo "  ERROR: a broker write or unauthorised read was ALLOWED, or a"
   echo "         structural guarantee of the tool surface no longer holds"
+  fail=1
+fi
+
+# The SS.7.1 Level 3 visual surface is the module most likely to be quietly
+# wrong: it guards a capability this runtime does not have, so nothing exercises
+# it in ordinary use and nothing notices when a guard rots. Its probe has already
+# earned its place twice -- it found a consent window bounded at one end only
+# (an approval dated tomorrow was honoured today) and a writable class ceiling
+# that widened every approval granted after it. Offline, no display, no capture.
+echo
+echo ">>> Level 3 visual surface (adversarial probe)"
+ssout=$(python3 tests/probe_screenshot.py 2>&1)
+ss_status=$?
+ssout_bad=$(echo "$ssout" | grep -E "^  ALLOWED|^  CRASHED|^  BROKEN")
+[ -n "$ssout_bad" ] && echo "$ssout_bad"
+echo "$ssout" | grep -E "^  attempts:|^  structural:"
+if [ $ss_status -ne 0 ]; then
+  echo "  ERROR: a forbidden capture, a forged consent, or TradingView"
+  echo "         laundering was ALLOWED, or a structural guarantee is gone"
   fail=1
 fi
 
@@ -313,6 +333,33 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: broker_tools.py not restored, or its oracles are not green"
     fail=1; }
   [ $btm_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> Level 3 visual surface mutation battery"
+  # 89 mutations against SS.7.1 Level 3, oracles test_screenshot.py AND
+  # probe_screenshot.py together. Five survived the first run. FOUR were findings
+  # about the tests, and all four were one shape: a case that could not
+  # distinguish the guard under test from something else answering for it -- a
+  # notification title also caught by a neighbouring pattern in the same tuple,
+  # an empty window title also caught by the mismatch guard raising the same
+  # class, a hyphen rule shadowed by the un-normalised second clause, and a
+  # provider expression indistinguishable because every test passed a requested
+  # title identical to the approved one.
+  #
+  # The FIFTH was a finding about the BATTERY: "content screened before consent"
+  # swapped two statements but not the raise, so it was a no-op I had written and
+  # would have quietly counted as a survivor forever. It is recorded in the file
+  # rather than silently corrected, because "the tests are too weak" is only one
+  # of the answers a survivor can have.
+  ssm=$(python3 tests/mutate_screenshot.py 2>&1)
+  ssm_status=$?
+  echo "$ssm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$ssm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$ssm" | grep -E "^ +RECHECK:" && fail=1
+  echo "$ssm" | grep -q "source restored and oracles green: True" || {
+    echo "  ERROR: screenshot.py not restored, or its oracles are not green"
+    fail=1; }
+  [ $ssm_status -ne 0 ] && fail=1
 fi
 
 echo
