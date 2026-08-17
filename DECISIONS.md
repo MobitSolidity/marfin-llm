@@ -947,3 +947,67 @@ lines, which is the one habit this project cannot afford. And an unasserted
 human-facing report is exactly the "harness that cannot fail is decoration"
 problem, one layer out from the graders.
 **Reversal:** none.
+
+---
+
+## D-0051 — The install failure is fixed with a prebuilt wheel, and I retract a wrong finding I made twenty minutes earlier
+**Date:** 2026-08-17 · **Phase:** 4 · **Status:** Active
+
+**Context:** the user ran the guide's §3 command on the target machine and hit
+`No CMAKE_C_COMPILER could be found` / `Failed building wheel for
+llama-cpp-python`. Guide §3 and §7 had both flagged this exact outcome as an
+UNKNOWN and asked for the full traceback, so the guide worked as designed.
+
+**Decision:** recommend the maintainer's CPU wheel index rather than telling the
+user to install Visual Studio Build Tools:
+
+```
+pip install llama-cpp-python psutil \
+  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+```
+
+**Diagnosis (V):** CMake found the *Visual Studio 16 2019 generator* but no C
+or C++ compiler, i.e. Visual Studio is installed without the C++ workload. The
+reason pip attempted a compile at all is that PyPI publishes **only an sdist**
+for `llama-cpp-python` — there is no wheel to fall back to.
+
+**What I measured before recommending it (all M, 2026-08-17):**
+
+| claim | evidence |
+|---|---|
+| index reachable | HTTP 200, 1,719,578-byte listing |
+| pip picks a wheel with no version pin | `llama_cpp_python-0.3.35-py3-none-win_amd64.whl`, 7,086,788 bytes |
+| pip prefers it over the sdist without `--only-binary` | yes; sdist never fetched |
+| works for 3.10 / 3.12 / 3.13 | identical file resolved for all three |
+| Python-ABI-independent | tag `py3-none`, zero `.pyd`, binds via `ctypes` |
+| real native code inside | `llama.dll`, `ggml-cpu.dll` are `PE32+ x86-64` |
+| reproducible bytes | sha256 `31590ea0...80bb` on two independent downloads |
+| no dependency needs a compiler | `psutil`, `numpy`, `markupsafe` etc. all wheels |
+
+Because the wheel is `py3-none`, **I did not need the user's Python version** —
+I had been about to ask for it, and the measurement made the question moot.
+
+**A retraction, recorded because getting this wrong in public is the point.**
+While checking the index I ran `curl -I -L` and a `curl -r 0-0` byte-range
+request against a release asset URL and got **404**, and I told the user: *"the
+index advertises wheels whose download URLs are dead."* That was false. I then
+queried the GitHub releases API, found the asset listed with a
+`browser_download_url` byte-identical to the URL I had just called dead, and a
+plain `GET` returned **200 with the complete, valid wheel**. GitHub release
+assets can reject `HEAD` and range requests for files that exist.
+
+**Why this matters beyond one wrong sentence:** the failing probe was cheaper
+than the real one, and I let cheapness substitute for correctness — the same
+error shape as reading a checksum out of an API field instead of hashing the
+file (D-0046). A negative result from a weaker instrument is not a negative
+result. Had I stopped at the 404 I would have sent the user to install several
+gigabytes of Visual Studio Build Tools to solve a problem that one `--extra-index-url`
+flag solves.
+
+**Not claimed:** that `import llama_cpp` succeeds on Windows 11. This sandbox is
+Linux; it cannot execute the DLLs. `honest_gaps.llama_cpp_import_succeeds_on_target`
+stays UNKNOWN until the user's run says otherwise.
+
+**Reversal:** if the index is unreachable from the user's network, fall back to
+Visual Studio Build Tools with the "Desktop development with C++" workload
+(guide §3.4), or I hand over the verified wheel directly.

@@ -657,9 +657,10 @@
       "peak_rss_8k": "UNKNOWN",
       "persian_generation_quality": "UNKNOWN (R10, needs a human reader)",
       "model_side_tool_selection": "UNKNOWN (R17)",
-      "llama_cpp_python_installs_on_target": "UNKNOWN",
+      "llama_cpp_python_installs_on_target": "RESOLVED IN PART, MEASURED 2026-08-17. The plain command failed on the target with 'No CMAKE_C_COMPILER could be found' -- Visual Studio 16 2019 was detected but its C++ toolset is absent, and PyPI ships only an sdist (VERIFIED), so pip had to compile. Fix VERIFIED: the maintainer's CPU index https://abetlen.github.io/llama-cpp-python/whl/cpu serves llama_cpp_python-0.3.35-py3-none-win_amd64.whl (7,086,788 bytes, sha256 31590ea000d5aff6f05f1e428048e72318a83709288159a5bd4dabec530080bb, identical across two independent downloads). pip selects it with no version pin and without --only-binary, for --python-version 310, 312 and 313 alike; the wheel is tagged py3-none, has zero .pyd files, binds via ctypes, and its llama.dll / ggml-cpu.dll are PE32+ x86-64. All dependencies incl. psutil resolve as prebuilt wheels: zero compilation. Visual Studio is NOT needed.",
       "total_runtime_of_the_harness": "UNKNOWN",
-      "pinned_revision_behaviour": "UNKNOWN - it publishes no GGUF"
+      "pinned_revision_behaviour": "UNKNOWN - it publishes no GGUF",
+      "llama_cpp_import_succeeds_on_target": "UNKNOWN. The wheel is correct and its DLLs are x86-64 Windows binaries, but this sandbox is Linux and cannot execute 'import llama_cpp'. Only the user's run settles it. Not recorded as a pass."
     }
   }
 }

@@ -268,9 +268,20 @@ curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokeniz
 **Persian step-by-step guide: `docs/guides/phase-4-windows-setup-fa.md`.**
 
 ```bash
-pip install llama-cpp-python psutil
+# The --extra-index-url is REQUIRED on Windows. PyPI publishes only an sdist
+# for llama-cpp-python (VERIFIED), so a plain `pip install` compiles C++ and
+# fails without the MSVC C++ toolset -- which is exactly what happened on the
+# target machine 2026-08-17 ("No CMAKE_C_COMPILER could be found").
+pip install llama-cpp-python psutil \
+  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 python scripts/run_phase4.py --model <path>Qwen3-4B-Q4_K_M.gguf
 ```
+
+MEASURED 2026-08-17: that index serves `llama_cpp_python-0.3.35-py3-none-win_amd64.whl`
+(7,086,788 bytes, sha256 `31590ea0...80bb`), which pip selects with no version
+pin. The wheel is tagged `py3-none`, contains zero `.pyd` files and binds via
+`ctypes`, so it is Python-ABI-independent — the same file resolves for 3.10,
+3.12 and 3.13. Visual Studio is **not** required.
 
 Defaults are already correct for the target (`--ctx 16384`, `--threads 6` for the
 i5-12400's six physical cores). It writes `evals/results/phase4_run.json`; that
