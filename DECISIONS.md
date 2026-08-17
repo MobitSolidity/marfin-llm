@@ -780,3 +780,170 @@ real wording and correct the test.
 **Why:** "strengthen the tests" applied reflexively to case 2 produces tests that
 chase a difference that does not exist, and applied to case 3 hides a defect.
 **Reversal:** none.
+
+---
+
+## D-0044 — Route A: the agent builds the instrument, the user takes the measurement
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+The user chose Route A from `docs/phase-reports/phase-4-execution-options.md`,
+verbatim: *«طبق راه الف یعنی استفاده از ماشین خودم پیش میریم»* — "we proceed
+according to Route A, i.e. using my own machine."
+
+This changes what the agent's job **is** for Phase 4. Phase 4 asks for
+measurements, and no measurement can be produced in this sandbox. MEASURED
+2026-08-16: `pip install llama-cpp-python` fails with `[Errno 28] No space left
+on device` while fetching cmake/ninja, and the machine has 985 MiB total RAM
+against 2.33 GiB of weights. So the deliverable is not numbers — it is the
+instrument that produces them on the i5-12400, plus a guide in Persian, so that
+"the remaining work is downloading a file and running one script" (the promise
+made in §4 of the options document) is literally true.
+
+**Consequence for phase state:** `phase_status` is
+`TOOLING_COMPLETE_AWAITING_USER_MEASUREMENT`, and `phase_4.measurements_recorded`
+is `null` **on purpose**. Phase 4 is not complete, not in progress, and not
+partially measured. It is built and waiting.
+**Why:** the alternative — recording sandbox-derived or estimated figures for
+tok/s, peak RSS and citation rate — would violate the project's first rule.
+Numbers that look like measurements are worse than no numbers.
+**Reversal:** if the user later prefers a rented machine (Route B/C), the harness
+is unchanged; only the guide is.
+
+---
+
+## D-0045 — The available GGUF is not the pinned model, and the results file says so
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+Phase 2 pinned `Qwen/Qwen3-4B-Instruct-2507` at sha
+`cdbee75f17c01a7cc42f958dc650907174af0554`. VERIFIED 2026-08-16 against the
+Hugging Face API: **that repo publishes no GGUF.** The obvious companion repo
+`…-2507-GGUF` returns HTTP 401 — but a repo name invented for the test
+(`Qwen/definitely-does-not-exist-xyz123`) returns 401 as well, so **401 cannot
+distinguish absent from gated.** Its existence is UNKNOWN, not negative. That
+distinction is recorded rather than collapsed into "it doesn't exist."
+
+What the user can actually download is `Qwen/Qwen3-4B-GGUF` →
+`Qwen3-4B-Q4_K_M.gguf`, 2,497,280,256 bytes (2.33 GiB), which is the **original
+Qwen3-4B**, a different model.
+
+Decision: run against it, and make the substitution **visible in the data**.
+`phase4_lib.identify_model()` hashes the file and records
+`is_pinned_revision: false` with a note that speed and RAM figures transfer
+(same architecture and parameter count, COMPUTED) while Persian fluency,
+instruction following and tool selection do **not**. An unrecognised file is
+labelled `UNKNOWN` — never assumed to be the pinned model.
+**Why:** a basename cannot establish provenance; a filename is whatever someone
+typed. Without a content hash in the file, a Persian-fluency verdict measured on
+Qwen3-4B would later be read as a verdict on Qwen3-4B-Instruct-2507.
+**Reversal:** if a 2507 GGUF appears, add its digest to `KNOWN_MODEL_FILES` and
+re-run; nothing else changes.
+
+---
+
+## D-0046 — A published checksum is verified by downloading, not by copying an API field
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+`docs/guides/phase-4-windows-setup-fa.md` instructs the user to **abort** if the
+model's SHA-256 does not match the value printed in the guide. That makes the
+checksum a safety control, so it was established the only way that justifies the
+instruction: the full 2,497,280,256-byte file was downloaded and hashed with
+`sha256sum`, and `phase4_lib.sha256_file()` was run against the same file. All
+three agree on
+`7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5`, the download
+served exactly the advertised byte count, and the first four bytes are `GGUF`.
+**Why:** the digest was first read from the API's LFS `oid` field. Git LFS
+defines that as the SHA-256 of content, so copying it would probably have been
+right — and "probably right" turns an abort-on-mismatch check into a coin toss
+that fails safe-looking. Publishing an unverified checksum also teaches the user
+to ignore a mismatch when it eventually happens.
+**Reversal:** none. Any future artefact added to `KNOWN_MODEL_FILES` gets the
+same treatment.
+
+---
+
+## D-0047 — A constant that documents a rule it does not enforce is decoration
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+MEASURED: `_DECIMAL_SEPARATORS` in `scripts/phase4_lib.py` carried a careful
+comment distinguishing U+066B (Arabic decimal separator) from U+066C (Arabic
+thousands separator) — three orders of magnitude apart in a financial figure —
+and **was never read.** Both `extract_numbers` and `extract_magnitudes`
+hard-coded the replacement, in duplicate. Deleting U+066B from the table changed
+no behaviour, which is how the mutation battery found it.
+
+Fix: a single `_normalise_separators()` that iterates the tables, plus tests
+asserting that *every declared separator is actually honoured* and that the two
+tables do not overlap.
+**Why:** the danger is not the dead line; it is that the comment makes a reader
+believe the rule is enforced. Duplicated logic with a decorative table is how the
+two copies silently drift apart.
+**Reversal:** none.
+
+---
+
+## D-0048 — A test that derives its expectation from the code under test asserts nothing
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+MEASURED: the threshold-direction check read `THRESHOLD_DIRECTION`, then chose a
+probe value that would breach *whatever direction it had just read*. Flipping an
+entry therefore selected the matching probe and passed. The mutation
+`fabricated_financial_data_count_max: max -> min` — which inverts the meaning of
+a zero-tolerance fabrication ceiling — **survived a 322-assertion suite.**
+
+Fix: an independently written `_EXPECTED_DIRECTION` dict, compared to the table
+as a whole, with probes derived from the independent copy.
+**Why:** a loop over the thing under test proves only that the code equals
+itself. This is the sharpest instance of the project's recurring lesson that a
+passing suite proves nothing on its own.
+**Reversal:** none.
+
+---
+
+## D-0049 — The instrument must not be able to lie about its own subject
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+The mutation battery reported `source restored and oracle green: False` for a
+source that was intact. Diagnosis by measurement: the suite created two
+`mkdtemp()` directories per run and deleted neither, one holding a 3 MiB
+stand-in `.gguf`. Across 81 mutation runs that left 288 directories and filled
+`/tmp` — a 493 MiB tmpfs — to 100%. Python then exited 120 while flushing
+stdout, and the battery read that as a source-integrity failure. Minimal repro:
+exit 120 deterministically on redirect, 0 on a pipe, and
+`cat: write error: No space left on device`.
+
+Fix: a `_TEMP_DIRS` registry with cleanup before `sys.exit(summary())`, and a
+section asserting the suite does not leak. **The leak detector was then wrong
+too** — it scanned all of `/tmp` for `phase4_test_*` and tripped on the
+battery's own aborted runs, since a killed mutation exits before cleanup. Scoped
+to this process only.
+**Why:** the battery is this project's decisive instrument. A false integrity
+alarm is worse than a missing one, because the natural response is to distrust
+the source rather than the tool.
+**Reversal:** none.
+
+---
+
+## D-0050 — The report the user reads is part of the deliverable, and is asserted
+**Date:** 2026-08-16 · **Phase:** 4 · **Status:** Active
+
+Two related findings, both MEASURED.
+
+**1. The suite reported phantom failures.** `main()` prints a verdict table in
+which five thresholds legitimately read `FAIL` against the deliberately-bad fake
+model. Those lines went to the test suite's own stdout, where
+`tests/run_all.sh` greps `^  FAIL` to detect a failing test — so a *healthy*
+harness would have printed five phantom failures on every regression run. Fixed
+by capturing stdout during the two `main()` calls.
+
+**2. Capturing revealed the report was entirely unasserted.** It is the first
+thing the user sees when the run ends on their own machine, and not one character
+of it was checked. Six seeded mutations that broke the report while leaving the
+JSON perfect — dropping the verdict column, printing no table, counting FAIL or
+PENDING verdicts as passes, hiding the passing rows, removing the "a human has
+not graded this" notice — would all have survived. Now asserted, including that
+the tally line agrees with the table it summarises.
+**Why:** a runner that prints non-failures as FAIL trains the reader to skip FAIL
+lines, which is the one habit this project cannot afford. And an unasserted
+human-facing report is exactly the "harness that cannot fail is decoration"
+problem, one layer out from the graders.
+**Reversal:** none.

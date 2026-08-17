@@ -11,8 +11,8 @@ paper/live trading controls.
 |---|---|
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
-| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 2. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0018). |
+| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0050). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -20,7 +20,10 @@ paper/live trading controls.
 | `scripts/measure_tokenizer_efficiency.py` | Persian vs English tokenizer cost measurement. |
 | `scripts/estimate_model_footprint.py` | Generic sizing tool (superseded for Phase 1 by `size_from_config.py`). |
 | `scripts/throughput_ceiling.py` | Bandwidth-bound decode ceiling for the target RAM. |
-| `scripts/run_baseline.py` | On-target baseline harness (speed, RSS, eval set). |
+| `scripts/run_baseline.py` | Phase 2 baseline harness. **Superseded by `run_phase4.py`; 9 MEASURED defects, never executed.** Kept for the audit trail. |
+| `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
+| `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
+| `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
 | `src/calc/valuation.py` | DCF, DDM, multiples, margins, leverage (26 fns). |
 | `src/calc/technicals.py` | RSI, MACD, ATR, Bollinger, ADX, VWAP … (13 fns). |
@@ -65,19 +68,53 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **3A — Market Data, TradingView, and Broker Design** |
-| Status | PASS — **awaiting Phase 4 approval** |
-| Next | Phase 4 — RAG and Tool-Enabled Evaluation (**not started; NOT startable in this sandbox**) |
+| Current phase | **4 — RAG and Tool-Enabled Evaluation** |
+| Status | **TOOLING COMPLETE — awaiting the user's measurement.** Not complete, not partially measured. |
+| Route | **A — the user's own machine** (approved 2026-08-16) |
+| Next | The user runs `scripts/run_phase4.py` on the i5-12400 and returns `evals/results/phase4_run.json` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |
 | TradingView connector level | 0 (display only; extraction refused) |
 | Market data provider | Alpha Vantage **free tier only** (D-0040) — no paid feed |
 
-**Why Phase 4 cannot start here:** it compares a plain baseline against RAG+tools,
-which requires a running model. MEASURED in this sandbox: no model file on disk,
-`llama_cpp` absent, **0.96 GiB RAM available** against a 0.85 GiB minimum weights
-footprint before any runtime overhead. This is stated rather than silently
-skipped; see `docs/phase-reports/phase-3a.md` §7.
+**Why Phase 4 is not measured here:** it requires a running model. MEASURED in
+this sandbox 2026-08-16: `pip install llama-cpp-python` fails with `[Errno 28]
+No space left on device` while fetching cmake/ninja, and the machine has **985
+MiB total RAM** against **2.33 GiB** of weights. Under Route A the agent
+therefore builds the instrument and the user takes the measurement (D-0044).
+
+**No figure for tok/s, peak RSS, citation correctness or Persian fluency exists
+yet for this project, on any hardware.** `phase_4.measurements_recorded` is
+`null` on purpose. The harness that will produce them is built and verified —
+**346 assertions, 96 seeded mutations, 96 killed, 0 survived, 0 skipped** — but
+it has never seen a model.
+
+### The model file is not the pinned revision (D-0045)
+
+VERIFIED 2026-08-16: the pinned `Qwen/Qwen3-4B-Instruct-2507` **publishes no
+GGUF**. The companion `…-2507-GGUF` returns HTTP 401, but an invented repo name
+returns 401 too, so that status cannot distinguish *absent* from *gated* — its
+existence is UNKNOWN, not negative.
+
+What is downloadable is `Qwen/Qwen3-4B-GGUF` → `Qwen3-4B-Q4_K_M.gguf`,
+2,497,280,256 bytes, sha256 `7485fe6f…34fdf5` (MEASURED by downloading the whole
+file and hashing it, because the setup guide tells the user to abort on a
+mismatch — D-0046). That is the **original Qwen3-4B**, a different model. So the
+runner hashes whatever file it is given and records `is_pinned_revision`. Speed
+and RAM figures transfer between the two; **Persian fluency, instruction
+following and tool selection do not.**
+
+### How a harness is verified when it cannot be run
+
+The harness gets one evening of the user's time, so it is driven end to end by a
+fake `Llama` occupying a single seam. The fake is not a stub that returns "ok":
+it returns specific wrong answers, fabrications, malformed tool calls, empty
+strings, and a correct refusal delivered in the **wrong language**. The suite
+asserts the harness *notices each one*. A grader is only trustworthy once it has
+been shown to fail on bad input.
+
+Five `FAIL` lines in the harness's own verdict table are therefore the expected
+result against that fake — evidence the graders are not inert.
 
 ### Target (user-supplied)
 
@@ -156,9 +193,9 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**2,187 assertions pass across 15 suites. That is not the claim.** A passing
-suite proves nothing on its own. The claim is **692 seeded defects across 10
-batteries, 0 survivors, 0 skips** — every guard was deliberately broken and the
+**2,533 assertions pass across 16 suites. That is not the claim.** A passing
+suite proves nothing on its own. The claim is **788 seeded defects across 11
+batteries, 783 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
 suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
 0 crashed.**
 
@@ -187,14 +224,28 @@ changing anything: one Phase 3A survivor was a **no-op mutation I had written**
 presence. Three causes — weak test, wrong mutation, wrong code — and this phase
 produced all three.
 
+Phase 4's battery added three findings of its own, each a different cause:
+
+- **A test that read the code under test.** The threshold-direction check pulled
+  the direction out of `THRESHOLD_DIRECTION` and then probed accordingly, so
+  flipping an entry merely selected the matching probe. Inverting a
+  **zero-tolerance fabrication ceiling** survived a 322-assertion suite
+  (D-0048).
+- **A constant that documented a rule it did not enforce.** `_DECIMAL_SEPARATORS`
+  carried a careful U+066B-vs-U+066C comment — three orders of magnitude apart in
+  a financial figure — and was **never read** (D-0047).
+- **The instrument lying about its own subject.** The battery reported the source
+  as not-restored when it was intact; the real cause was a temp-dir leak in the
+  test suite filling a 493 MiB `/tmp` (D-0049).
+
 Reproduce: `./tests/run_all.sh --mutate`
 See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 2,187 assertions across 15 suites + 2 probes (~5 s)
-./tests/run_all.sh --mutate     # + 692 seeded defects across 10 batteries (~105 s)
+./tests/run_all.sh              # 2,533 assertions across 16 suites + 2 probes (~6 s)
+./tests/run_all.sh --mutate     # + 788 seeded defects across 11 batteries (~140 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -212,15 +263,29 @@ curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokeniz
   -o /tmp/qwen3_tokcfg.json
 ```
 
-### Running the baseline (on the target machine, not here)
+### Running Phase 4 (on the target machine, not here)
+
+**Persian step-by-step guide: `docs/guides/phase-4-windows-setup-fa.md`.**
 
 ```bash
 pip install llama-cpp-python psutil
-python scripts/run_baseline.py --model <path>.gguf --ctx 16384 --threads 6
+python scripts/run_phase4.py --model <path>Qwen3-4B-Q4_K_M.gguf
 ```
 
-This sandbox has 0.60 GiB available and cannot load any candidate model
-(Phase 0 finding F1), so no throughput figure is ever reported from here.
+Defaults are already correct for the target (`--ctx 16384`, `--threads 6` for the
+i5-12400's six physical cores). It writes `evals/results/phase4_run.json`; that
+file is the deliverable.
+
+Do **not** use `scripts/run_baseline.py`. It has 9 MEASURED defects — among them
+grading peak RSS against **12.0 GiB when the approved ceiling is 6.0** (it would
+have printed PASS at twice the approved limit), ignoring `expected_value`,
+`expected_tool` and `tolerance` entirely, and crashing on Persian output on a
+`cp1252` console *after* the model had already been loaded. It is retained only
+for the audit trail.
+
+This sandbox cannot load any candidate model (Phase 0 finding F1; and MEASURED
+2026-08-16, `pip install llama-cpp-python` itself fails here for lack of disk),
+so no throughput figure is ever reported from here.
 
 ### Reproducing the estimates
 

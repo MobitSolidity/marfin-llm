@@ -27,7 +27,8 @@ tests/test_csv_import.py \
 tests/test_webhooks.py \
 tests/test_alpha_vantage.py \
 tests/test_broker_tools.py \
-tests/test_screenshot.py"
+tests/test_screenshot.py \
+tests/test_phase4_harness.py"
 
 for t in $SUITES; do
   echo
@@ -360,6 +361,40 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: screenshot.py not restored, or its oracles are not green"
     fail=1; }
   [ $ssm_status -ne 0 ] && fail=1
+
+  echo
+  echo ">>> Phase 4 harness mutation battery"
+  # 89 mutations against scripts/phase4_lib.py and scripts/run_phase4.py, the
+  # harness the user runs on their OWN i5-12400 under Route A. It gets one
+  # evening of their time; a mis-grading harness turns that evening into a file
+  # that looks like measurement and is not, so it is mutation-tested before it
+  # is ever handed over.
+  #
+  # Ten survived the first round and the split is the point: THREE were wrong
+  # mutations I had written (an alternation order made irrelevant by \b, a
+  # .lower() that is a no-op on Persian, an inert assignment), ONE was a real
+  # code defect (_DECIMAL_SEPARATORS was declared and never read -- a table
+  # documenting a rule it did not enforce), and six were genuine test gaps.
+  # A survivor is not automatically a weak test.
+  #
+  # One survivor deserves its own note: the threshold-direction check read the
+  # direction out of the table under test and then probed accordingly, so
+  # flipping an entry merely selected the matching probe. A flipped fabrication
+  # ceiling survived a 322-assertion suite. The table is now compared against
+  # an independently written copy.
+  #
+  # NOTE the grep below says "oracle", singular. This battery has one oracle;
+  # the others have two. Grepping the plural here would never match and the
+  # source-integrity check would fail every run.
+  p4m=$(python3 tests/mutate_phase4.py 2>&1)
+  p4m_status=$?
+  echo "$p4m" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$p4m" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$p4m" | grep -E "^ +RECHECK:" && fail=1
+  echo "$p4m" | grep -q "source restored and oracle green: True" || {
+    echo "  ERROR: the Phase 4 harness is not restored, or its oracle is not green"
+    fail=1; }
+  [ $p4m_status -ne 0 ] && fail=1
 fi
 
 echo

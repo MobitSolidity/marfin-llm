@@ -1,8 +1,8 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": "3A",
-  "phase_status": "COMPLETE_AWAITING_APPROVAL",
-  "user_approval_required": true,
+  "current_phase": "4",
+  "phase_status": "TOOLING_COMPLETE_AWAITING_USER_MEASUREMENT",
+  "user_approval_required": false,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
   "model_revision": null,
@@ -223,14 +223,14 @@
     "paper_live_confusion_count_max": 0
   },
   "benchmark_summary": {
-    "status": "NONE - no measurements possible in this environment",
-    "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED."
+    "status": "NONE - awaiting the user's Route A run on the i5-12400",
+    "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED. The Phase 4 harness that will produce the first MEASURED figures is built and verified (346 assertions, 96/96 mutations killed), but it has never seen a model."
   },
   "next_phase": 4,
-  "next_phase_name": "RAG and Tool-Enabled Evaluation",
+  "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
-  "next_phase_note": "NOT STARTED and NOT STARTABLE HERE. Phase 4 compares a plain baseline against RAG+tools, which requires a running model. MEASURED: no model file on disk, llama_cpp absent, 0.96 GiB RAM available against a 0.85 GiB minimum weights footprint before runtime overhead. Phase 3A stops at the Phase 4 gate per SS.24; explicit user approval required, AND an execution route must be chosen because this sandbox cannot provide one.",
-  "last_updated": "2026-08-15",
+  "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
+  "last_updated": "2026-08-16",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -306,7 +306,7 @@
     "R13 tests may not discriminate - MITIGATED, 692 mutations across 10 batteries, 0 survivors",
     "R22 Alpha Vantage permitted storage timeframe UNKNOWN; market data treated as non-persistable (Medium, OPEN)"
   ],
-  "awaiting_approval_for": "Phase 4 - RAG and Tool-Enabled Evaluation",
+  "awaiting_approval_for": null,
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -602,5 +602,64 @@
       "Persian tested with constructed text, not real Iranian filings",
       "nothing run against a live model (R10, R21)"
     ]
+  },
+  "awaiting_user_action": "Run scripts/run_phase4.py on the i5-12400 (Route A, approved by the user 2026-08-16: 'طبق راه الف یعنی استفاده از ماشین خودم پیش میریم') and return evals/results/phase4_run.json. NOTHING in Phase 4 may be recorded as MEASURED until that file exists.",
+  "phase_4": {
+    "name": "RAG and Tool-Enabled Evaluation",
+    "status": "TOOLING_COMPLETE_AWAITING_USER_MEASUREMENT",
+    "execution_route": "A - user's own machine (i5-12400 / 16 GB / Windows 11)",
+    "route_approved_by_user": "2026-08-16",
+    "route_options_document": "docs/phase-reports/phase-4-execution-options.md",
+    "setup_guide": "docs/guides/phase-4-windows-setup-fa.md",
+    "harness": {
+      "runner": "scripts/run_phase4.py",
+      "gradeable_core": "scripts/phase4_lib.py",
+      "oracle_suite": "tests/test_phase4_harness.py",
+      "mutation_battery": "tests/mutate_phase4.py",
+      "wired_into_regression": "tests/run_all.sh (suite 16 of 16, battery 11 of 11)"
+    },
+    "verification": {
+      "suite_assertions": "346 passed, 0 failed (MEASURED 2026-08-16)",
+      "mutations": "96 seeded, 96 killed, 0 survived, 0 skipped (MEASURED)",
+      "full_regression": "MEASURED 2026-08-16 by ./tests/run_all.sh --mutate: 2533 assertions across 16 suites; 788 mutations seeded, 783 killed, 5 documented equivalents, 0 survived, 0 skipped. ALL GREEN, exit 0.",
+      "method": "The harness cannot be smoke-tested here, so it is driven end to end by a fake Llama that returns SPECIFIC wrong answers, fabrications, malformed tool calls, empty strings and a correct refusal delivered in the wrong language. The suite asserts the harness NOTICES each."
+    },
+    "measurements_recorded": null,
+    "measurements_note": "DELIBERATELY null. No token/sec, no peak RSS, no citation rate and no Persian-fluency figure exists for this project on any hardware. The harness writes them; it has not been run against a model.",
+    "model_artefact": {
+      "problem": "The pinned Phase 2 revision Qwen/Qwen3-4B-Instruct-2507 publishes NO GGUF (VERIFIED 2026-08-16 via the Hugging Face API). The …-2507-GGUF repo returns 401, but 401 cannot distinguish absent from gated -- an invented repo name returns 401 too -- so its existence is UNKNOWN, not negative.",
+      "substitute_repo": "Qwen/Qwen3-4B-GGUF",
+      "substitute_file": "Qwen3-4B-Q4_K_M.gguf",
+      "substitute_size_bytes": 2497280256,
+      "substitute_sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "substitute_sha256_label": "MEASURED - the full 2.33 GiB file was downloaded and hashed with sha256sum, and phase4_lib.sha256_file() agrees. Not copied from an API field, because the setup guide tells the user to ABORT on a mismatch.",
+      "is_pinned_revision": false,
+      "consequence": "Speed and RAM figures transfer between the two (same architecture and parameter count, COMPUTED). Persian fluency, instruction following and tool selection do NOT and must not be attributed to Qwen3-4B-Instruct-2507. The runner records the sha256 of whatever file was used, and labels an unrecognised file UNKNOWN rather than assuming it is the pinned model."
+    },
+    "safety_invariants_held": {
+      "live_trading_enabled": false,
+      "active_mode": "ANALYSIS_ONLY",
+      "execution_tools_in_registry": 0,
+      "startup_guard": "assert_no_execution_capability() runs before any token is generated and aborts the run if the registry ever gains an order tool (84 tools, 0 executors, MEASURED)"
+    },
+    "human_gate": "Every case in the results file carries human_grade=null and the file records the QUESTION as well as the answer. persian_fluency_regression reads PENDING/UNKNOWN, never PASS, because no prior measurement exists to regress against and no human has read the output (R10).",
+    "defects_found_while_building": {
+      "run_baseline_py": "9 MEASURED defects in the never-executed Phase 2 script, incl. grading peak RSS against 12.0 GiB when the APPROVED ceiling is 6.0, ignoring expected_value/expected_tool/tolerance entirely, and crashing on Persian output on a cp1252 console. Superseded, not deleted.",
+      "dead_constant": "_DECIMAL_SEPARATORS was declared with a careful U+066B-vs-U+066C comment and never read; both extractors hard-coded the replace.",
+      "self_referential_test": "The threshold-direction check read THRESHOLD_DIRECTION and then probed accordingly, so a flipped entry merely selected the matching probe. A flipped fabrication ceiling survived a 322-assertion suite.",
+      "results_file_ungradeable": "The file recorded answers without questions, making the human gate a formality.",
+      "summary_discarded_a_measurement": "summarize_rag computed persian_script per case and threw it away, hiding a correct refusal delivered in the wrong language.",
+      "test_suite_disk_leak": "The suite leaked two mkdtemp dirs per run; 81 mutation runs filled the 493 MiB /tmp and made the battery report a source-integrity failure that had not happened. The instrument must not be able to lie about its own subject.",
+      "unasserted_console_report": "The report the user actually reads was entirely unasserted; six mutations that broke it while leaving the JSON perfect all survived until it was captured and checked."
+    },
+    "honest_gaps": {
+      "tokens_per_second_i5_12400": "UNKNOWN",
+      "peak_rss_8k": "UNKNOWN",
+      "persian_generation_quality": "UNKNOWN (R10, needs a human reader)",
+      "model_side_tool_selection": "UNKNOWN (R17)",
+      "llama_cpp_python_installs_on_target": "UNKNOWN",
+      "total_runtime_of_the_harness": "UNKNOWN",
+      "pinned_revision_behaviour": "UNKNOWN - it publishes no GGUF"
+    }
   }
 }
