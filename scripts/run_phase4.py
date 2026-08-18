@@ -360,23 +360,49 @@ def run_arm_rag(runner, gold_rows, index, top_k):
         # Verify the answer's numbers against the evidence ACTUALLY shown to
         # the model -- not against the gold passage. Checking against evidence
         # the model never saw would measure the gold set, not the model.
+        # Verify SENTENCE BY SENTENCE, with years masked.
+        #
+        # This used to pass the whole answer as a single claim. verify_claim
+        # returns early on the first number it cannot locate, and the first
+        # number in a financial answer is almost always a year -- so all three
+        # graded cases on 2026-08-18 were decided by "2023 does not appear in
+        # the evidence", which is true of every filing and means nothing. See
+        # phase4_lib.split_claims for the measured evidence.
         citations = []
-        if text.strip() and not L.is_abstention(text):
-            for ps in passages:
-                c = verify_claim(text, ps)
-                citations.append({"status": c.status,
-                                  "doc_id": ps.doc_id,
-                                  "detail": c.detail[:160]})
-            # One SUPPORTED passage is enough to ground the answer; keep the
-            # best outcome plus the count so the rate is honest.
-            best = "SUPPORTED" if any(
-                c["status"] == "SUPPORTED" for c in citations) else (
-                "CONTRADICTED" if any(
-                    c["status"] == "CONTRADICTED" for c in citations)
-                else "UNSUPPORTED")
+        claims = L.split_claims(text)
+        if text.strip() and not L.is_abstention(text) and claims:
+            per_claim = []
+            for claim in claims:
+                per_passage = []
+                for ps in passages:
+                    c = verify_claim(claim, ps)
+                    per_passage.append({"status": c.status,
+                                        "doc_id": ps.doc_id,
+                                        "detail": c.detail[:160]})
+                # One SUPPORTED passage is enough to ground ONE claim.
+                cstat = "SUPPORTED" if any(
+                    x["status"] == "SUPPORTED" for x in per_passage) else (
+                    "CONTRADICTED" if any(
+                        x["status"] == "CONTRADICTED" for x in per_passage)
+                    else "UNSUPPORTED")
+                per_claim.append({"claim": claim[:200],
+                                  "status": cstat,
+                                  "per_passage": per_passage})
+            # A CONTRADICTED claim anywhere is the worst outcome and decides
+            # the answer: one fabricated figure is not redeemed by three sound
+            # ones sitting beside it.
+            if any(x["status"] == "CONTRADICTED" for x in per_claim):
+                best = "CONTRADICTED"
+            elif all(x["status"] == "SUPPORTED" for x in per_claim):
+                best = "SUPPORTED"
+            elif any(x["status"] == "SUPPORTED" for x in per_claim):
+                best = "PARTIALLY_SUPPORTED"
+            else:
+                best = "UNSUPPORTED"
             citations = [{"status": best,
                           "n_passages_checked": len(passages),
-                          "per_passage": citations}]
+                          "n_claims_checked": len(per_claim),
+                          "per_claim": per_claim}]
 
         g = L.grade_rag_case(gold, text, [h.doc_id for h in passages],
                              citations)
@@ -416,19 +442,104 @@ def _flagline(g):
 # Latency measurement (task 5).
 # ---------------------------------------------------------------------------
 
+def build_ttft_prompt(ctx_target, token_counter=None):
+    """
+    A prompt of approximately `ctx_target` tokens, MEASURED not guessed.
+
+    DEFECT FOUND IN THE FIRST REAL RUN 2026-08-18, MEASURED: this used to be
+    `filler * (ctx_target // 12)` on the assumption of ~12 characters, later
+    ~14 tokens, per repetition. Against the real Qwen3.5 tokenizer a 2048
+    target produced 4433 prompt tokens -- a 2.16x overshoot -- and the run
+    still recorded ttft_measured_at_2k: true, because that flag was a ONE-SIDED
+    check (`ptok >= target * 0.8`) with a floor and no ceiling. So the reported
+    118.68 s was not the quantity the approved threshold names, and nothing in
+    the harness said so.
+
+    The repetition count is now derived by actually TOKENIZING the filler when
+    a counter is available. `token_counter` takes text and returns a token
+    count; when it is None we fall back to the character heuristic AND the
+    caller reports the fallback, because an estimate must never be labelled a
+    measurement.
+
+    Returns (prompt, how) where `how` is "tokenized" or "estimated".
+    """
+    filler = ("A price-to-earnings ratio divides price by earnings per share. "
+              "It is a valuation multiple, not a measure of quality. ")
+    tail = "\n\nQuestion: What is a P/E ratio?\nAnswer:"
+
+    if token_counter is None:
+        # No tokenizer: keep the old heuristic but SAY it is a heuristic.
+        return (filler * (ctx_target // 12)) + tail, "estimated"
+
+    per = token_counter(filler)
+    tail_tokens = token_counter(tail)
+    if not per or per <= 0:
+        return (filler * (ctx_target // 12)) + tail, "estimated"
+    reps = int(max(1, (ctx_target - tail_tokens) // per))
+    return (filler * reps) + tail, "tokenized"
+
+
+def report_latency_block(lat):
+    """
+    Print the latency lines AND every caveat attached to them.
+
+    EXTRACTED from main() 2026-08-18 so it can be asserted directly. It was
+    inline, and mutation testing showed why that mattered: replacing either
+    warning's condition with `if False:` -- silencing the harness -- passed the
+    whole suite. These two warnings are the only mechanism by which the user
+    learns that a printed number does not measure the quantity its threshold
+    names. Untested, they were decoration.
+    """
+    p("TTFT @ %d prompt tokens : %.2f s  [MEASURED]"
+      % (lat["ttft_prompt_tokens"], lat["ttft_seconds"]))
+    p("decode tok/s            : %s  [MEASURED]"
+      % lat["decode_tokens_per_sec"])
+    if lat["ttft_prompt_built_by"] != "tokenized":
+        p("WARN: the TTFT prompt length was ESTIMATED from characters, not")
+        p("      tokenized. Treat ttft_prompt_tokens as the authority.")
+    if lat["ttft_measured_at_2k"] is False:
+        lo, hi = lat["ttft_prompt_tokens_window"]
+        direction = ("OVER" if lat["ttft_prompt_tokens"] > hi else "UNDER")
+        p("WARN: the TTFT prompt came out at %d tokens, %s the %d-%d window"
+          % (lat["ttft_prompt_tokens"], direction, lo, hi))
+        p("      the %d-token threshold refers to. This number therefore does"
+          % lat["ttft_prompt_tokens_target"])
+        p("      NOT measure the quantity the threshold names.")
+        p("      Reported, not silently accepted.")
+
+
+def _token_counter_for(llm):
+    """
+    A callable returning the token count of a string, or None if unavailable.
+
+    llama-cpp-python exposes .tokenize(bytes). Older or differently-built
+    wheels may not, and a harness that crashes on the user's actual build is
+    worse than one that falls back and labels the fallback.
+    """
+    tok = getattr(llm, "tokenize", None)
+    if tok is None:
+        return None
+
+    def count(text):
+        try:
+            return len(tok(text.encode("utf-8")))
+        except Exception:
+            return None
+    return count
+
+
 def measure_latency(runner, ctx_target=2048):
     """
     TTFT at ~2K prompt tokens, and sustained decode tok/s.
 
     The approved threshold is time_to_first_token_2k_sec_max = 3.0, so the
     prompt has to actually be about 2K tokens. Measuring TTFT on a short prompt
-    and reporting it against a 2K threshold would be a fabricated pass.
+    and reporting it against a 2K threshold would be a fabricated pass -- and
+    measuring it on a 4433-token prompt and reporting it as 2K is the same lie
+    in the opposite direction, which is exactly what happened on 2026-08-18.
     """
-    filler = ("A price-to-earnings ratio divides price by earnings per share. "
-              "It is a valuation multiple, not a measure of quality. ")
-    # ~14 tokens per repetition; overshoot slightly then report the MEASURED
-    # prompt_tokens so the reader can see what was actually used.
-    prompt = (filler * (ctx_target // 12)) + "\n\nQuestion: What is a P/E ratio?\nAnswer:"
+    prompt, how = build_ttft_prompt(
+        ctx_target, _token_counter_for(getattr(runner, "llm", None)))
 
     # A one-token generation on a thinking model necessarily leaves <think>
     # unterminated, which would inflate the truncated-thinking counter with two
@@ -448,8 +559,16 @@ def measure_latency(runner, ctx_target=2048):
         "ttft_seconds": round(ttft, 3),
         "ttft_prompt_tokens": ptok,
         "ttft_prompt_tokens_target": ctx_target,
-        "ttft_measured_at_2k": (ptok >= ctx_target * 0.8
-                                if ptok else None),
+        "ttft_prompt_built_by": how,
+        # TWO-SIDED. The old form was `ptok >= ctx_target * 0.8`: a floor with
+        # no ceiling, so 4433 tokens against a 2048 target reported True. A
+        # window is the only honest form -- a measurement taken at twice the
+        # named size is not a measurement at that size.
+        "ttft_measured_at_2k": (
+            (ctx_target * 0.8) <= ptok <= (ctx_target * 1.25)
+            if ptok else None),
+        "ttft_prompt_tokens_window": [round(ctx_target * 0.8),
+                                      round(ctx_target * 1.25)],
         "decode_tokens_per_sec": m2["decode_tps"],
         "decode_completion_tokens": m2["completion_tokens"],
         "label": "MEASURED",
@@ -566,14 +685,7 @@ def main(argv=None):
     p("LATENCY AND MEMORY  (task 5)")
     p("-" * 78)
     lat = measure_latency(runner)
-    p("TTFT @ %d prompt tokens : %.2f s  [MEASURED]"
-      % (lat["ttft_prompt_tokens"], lat["ttft_seconds"]))
-    p("decode tok/s            : %s  [MEASURED]"
-      % lat["decode_tokens_per_sec"])
-    if lat["ttft_measured_at_2k"] is False:
-        p("WARN: the TTFT prompt came out at %d tokens, short of the 2K the"
-          % lat["ttft_prompt_tokens"])
-        p("      threshold refers to. Reported, not silently accepted.")
+    report_latency_block(lat)
 
     cases = load_jsonl(rel(a.evals))
     gold_rows = load_jsonl(rel(a.gold))
