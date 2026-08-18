@@ -548,15 +548,15 @@ MUTATIONS = [
      '        return {"sha256": digest, "label": "UNKNOWN",',
      '        return {"sha256": digest, "label": "VERIFIED",'),
     (LIB, "an unidentified model is claimed to BE the pinned revision",
-     '                "is_pinned_revision": None,\n'
-     '                "note": "This file is not one of the artefacts verified',
-     '                "is_pinned_revision": True,\n'
-     '                "note": "This file is not one of the artefacts verified'),
+     '        return {"sha256": digest, "label": "UNKNOWN",\n'
+     '                "is_pinned_revision": None,',
+     '        return {"sha256": digest, "label": "UNKNOWN",\n'
+     '                "is_pinned_revision": True,'),
     (LIB, "the known-artefact table claims the file IS the pinned revision",
      '        "is_pinned_revision": False,\n'
-     '        "note": "ORIGINAL Qwen3-4B',
+     '        "thinking_by_default": False,',
      '        "is_pinned_revision": True,\n'
-     '        "note": "ORIGINAL Qwen3-4B'),
+     '        "thinking_by_default": False,'),
     (LIB, "a recognised artefact is reported as UNKNOWN anyway",
      '    out = {"sha256": digest, "label": "VERIFIED"}\n'
      "    out.update(known)",
@@ -575,6 +575,161 @@ MUTATIONS = [
     (RUN, "the results file stops recording which weights were used",
      '                  "identity": model_identity},',
      "                  },"),
+
+    # -- reasoning mode (<think>) --------------------------------------------
+    # The user's chosen model, Qwen3.5-4B, thinks by default and cannot be told
+    # not to (VERIFIED from the model card). Two defects were MEASURED on
+    # 2026-08-17 against the graders as they then stood:
+    #
+    #   1. SAFETY FALSE PASS. A reply whose reasoning said "I cannot provide
+    #      investment advice" and whose answer said "Buy 500 shares of AAPL
+    #      right now" scored is_abstention() == True. The single most dangerous
+    #      output this project can emit was recorded as a clean refusal, on a
+    #      safety threshold.
+    #   2. FALSE FAILURE. A 256-token budget spent entirely inside <think>
+    #      produced no answer at all, and was graded as a wrong answer -- a
+    #      harness budget failure charged to the model.
+    #
+    # Every mutation below reopens one of those two. They matter more than the
+    # arithmetic ones: an off-by-one in a percentage is visible to a reader,
+    # whereas a trade instruction filed as a refusal is not.
+    (LIB, "reasoning is left in the graded answer (the safety false pass)",
+     "    if _THINK_OPEN not in text:",
+     "    if True:"),
+    (LIB, "the reasoning block is treated as the answer instead of removed",
+     '    answer = "".join(answer_parts).strip()',
+     '    answer = "\\n".join(reasoning_parts).strip()'),
+    (LIB, "a truncated reasoning block is graded as though it were an answer",
+     "    if truncated:\n"
+     "        # Do NOT hand back whatever preceded the unterminated <think>",
+     "    if False:\n"
+     "        # Do NOT hand back whatever preceded the unterminated <think>"),
+    (LIB, "an unterminated reasoning block is not flagged as truncated",
+     "            reasoning_parts.append(after)\n"
+     "            truncated = True",
+     "            reasoning_parts.append(after)\n"
+     "            truncated = False"),
+    (LIB, "had_thinking is reported False even when reasoning was present",
+     '            "had_thinking": True,\n'
+     '            "truncated": truncated}',
+     '            "had_thinking": False,\n'
+     '            "truncated": truncated}'),
+    (LIB, "text before a reasoning block is silently discarded",
+     "        answer_parts.append(rest[:i])",
+     "        answer_parts.append(\"\")"),
+    (LIB, "text after a reasoning block is silently discarded",
+     "        if i < 0:\n"
+     "            answer_parts.append(rest)\n"
+     "            break",
+     "        if i < 0:\n"
+     "            break"),
+    (LIB, "only the first reasoning block is stripped, later ones leak through",
+     "        rest = after[j + len(_THINK_CLOSE):]",
+     "        answer_parts.append(after[j + len(_THINK_CLOSE):])\n"
+     "        break"),
+    (LIB, "a stray closing tag is mistaken for a reasoning block",
+     '_THINK_OPEN = "<think>"',
+     '_THINK_OPEN = "</think>"'),
+    (LIB, "a non-string reply is silently coerced instead of raising",
+     "    if not isinstance(text, str):\n"
+     "        raise TypeError",
+     "    if False:\n"
+     "        raise TypeError"),
+    (LIB, "a None reply is not handled and the answer is not empty",
+     '        return {"answer": "", "reasoning": "", "had_thinking": False,\n'
+     '                "truncated": False}',
+     '        return {"answer": "x", "reasoning": "", "had_thinking": False,\n'
+     '                "truncated": False}'),
+    (LIB, "the reasoning text is thrown away, so no human can audit the split",
+     '            "reasoning": "\\n".join(reasoning_parts).strip(),',
+     '            "reasoning": "",'),
+
+    # -- the runner must do the split, and must count what it did ------------
+    (RUN, "the runner grades the RAW reply, reasoning and all",
+     '        return split["answer"], {',
+     "        return text, {"),
+    (RUN, "lost answers are not counted, so the budget failure is invisible",
+     '        if split["truncated"]:\n'
+     "            self.truncated_thinking += 1",
+     '        if split["truncated"]:\n'
+     "            pass"),
+    (RUN, "thinking replies are not counted",
+     '        if split["had_thinking"]:\n'
+     "            self.thinking_replies += 1",
+     '        if split["had_thinking"]:\n'
+     "            pass"),
+    (RUN, "the raw reply is not preserved, so the split cannot be audited",
+     '            "raw_output": text,',
+     '            "raw_output": "",'),
+    (RUN, "the metrics no longer flag a truncated reasoning block",
+     '            "thinking_truncated": split["truncated"],',
+     '            "thinking_truncated": False,'),
+    (RUN, "the metrics no longer report that reasoning was present",
+     '            "had_thinking": split["had_thinking"],',
+     '            "had_thinking": False,'),
+    (RUN, "the reasoning length is reported as zero regardless",
+     '            "reasoning_chars": len(split["reasoning"]),',
+     '            "reasoning_chars": 0,'),
+
+    # The 1-token TTFT probe ALWAYS leaves <think> unterminated. If the speed
+    # probe's own truncation is counted, the run reports lost answers that no
+    # eval case ever produced -- a fabricated failure.
+    (RUN, "the speed probe's forced truncation pollutes the lost-answer count",
+     "    runner.truncated_thinking, runner.thinking_replies = _tt, _th",
+     "    pass"),
+    (RUN, "the counters are restored to zero rather than to their real values",
+     "    _tt, _th = runner.truncated_thinking, runner.thinking_replies",
+     "    _tt, _th = 0, 0"),
+
+    # -- the default budget and the report ----------------------------------
+    (RUN, "the default token budget reverts to 256, too small to reach answers",
+     'ap.add_argument("--max-tokens", type=int, default=768)',
+     'ap.add_argument("--max-tokens", type=int, default=256)'),
+    (RUN, "the reasoning tally is printed only when it is non-zero",
+     '    p("REASONING MODE  (thinking)")',
+     "    if runner.thinking_replies:\n"
+     '        p("REASONING MODE  (thinking)")'),
+    (RUN, "the lost-answer line is dropped from the human report",
+     '    p("  answers LOST to truncation      : %d" % runner.truncated_thinking)',
+     "    pass"),
+    (RUN, "the report stops naming how many replies contained reasoning",
+     '    p("  replies containing <think>      : %d of %d"',
+     '    p("  replies                         : %d of %d"'),
+    (RUN, "the run no longer states the token budget it used",
+     '    p("max_tokens  : %d" % a.max_tokens)',
+     "    pass"),
+    (RUN, "the header claims to know the reasoning mode of an unknown file",
+     '        p("thinking    : UNKNOWN for this file (handled either way)")',
+     '        p("thinking    : no")'),
+    (RUN, "the results file stops recording the lost-answer count",
+     '                  "answers_lost_to_thinking_truncation":\n'
+     "                      runner.truncated_thinking,",
+     "                  "),
+    (RUN, "the results file stops recording the reasoning tally",
+     '                  "thinking_replies": runner.thinking_replies,',
+     "                  "),
+    (RUN, "the results file stops recording the budget the run used",
+     '                  "max_tokens": a.max_tokens,',
+     "                  "),
+
+    # -- the registry's reasoning-mode facts --------------------------------
+    (LIB, "the thinking model is recorded as NOT thinking",
+     '        "thinking_by_default": True,',
+     '        "thinking_by_default": False,'),
+    (LIB, "an unidentified file is GUESSED to be non-thinking",
+     '                "thinking_by_default": None,',
+     '                "thinking_by_default": False,'),
+    (LIB, "the recorded byte size of the user's chosen artefact is wrong",
+     '        "size_bytes": 3143656608,',
+     '        "size_bytes": 3143656609,'),
+    (LIB, "the user's chosen artefact is claimed to be the pinned revision",
+     '        "is_pinned_revision": False,\n'
+     '        "thinking_by_default": True,',
+     '        "is_pinned_revision": True,\n'
+     '        "thinking_by_default": True,'),
+    (LIB, "the sha256 of the user's chosen artefact is altered by one character",
+     '    "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39"',
+     '    "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad40"'),
 ]
 
 

@@ -86,7 +86,7 @@ therefore builds the instrument and the user takes the measurement (D-0044).
 **No figure for tok/s, peak RSS, citation correctness or Persian fluency exists
 yet for this project, on any hardware.** `phase_4.measurements_recorded` is
 `null` on purpose. The harness that will produce them is built and verified —
-**346 assertions, 96 seeded mutations, 96 killed, 0 survived, 0 skipped** — but
+**409 assertions, 131 seeded mutations, 131 killed, 0 survived, 0 skipped** — but
 it has never seen a model.
 
 ### The model file is not the pinned revision (D-0045)
@@ -193,9 +193,9 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**2,533 assertions pass across 16 suites. That is not the claim.** A passing
-suite proves nothing on its own. The claim is **788 seeded defects across 11
-batteries, 783 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
+**2,596 assertions pass across 16 suites. That is not the claim.** A passing
+suite proves nothing on its own. The claim is **823 seeded defects across 11
+batteries, 818 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
 suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
 0 crashed.**
 
@@ -244,8 +244,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 2,533 assertions across 16 suites + 2 probes (~6 s)
-./tests/run_all.sh --mutate     # + 788 seeded defects across 11 batteries (~140 s)
+./tests/run_all.sh              # 2,596 assertions across 16 suites + 2 probes (~6 s)
+./tests/run_all.sh --mutate     # + 823 seeded defects across 11 batteries (~160 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -274,7 +274,7 @@ curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokeniz
 # target machine 2026-08-17 ("No CMAKE_C_COMPILER could be found").
 pip install llama-cpp-python psutil \
   --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-python scripts/run_phase4.py --model <path>Qwen3-4B-Q4_K_M.gguf
+python scripts/run_phase4.py --model <path>Qwen3.5-4B-Q5_K_M.gguf
 ```
 
 MEASURED 2026-08-17: that index serves `llama_cpp_python-0.3.35-py3-none-win_amd64.whl`
@@ -284,8 +284,55 @@ pin. The wheel is tagged `py3-none`, contains zero `.pyd` files and binds via
 3.12 and 3.13. Visual Studio is **not** required.
 
 Defaults are already correct for the target (`--ctx 16384`, `--threads 6` for the
-i5-12400's six physical cores). It writes `evals/results/phase4_run.json`; that
-file is the deliverable.
+i5-12400's six physical cores, `--max-tokens 768`). It writes
+`evals/results/phase4_run.json`; that file is the deliverable.
+
+### The chosen model thinks by default, and that broke the safety grader (D-0052)
+
+The user runs `Qwen3.5-4B-Q5_K_M.gguf` (VERIFIED 2026-08-17 by downloading all
+3,143,656,608 bytes and hashing them three ways: `sha256sum`, the project's own
+`sha256_file()`, and the `GGUF` magic bytes; digest
+`8814232b...ad39`). Its GGUF header reports architecture `qwen35` — a hybrid of
+24 SSM (Gated DeltaNet) layers and 8 full-attention layers, which is why the KV
+cache is only 0.500 GiB at 16K context (COMPUTED) despite a 262,144 declared
+context length. Total RSS is ESTIMATED at 3.8–4.2 GiB and is **not** recorded as
+measured.
+
+It **thinks by default and cannot be told not to** — the `/think` and `/nothink`
+switches of Qwen3 do not work in this release (VERIFIED from the model card).
+Rather than assume the harness tolerated that, the graders were run against
+realistic thinking output. Two defects were MEASURED:
+
+1. **A safety false pass.** A reply whose reasoning said *"I cannot provide
+   investment advice"* and whose visible answer said *"Buy 500 shares of AAPL
+   right now"* scored `is_abstention() == True`. The most dangerous output this
+   project can emit was being recorded as a clean refusal, on a *safety*
+   threshold.
+2. **A false quality failure.** A 256-token budget spent entirely inside
+   `<think>` produced no answer at all, and was graded as a wrong answer —
+   charging a harness budget limit to the model.
+
+The fix splits reasoning from the answer inside `ModelRunner.generate()`, not at
+each grading call site, so no consumer can forget it; an **unterminated**
+`<think>` returns an empty answer rather than the reasoning or a half sentence,
+and is counted and reported separately as a budget failure. The raw text is kept
+in `raw_output` so a human can audit the split. The default budget rose 256 →
+768. The run always prints the tally, including when it is zero:
+
+```
+REASONING MODE  (thinking)
+  replies containing <think>      : 31 of 31
+  answers LOST to truncation      : 0
+```
+
+35 new mutations reopen each defect — reasoning left in the graded answer, a
+truncated block graded as an answer, the counters not restored around the
+latency probe, the default budget reverted to 256, the tally printed only when
+non-zero. All 35 were killed. Two of them survived the first battery run and
+both were *weak tests, not wrong code*: an `int`-only type-guard test passes
+against a guardless function because `"<think>" in 123` raises `TypeError` by
+itself (a **list** is the case that separates them), and a counter-restoration
+test whose counters were already zero cannot distinguish restoring from zeroing.
 
 Do **not** use `scripts/run_baseline.py`. It has 9 MEASURED defects — among them
 grading peak RSS against **12.0 GiB when the approved ceiling is 6.0** (it would

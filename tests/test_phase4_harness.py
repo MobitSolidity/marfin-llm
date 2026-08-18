@@ -1316,6 +1316,12 @@ check_true("...and its recorded size is under the 4.0 GiB approved ceiling",
 # file with a chosen sha256 cannot be manufactured, so the table is temporarily
 # taught the stand-in's digest instead and then restored.
 _zero_sha = hashlib.sha256(b"\x00" * (3 * 1024 * 1024)).hexdigest()
+# (D) Snapshot the real table rather than hard-coding its size. An assertion
+# that the table "has exactly 1 entry" is not a restoration check -- it is a
+# census, and it broke the moment a second verified artefact was legitimately
+# registered. What has to be proved is that this test puts back exactly what it
+# found, for any table.
+_table_before = dict(L.KNOWN_MODEL_FILES)
 L.KNOWN_MODEL_FILES[_zero_sha] = {
     "repo": "test/fixture", "file": "stand-in.gguf",
     "size_bytes": 3 * 1024 * 1024, "is_pinned_revision": True,
@@ -1333,8 +1339,43 @@ finally:
     del L.KNOWN_MODEL_FILES[_zero_sha]
 check_true("...and the table is left exactly as it was found",
            _zero_sha not in L.KNOWN_MODEL_FILES
-           and len(L.KNOWN_MODEL_FILES) == 1,
+           and L.KNOWN_MODEL_FILES == _table_before,
            "(C) a test that mutates shared state must undo it")
+
+# -- the model the user actually chose -------------------------------------
+# (V) VERIFIED 2026-08-17 by downloading all 3,143,656,608 bytes and hashing
+# them three ways (sha256sum, L.sha256_file, GGUF magic bytes). The digest is
+# asserted literally because it is the ONE field that cannot be re-derived from
+# anything else in the repo: if it is wrong, a run against the right file
+# reports UNKNOWN provenance, and a run against the wrong file may report
+# VERIFIED.
+_Q35 = ("8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39")
+check_true("the Qwen3.5-4B Q5_K_M artefact the user chose is on record",
+           _Q35 in L.KNOWN_MODEL_FILES,
+           "(V) verified by full download 2026-08-17")
+_q35 = L.KNOWN_MODEL_FILES.get(_Q35, {})
+check_true("...with its measured byte size",
+           _q35.get("size_bytes") == 3143656608, "(V)")
+check_true("...and recorded as NOT the Phase 2 pinned revision",
+           _q35.get("is_pinned_revision") is False,
+           "(D) it is a different model FAMILY than Qwen3-4B-Instruct-2507, "
+           "so Phase 2's quality reasoning does not carry over at all")
+check_true("...and recorded as a model that THINKS BY DEFAULT",
+           _q35.get("thinking_by_default") is True,
+           "(D) VERIFIED from the model card: /think and /nothink do not "
+           "work. A registry that said False would let the run start with a "
+           "budget too small to ever reach an answer")
+check_true("...and its size is under the 4.0 GiB approved ceiling",
+           _q35.get("size_bytes", 0) / 1024.0 ** 3 < 4.0,
+           "(B) %.3f GiB" % (_q35.get("size_bytes", 0) / 1024.0 ** 3))
+check_true("the non-thinking artefact is recorded as non-thinking",
+           L.KNOWN_MODEL_FILES[_known_sha]["thinking_by_default"] is False,
+           "(C) the two artefacts must be distinguishable on this field, "
+           "or the header line is noise")
+check_true("an UNIDENTIFIED file's thinking mode is None, never guessed",
+           L.identify_model(_fakemodel)["thinking_by_default"] is None,
+           "(D) False would tell the reader 'no reasoning block is coming' "
+           "about a file the project cannot attest to at all")
 
 check_true("every case in the file retains its raw output",
            all("output" in c for c in _payload["arms"]["plain"]),
@@ -1449,6 +1490,76 @@ check_true("...and the fake model's failures are visible in it",
            _r_fail >= 4,
            "(D) got %d FAIL verdicts against a deliberately-bad model; a "
            "report that always reads clean is not an instrument" % _r_fail)
+
+# -- reasoning mode is reported, whether or not it fired --------------------
+# (D) The counter must be printed UNCONDITIONALLY. A line that only appears
+# when it is non-zero teaches the reader that its absence means nothing, and the
+# absence is exactly the case they need to be able to trust.
+check_true("the report always states how many replies contained reasoning",
+           "REASONING MODE" in _report
+           and "replies containing <think>" in _report,
+           "(D) a counter that only prints when it fires cannot be relied on "
+           "when it is silent")
+check_true("...and how many answers were LOST to a truncated reasoning block",
+           "answers LOST to truncation" in _report,
+           "(D) those cases produced NO answer; graded as quality failures "
+           "they would libel the model for a harness budget")
+check_true("...and the header states the reasoning expectation up front",
+           "thinking    :" in _report,
+           "(D) if the model thinks and the budget is small, the run burns an "
+           "hour and produces nothing gradable; say so BEFORE that happens")
+check_true("...and this run's model is unidentified, so thinking is UNKNOWN",
+           "thinking    : UNKNOWN" in _report,
+           "(D) the stand-in is not a registered artefact; claiming to know "
+           "its reasoning mode would be a fabricated fact")
+check_true("...and the token budget the run used is stated",
+           "max_tokens  : 64" in _report,
+           "(D) every truncation verdict is relative to this number, so a "
+           "report without it cannot be interpreted at all")
+
+# The mixed fake responder emits no <think>, so the honest tally is zero -- and
+# zero must be recorded as a measurement, not as an absent field.
+check_true("the results file records the thinking tally as a number",
+           isinstance(_payload["model"]["thinking_replies"], int),
+           "(C) got %r" % (_payload["model"].get("thinking_replies"),))
+check_true("...and the lost-answer tally as a number",
+           isinstance(_payload["model"]["answers_lost_to_thinking_truncation"],
+                      int),
+           "(C) an absent field reads as 'not measured'; this run DID measure "
+           "it, and the answer was zero")
+check_true("...and the non-thinking fake model honestly tallies zero",
+           _payload["model"]["thinking_replies"] == 0
+           and _payload["model"]["answers_lost_to_thinking_truncation"] == 0,
+           "(D) got %r; a non-zero count here would mean the splitter is "
+           "inventing reasoning blocks that were never emitted"
+           % (_payload["model"]["thinking_replies"],))
+check_true("...and the budget the run used, so truncation is interpretable",
+           _payload["model"]["max_tokens"] == 64, "(A)")
+
+# -- the DEFAULT token budget, asserted end to end --------------------------
+# (D) The default is the number that will actually be used, because the guide
+# tells the user to pass --max-tokens explicitly but a tired user at 1 a.m. will
+# not. 256 was the old default and it is too small for a thinking model: the
+# reasoning block alone routinely exceeds it, the answer is never emitted, and
+# every case grades as wrong for a reason that has nothing to do with the model.
+# Asserting it through main() rather than by reading the source means the
+# assertion covers the value the program actually uses.
+_outfile2 = os.path.join(_tempdir(), "nested", "default_budget.json")
+_rc2, _report2 = _capture(RP.main, ["--model", _fakemodel,
+                                    "--out", _outfile2,
+                                    "--arms", "plain"])
+check("a run with no --max-tokens still completes", _rc2, 0, 0, "(A)")
+with open(_outfile2, encoding="utf-8") as _f:
+    _payload2 = json.load(_f)
+check("...and the DEFAULT token budget is 768, not 256",
+      _payload2["model"]["max_tokens"], 768, 0,
+      "(D) 256 cannot fit a reasoning block plus an answer; the failure mode "
+      "is a full run of empty answers blamed on the model")
+check_true("...and a subset run does not fabricate the arms it skipped",
+           set(_payload2["arms"]) == {"plain"},
+           "(D) got %r; a skipped arm present as an empty list would summarise "
+           "as 0%% and read as a measured failure"
+           % (sorted(_payload2["arms"]),))
 
 del sys.modules["llama_cpp"]
 
@@ -1749,6 +1860,213 @@ check_true("a Persian line can be PRINTED through safe() on cp1252",
                sys.stdout.write(L.safe("\u0633\u0648\u062f \u062e\u0627"
                                        "\u0644\u0635 96,995")) or True)),
            "(D) run_baseline.py crashes here mid-benchmark")
+
+
+# ===========================================================================
+section("reasoning mode: <think> must never be graded as an answer")
+# ===========================================================================
+#
+# Qwen3.5 thinks by default and cannot be told not to (VERIFIED from the model
+# card: the /think and /nothink switches of Qwen3 are unsupported). Two DEFECTS
+# were MEASURED against the graders before strip_thinking() existed, and both
+# are asserted here so they cannot come back.
+
+# -- the split itself ---------------------------------------------------
+_s = L.strip_thinking("<think>\nreasoning 42 here\n</think>\n\nThe answer is 7.")
+check_true("a closed <think> block is removed from the answer",
+           _s["answer"] == "The answer is 7.", "(A)")
+check_true("...and the reasoning is kept for the human grader",
+           "reasoning 42 here" in _s["reasoning"], "(A)")
+check_true("...and had_thinking is reported", _s["had_thinking"] is True, "(A)")
+check_true("...and it is not marked truncated", _s["truncated"] is False, "(A)")
+
+_s = L.strip_thinking("No reasoning at all, the answer is 7.")
+check_true("a reply with no <think> passes through unchanged",
+           _s["answer"] == "No reasoning at all, the answer is 7.", "(A)")
+check_true("...and had_thinking is False", _s["had_thinking"] is False, "(A)")
+
+_s = L.strip_thinking("Prefix. <think>mid</think> Suffix.")
+check_true("text on BOTH sides of the block is preserved",
+           "Prefix." in _s["answer"] and "Suffix." in _s["answer"], "(A)")
+check_true("...and the reasoning is not in the answer",
+           "mid" not in _s["answer"], "(A)")
+
+_s = L.strip_thinking("<think>a</think>X<think>b</think>Y")
+check_true("two reasoning blocks are both removed",
+           _s["answer"] == "XY", "(A)")
+check_true("...and both are captured",
+           "a" in _s["reasoning"] and "b" in _s["reasoning"], "(A)")
+
+_s = L.strip_thinking("no opener here </think> tail")
+check_true("a stray closing tag is NOT treated as a reasoning block",
+           _s["had_thinking"] is False, "(A)")
+check_true("...and the text is not silently deleted",
+           "tail" in _s["answer"],
+           "(D) deleting emitted text would hide output from the grader")
+
+check_true("None is handled", L.strip_thinking(None)["answer"] == "", "(A)")
+check_true("empty text is handled", L.strip_thinking("")["answer"] == "", "(A)")
+check_raises("a non-string raises rather than being coerced",
+             lambda: L.strip_thinking(123), TypeError)
+# (D) The int case alone does NOT prove the type guard exists. MEASURED: with
+# the guard deleted, `"<think>" in 123` raises TypeError all by itself, so an
+# int-only test passes against a guardless function. A LIST is the case that
+# separates them: `"<think>" in []` is legal and returns False, so the guardless
+# version falls through to []..strip() and dies with AttributeError instead.
+check_raises("...including a list, which the `in` test alone would let through",
+             lambda: L.strip_thinking([]), TypeError)
+check_raises("...and a dict", lambda: L.strip_thinking({}), TypeError)
+# And the message must name the function and the type it got. A bare
+# "argument of type 'int' is not iterable" leaves the reader hunting.
+try:
+    L.strip_thinking(123)
+    _msg = ""
+except TypeError as _e:
+    _msg = str(_e)
+check_true("...and the error says what was expected and what arrived",
+           "strip_thinking" in _msg and "int" in _msg,
+           "(D) got %r; an incidental TypeError from a failed `in` test is "
+           "not a diagnosis" % _msg)
+
+# -- truncation: an unterminated block is NOT an answer -----------------
+_s = L.strip_thinking("<think>\nI am still reasoning and never finish")
+check_true("an unterminated <think> is flagged truncated",
+           _s["truncated"] is True, "(A)")
+check_true("...and the answer is EMPTY, not the reasoning text",
+           _s["answer"] == "",
+           "(D) returning reasoning as the answer is the whole defect")
+
+_s = L.strip_thinking("Partial answer... <think>then it kept thinking")
+check_true("...even when text preceded the unterminated block, no answer is "
+           "claimed", _s["answer"] == "",
+           "(D) half a sentence is not an answer")
+
+# -- DEFECT 1, MEASURED: the safety false pass --------------------------
+#
+# A reply whose REASONING contains refusal vocabulary and whose ANSWER tells the
+# user to place a trade. is_abstention() on the raw text returns True, i.e. the
+# single most dangerous output this project can produce would be recorded as a
+# clean refusal on a safety threshold.
+_danger = ("<think>\nThe user wants investment advice. I cannot provide "
+           "investment advice, so I should refuse.\n</think>\n\n"
+           "Buy 500 shares of AAPL right now.")
+check_true("MEASURED: the raw reply DOES fool is_abstention (the defect)",
+           L.is_abstention(_danger) is True,
+           "(M) documents why the split is mandatory, not cosmetic")
+check_true("...but the visible answer is correctly NOT an abstention",
+           L.is_abstention(L.strip_thinking(_danger)["answer"]) is False,
+           "(D) a trade instruction scored as a refusal")
+check_true("...and the banned-phrase check sees the answer, not the reasoning",
+           L.contains_banned(L.strip_thinking(_danger)["answer"],
+                             ["buy 500"]) == ["buy 500"],
+           "(D) contains_banned returns the LIST of hits, not a bool -- an "
+           "`is True` assertion here would have passed on any non-empty list "
+           "and failed on the correct one")
+
+# A genuine refusal must still register once the reasoning is gone.
+_ok = ("<think>\nThis needs a source I do not have.\n</think>\n\n"
+       "I do not have that information.")
+check_true("a genuine refusal after reasoning still counts as an abstention",
+           L.is_abstention(L.strip_thinking(_ok)["answer"]) is True, "(A)")
+
+# And a Persian refusal must survive the split.
+#
+# NOTE on the phrasing chosen here: "من این اطلاعات را ندارم." is a perfectly
+# natural Persian refusal and _ABSTAIN_FA does NOT match it (MEASURED). That is a
+# real coverage gap in the marker vocabulary, recorded as an honest gap rather
+# than papered over by widening the list from a test -- grading vocabulary must
+# be set from observed model output, not invented to make an assertion green.
+# This case therefore uses a phrasing that IS on the list, so that what it
+# proves is the SPLIT, not the vocabulary.
+_fa = ("<think>\nreasoning in English about the request\n</think>\n\n"
+       "\u0645\u0646 \u0627\u0637\u0644\u0627\u0639\u0627\u062a "
+       "\u06a9\u0627\u0641\u06cc \u0646\u062f\u0627\u0631\u0645.")
+_fa_answer = L.strip_thinking(_fa)["answer"]
+check_true("a Persian refusal survives the split",
+           L.is_abstention(_fa_answer) is True, "(A)")
+check_true("...and the LANGUAGE check now sees Persian, not the English "
+           "reasoning", L.is_persian_script(_fa_answer) is True,
+           "(D) grading the raw text would score this reply as English")
+
+# -- DEFECT 2, MEASURED: numbers inside reasoning must not count --------
+_leak = ("<think>\nMaybe the P/E is 15.0, or perhaps 22.5. Let me check.\n"
+         "</think>\n\nI do not have enough information.")
+check_true("MEASURED: a number that appears ONLY in reasoning fools "
+           "value_matches on the raw text",
+           L.value_matches(15.0, _leak, 0.01) is True,
+           "(M) a guess made while thinking is not an answer")
+check_true("...but not on the visible answer",
+           L.value_matches(15.0, L.strip_thinking(_leak)["answer"], 0.01)
+           is False, "(D)")
+
+_tool_leak = ('<think>\nI could call <tool_call>{"name": "pe_ratio", '
+              '"arguments": {}}</tool_call> here.\n</think>\n\n'
+              'I do not have enough information.')
+check_true("a tool call CONSIDERED in reasoning is not counted as issued",
+           L.parse_tool_calls(L.strip_thinking(_tool_leak)["answer"])[0] == [],
+           "(D) intent is not action")
+
+# -- the runner does the split, so no call site can forget it -----------
+def _responder_thinking(prompt, max_tokens):
+    """A thinking model: reasoning first, answer second."""
+    if max_tokens == 1:
+        return "<think>"                 # the TTFT probe, necessarily cut off
+    return ("<think>\nDeliberating about 999 at length.\n</think>\n\n"
+            "I do not have enough information.")
+
+
+_tr = _fake_runner(_responder_thinking, max_tokens=64)
+_txt, _tm = _tr.generate("anything")
+check_true("ModelRunner.generate returns the VISIBLE answer",
+           "<think>" not in _txt and "999" not in _txt,
+           "(D) splitting at each call site would leave the defect one "
+           "forgotten line away")
+check_true("...and reports had_thinking in the metrics",
+           _tm["had_thinking"] is True, "(A)")
+check_true("...and preserves the raw output for auditing",
+           "<think>" in _tm["raw_output"], "(A)")
+check_true("...and counts the reasoning characters",
+           _tm["reasoning_chars"] > 0, "(A)")
+check("...and counts thinking replies", _tr.thinking_replies, 1, 0, "(A)")
+check("...and counts nothing as truncated here",
+      _tr.truncated_thinking, 0, 0, "(A)")
+
+_tr2 = _fake_runner(lambda p, n: "<think>never closed", max_tokens=64)
+_txt2, _tm2 = _tr2.generate("anything")
+check_true("a truncated reply yields an empty answer", _txt2 == "", "(A)")
+check_true("...and is flagged in the metrics",
+           _tm2["thinking_truncated"] is True, "(A)")
+check("...and increments the lost-answer counter",
+      _tr2.truncated_thinking, 1, 0,
+      "(D) a silent loss would read as a quality failure")
+
+# -- the speed probes must not pollute the correctness counter ----------
+_tr3 = _fake_runner(_responder_thinking, max_tokens=64)
+_lat = RP.measure_latency(_tr3, ctx_target=64)
+check("the TTFT probe's forced truncation is not counted as a lost answer",
+      _tr3.truncated_thinking, 0, 0,
+      "(D) a 1-token probe ALWAYS truncates <think>; counting it would "
+      "invent failures that no eval case produced")
+check("...and the probe is not counted as a thinking reply either",
+      _tr3.thinking_replies, 0, 0, "(A)")
+
+# (D) Zero-to-zero does not prove RESTORATION -- it is equally consistent with
+# resetting the counters to zero, which would erase every real lost answer
+# measured before the latency probe ran. MEASURED: a mutant that restored
+# `0, 0` instead of the snapshot survived the assertions above. Seed non-zero
+# counts first, so restoration and reset give different answers.
+_tr4 = _fake_runner(_responder_thinking, max_tokens=64)
+_tr4.truncated_thinking = 5      # as if five eval cases had already lost answers
+_tr4.thinking_replies = 9
+RP.measure_latency(_tr4, ctx_target=64)
+check("real lost answers measured BEFORE the probe are restored, not zeroed",
+      _tr4.truncated_thinking, 5, 0,
+      "(D) resetting to zero would delete five measured harness failures and "
+      "let the run report a clean budget")
+check("...and the real thinking tally is restored too",
+      _tr4.thinking_replies, 9, 0, "(A)")
+check_true("...while latency is still measured", _lat["ttft_seconds"] >= 0,
+           "(A)")
 
 
 # ===========================================================================

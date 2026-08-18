@@ -93,14 +93,28 @@ def rel(path):
 class ModelRunner(object):
     """Thin wrapper over llama_cpp.Llama that records timing per call."""
 
-    def __init__(self, llm, max_tokens=256):
+    def __init__(self, llm, max_tokens=768):
         self.llm = llm
         self.max_tokens = max_tokens
         self.calls = 0
+        self.truncated_thinking = 0
+        self.thinking_replies = 0
 
     def generate(self, prompt, max_tokens=None):
         """
-        Returns (text, metrics). Metrics are MEASURED, never estimated.
+        Returns (answer, metrics). Metrics are MEASURED, never estimated.
+
+        The FIRST return value is the VISIBLE answer, with any <think> block
+        removed. That is deliberate: every grader in this harness consumes this
+        function's output, so separating reasoning here means no call site can
+        forget to do it. MEASURED 2026-08-17 on the unmodified graders: a reply
+        whose reasoning said "I cannot provide investment advice" and whose
+        answer said "Buy 500 shares of AAPL right now" was scored as a clean
+        refusal. Doing the split at each call site instead would leave that
+        defect one forgotten line away from returning.
+
+        The raw text is preserved in metrics["raw_output"] so a human grader
+        can still read what the model actually emitted.
 
         `ttft_s` is measured by asking for ONE token and timing it. Streaming
         would be a truer measure, but it is not available uniformly across
@@ -120,12 +134,25 @@ class ModelRunner(object):
         usage = out.get("usage", {}) or {}
         ctok = usage.get("completion_tokens", 0)
         ptok = usage.get("prompt_tokens", 0)
-        return text.strip(), {
+
+        split = L.strip_thinking(text)
+        if split["had_thinking"]:
+            self.thinking_replies += 1
+        if split["truncated"]:
+            self.truncated_thinking += 1
+
+        return split["answer"], {
             "seconds": round(elapsed, 3),
             "prompt_tokens": ptok,
             "completion_tokens": ctok,
             "decode_tps": (round(ctok / elapsed, 2)
                            if elapsed > 0 and ctok else None),
+            "had_thinking": split["had_thinking"],
+            "thinking_truncated": split["truncated"],
+            "reasoning_chars": len(split["reasoning"]),
+            # Kept so a human can audit the split, and so a truncated reply is
+            # not silently indistinguishable from an empty one.
+            "raw_output": text,
         }
 
 
@@ -403,12 +430,20 @@ def measure_latency(runner, ctx_target=2048):
     # prompt_tokens so the reader can see what was actually used.
     prompt = (filler * (ctx_target // 12)) + "\n\nQuestion: What is a P/E ratio?\nAnswer:"
 
+    # A one-token generation on a thinking model necessarily leaves <think>
+    # unterminated, which would inflate the truncated-thinking counter with two
+    # measurements that are not eval cases at all. Snapshot the counters and
+    # restore them: speed probes must not contaminate a correctness statistic.
+    _tt, _th = runner.truncated_thinking, runner.thinking_replies
+
     _t, m1 = runner.generate(prompt, max_tokens=1)
     ttft = m1["seconds"]
     ptok = m1["prompt_tokens"]
 
     _t2, m2 = runner.generate("Explain what a price-to-earnings ratio "
                               "measures, in detail.", max_tokens=128)
+
+    runner.truncated_thinking, runner.thinking_replies = _tt, _th
     return {
         "ttft_seconds": round(ttft, 3),
         "ttft_prompt_tokens": ptok,
@@ -437,7 +472,11 @@ def main(argv=None):
     ap.add_argument("--corpus", default="evals/rag_corpus_v1.jsonl")
     ap.add_argument("--gold", default="evals/rag_gold_v1.jsonl")
     ap.add_argument("--state", default="PROJECT_STATE.json")
-    ap.add_argument("--max-tokens", type=int, default=256)
+    # 768, not 256. Qwen3.5 thinks by default and its reasoning routinely runs
+    # past 256 tokens, in which case the answer is never emitted and the case
+    # grades as wrong for a reason that has nothing to do with the model. The
+    # cost is time, and time is measured; a lost answer is not recoverable.
+    ap.add_argument("--max-tokens", type=int, default=768)
     ap.add_argument("--top-k", type=int, default=4)
     ap.add_argument("--out", default="evals/results/phase4_run.json")
     ap.add_argument("--arms", default="plain,tools,rag",
@@ -486,7 +525,22 @@ def main(argv=None):
         p("              NOTE: %s" % model_identity["note"])
     elif model_identity["label"] == "UNKNOWN":
         p("              NOTE: %s" % model_identity["note"])
+    # State the reasoning-mode expectation UP FRONT. If the model thinks and the
+    # budget is small, the run can burn an hour and produce no gradable answers
+    # at all; the reader deserves to know before that happens, not after.
+    tbd = model_identity.get("thinking_by_default")
+    if tbd is True:
+        p("thinking    : YES, by default -- graded after <think> is removed")
+        if a.max_tokens < 512:
+            p("              WARNING: --max-tokens %d is low for a thinking"
+              % a.max_tokens)
+            p("              model. Answers may never be reached. 768+ advised.")
+    elif tbd is False:
+        p("thinking    : no")
+    else:
+        p("thinking    : UNKNOWN for this file (handled either way)")
     p("ctx         : %d   threads: %d   top_k: %d" % (a.ctx, a.threads, a.top_k))
+    p("max_tokens  : %d" % a.max_tokens)
     p("tools       : %d registered, 0 of them can execute a trade" % n_tools)
     p("")
 
@@ -597,6 +651,25 @@ def main(argv=None):
     p("  %d PASS, %d FAIL, %d PENDING (of %d)"
       % (len(verdicts) - n_fail - n_pend, n_fail, n_pend, len(verdicts)))
 
+    # ---- reasoning-mode accounting ---------------------------------------
+    # A thinking model that runs out of budget mid-reasoning produces no answer
+    # at all. Without this block those cases would read as wrong answers, and
+    # the reader would tune the model when the fix is --max-tokens. Printed
+    # unconditionally: "0 of N" is information, and a counter that only appears
+    # when it fires teaches the reader that its absence means nothing.
+    p("")
+    p("REASONING MODE  (thinking)")
+    p("  replies containing <think>      : %d of %d"
+      % (runner.thinking_replies, runner.calls))
+    p("  answers LOST to truncation      : %d" % runner.truncated_thinking)
+    if runner.truncated_thinking:
+        p("  WARNING: those cases produced NO answer -- the token budget ran")
+        p("  out inside the reasoning block. They are graded as failures but")
+        p("  the fault is the budget, not the model. Re-run with a larger")
+        p("  --max-tokens (currently %d) before drawing any conclusion about"
+          % a.max_tokens)
+        p("  answer quality.")
+
     if "rag" in arms:
         p("")
         p("MODEL vs RETRIEVAL FAILURES  (task 6)")
@@ -626,6 +699,9 @@ def main(argv=None):
                   "ctx": a.ctx, "threads": a.threads,
                   "load_seconds": load_s,
                   "max_tokens": a.max_tokens,
+                  "thinking_replies": runner.thinking_replies,
+                  "answers_lost_to_thinking_truncation":
+                      runner.truncated_thinking,
                   # WHICH weights produced these numbers, by content hash.
                   # The GGUF the user can actually download is the original
                   # Qwen3-4B, NOT the pinned Qwen3-4B-Instruct-2507 (which

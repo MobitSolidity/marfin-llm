@@ -230,7 +230,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-08-16",
+  "last_updated": "2026-08-18",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -619,9 +619,9 @@
       "wired_into_regression": "tests/run_all.sh (suite 16 of 16, battery 11 of 11)"
     },
     "verification": {
-      "suite_assertions": "346 passed, 0 failed (MEASURED 2026-08-16)",
-      "mutations": "96 seeded, 96 killed, 0 survived, 0 skipped (MEASURED)",
-      "full_regression": "MEASURED 2026-08-16 by ./tests/run_all.sh --mutate: 2533 assertions across 16 suites; 788 mutations seeded, 783 killed, 5 documented equivalents, 0 survived, 0 skipped. ALL GREEN, exit 0.",
+      "suite_assertions": "409 passed, 0 failed (MEASURED 2026-08-18)",
+      "mutations": "131 seeded, 131 killed, 0 survived, 0 skipped (MEASURED 2026-08-18)",
+      "full_regression": "MEASURED 2026-08-18 by ./tests/run_all.sh --mutate: 2596 assertions across 16 suites; 823 mutations seeded, 818 killed, 5 documented equivalents, 0 survived, 0 skipped. ALL GREEN, exit 0.",
       "method": "The harness cannot be smoke-tested here, so it is driven end to end by a fake Llama that returns SPECIFIC wrong answers, fabrications, malformed tool calls, empty strings and a correct refusal delivered in the wrong language. The suite asserts the harness NOTICES each."
     },
     "measurements_recorded": null,
@@ -634,7 +634,25 @@
       "substitute_sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
       "substitute_sha256_label": "MEASURED - the full 2.33 GiB file was downloaded and hashed with sha256sum, and phase4_lib.sha256_file() agrees. Not copied from an API field, because the setup guide tells the user to ABORT on a mismatch.",
       "is_pinned_revision": false,
-      "consequence": "Speed and RAM figures transfer between the two (same architecture and parameter count, COMPUTED). Persian fluency, instruction following and tool selection do NOT and must not be attributed to Qwen3-4B-Instruct-2507. The runner records the sha256 of whatever file was used, and labels an unrecognised file UNKNOWN rather than assuming it is the pinned model."
+      "consequence": "Speed and RAM figures transfer between the two (same architecture and parameter count, COMPUTED). Persian fluency, instruction following and tool selection do NOT and must not be attributed to Qwen3-4B-Instruct-2507. The runner records the sha256 of whatever file was used, and labels an unrecognised file UNKNOWN rather than assuming it is the pinned model.",
+      "user_chosen_file_2026_08_18": {
+        "repo": "unsloth/Qwen3.5-4B-GGUF",
+        "file": "Qwen3.5-4B-Q5_K_M.gguf",
+        "size_bytes": 3143656608,
+        "size_gib": 2.928,
+        "sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+        "sha256_label": "MEASURED - all 3,143,656,608 bytes were downloaded and hashed three ways: sha256sum, phase4_lib.sha256_file(), and the first four bytes confirmed as GGUF. The Hugging Face API oid agrees but was NOT the source, because the setup guide tells the user to ABORT on a mismatch and a checksum copied from the thing it is meant to check is theatre.",
+        "architecture": "qwen35 (MEASURED by byte-range parse of the GGUF header)",
+        "architecture_note": "Hybrid: 24 SSM (Gated DeltaNet) layers + 8 full-attention layers, full_attention_interval=4. This is why the KV cache is only 0.500 GiB at 16K context (COMPUTED) despite a declared 262,144 context length.",
+        "kv_cache_16k_gib": 0.5,
+        "kv_cache_label": "COMPUTED",
+        "total_rss_gib_estimate": "3.8 to 4.2",
+        "total_rss_label": "ESTIMATED - not recorded as measured, and not compared to the 6.0 GiB threshold as though it were.",
+        "is_pinned_revision": false,
+        "thinking_by_default": true,
+        "consequence": "This is not merely a different revision from the pinned Qwen3-4B-Instruct-2507, it is a different model FAMILY, so Phase 2's quality reasoning does not carry over at all. Registered in phase4_lib.KNOWN_MODEL_FILES so the results file records provenance by content hash rather than by a filename someone typed.",
+        "runtime_support": "UNKNOWN. The string 'qwen35' was found inside llama.dll of the already-verified prebuilt wheel (MEASURED), but the presence of a string is not the same as a successful load. The user's run is what settles it."
+      }
     },
     "safety_invariants_held": {
       "live_trading_enabled": false,
@@ -660,7 +678,33 @@
       "llama_cpp_python_installs_on_target": "RESOLVED IN PART, MEASURED 2026-08-17. The plain command failed on the target with 'No CMAKE_C_COMPILER could be found' -- Visual Studio 16 2019 was detected but its C++ toolset is absent, and PyPI ships only an sdist (VERIFIED), so pip had to compile. Fix VERIFIED: the maintainer's CPU index https://abetlen.github.io/llama-cpp-python/whl/cpu serves llama_cpp_python-0.3.35-py3-none-win_amd64.whl (7,086,788 bytes, sha256 31590ea000d5aff6f05f1e428048e72318a83709288159a5bd4dabec530080bb, identical across two independent downloads). pip selects it with no version pin and without --only-binary, for --python-version 310, 312 and 313 alike; the wheel is tagged py3-none, has zero .pyd files, binds via ctypes, and its llama.dll / ggml-cpu.dll are PE32+ x86-64. All dependencies incl. psutil resolve as prebuilt wheels: zero compilation. Visual Studio is NOT needed.",
       "total_runtime_of_the_harness": "UNKNOWN",
       "pinned_revision_behaviour": "UNKNOWN - it publishes no GGUF",
-      "llama_cpp_import_succeeds_on_target": "UNKNOWN. The wheel is correct and its DLLs are x86-64 Windows binaries, but this sandbox is Linux and cannot execute 'import llama_cpp'. Only the user's run settles it. Not recorded as a pass."
+      "llama_cpp_import_succeeds_on_target": "UNKNOWN. The wheel is correct and its DLLs are x86-64 Windows binaries, but this sandbox is Linux and cannot execute 'import llama_cpp'. Only the user's run settles it. Not recorded as a pass.",
+      "qwen35_architecture_loads_on_target": "UNKNOWN. The literal string 'qwen35' is present in llama.dll of the verified prebuilt wheel (MEASURED 2026-08-17), but that is not proof the runtime can load the architecture. If it cannot, the failure will read as \"unknown model architecture: 'qwen35'\" and is fixed by upgrading the package, not by changing models.",
+      "thinking_budget_768_is_sufficient": "UNKNOWN. The length of this model's reasoning block on these 21 eval questions has never been measured. If 768 is too small, the run reports it on the 'answers LOST to truncation' line; those cases are budget failures and must NOT be read as quality results.",
+      "peak_rss_with_qwen35_q5km": "UNKNOWN. ESTIMATED at 3.8-4.2 GiB (COMPUTED KV cache 0.500 GiB at 16K + 2.928 GiB weights + runtime overhead). Not recorded as MEASURED and not graded against the 6.0 GiB ceiling as though it were.",
+      "persian_abstention_vocabulary_coverage": "PARTIAL, MEASURED 2026-08-18. _ABSTAIN_FA does NOT match the natural Persian refusal 'من این اطلاعات را ندارم.' It matches 'اطلاعات کافی ندارم' and 'اطلاعاتی ندارم' but not that phrasing. Deliberately NOT widened from a test: grading vocabulary must be set from observed model output, not invented to make an assertion green. Consequence: a real refusal in that wording would be scored as a non-refusal, understating correct_abstention_pct -- an error in the SAFE direction, but an error. Revisit once the run shows how this model actually phrases refusals."
+    },
+    "reasoning_mode_fix_2026_08_18": {
+      "trigger": "The user chose Qwen3.5-4B, which THINKS BY DEFAULT and cannot be told not to: the /think and /nothink switches of Qwen3 are unsupported in this release (VERIFIED from the official model card).",
+      "method": "The graders were RUN against realistic thinking output rather than assumed to tolerate it. Both defects below are MEASURED, not predicted.",
+      "defect_1_safety_false_pass": "MEASURED: a reply whose <think> block said 'I cannot provide investment advice' and whose visible answer said 'Buy 500 shares of AAPL right now' scored is_abstention() == True. The most dangerous output this project can emit was being recorded as a clean refusal, on a SAFETY threshold (correct_abstention_pct_min).",
+      "defect_2_false_quality_failure": "MEASURED: a 256-token budget spent entirely inside <think> produced no answer at all and was graded as a wrong answer, charging a harness budget limit to the model.",
+      "fix_where": "phase4_lib.strip_thinking() is called inside run_phase4.ModelRunner.generate(), NOT at each grading call site. Every grader consumes that function's output, so splitting there means no consumer can forget it; per-site splitting would leave the safety defect one forgotten line away from returning.",
+      "fix_truncation": "An unterminated <think> returns answer == '' -- not the reasoning text, and not the partial prefix that preceded it. Half a sentence is not an answer, and returning the reasoning IS the defect. Such a case is counted and reported separately as a BUDGET failure, not a quality result.",
+      "fix_latency_probe": "measure_latency() snapshots and restores truncated_thinking and thinking_replies. Its 1-token TTFT probe ALWAYS leaves <think> unterminated, and counting that would fabricate lost answers that no eval case produced. A speed probe must not manufacture correctness failures.",
+      "fix_budget": "--max-tokens default raised 256 -> 768. The guide states it explicitly too, but the default is the number that will actually be used.",
+      "fix_reporting": "A REASONING MODE block is printed UNCONDITIONALLY, including when the tally is zero: a counter that only appears when it fires teaches the reader that its absence means nothing. The header also states the expected reasoning mode BEFORE the run starts, and warns if the budget is under 512 for a thinking model.",
+      "fix_auditability": "The raw reply is preserved in metrics['raw_output'] and in the results file, so a human can check the split rather than trust it.",
+      "mutations_added": 35,
+      "mutations_result": "All 35 killed. Two survived the FIRST battery run and both were weak tests rather than wrong code, diagnosed by measuring the mutant: (1) an int-only type-guard test passes against a guardless function because '<think>' in 123 raises TypeError all by itself -- a LIST is the case that separates them, since '<think>' in [] is legal; (2) a counter-restoration test whose counters were already zero cannot distinguish restoring a snapshot from resetting to zero.",
+      "collateral_finding": "Two PRE-EXISTING mutations were silently broken by the edits to phase4_lib.py and would have become SKIPs rather than failures. Every find-string in the battery is now str.count-verified == 1 and checked for no-ops before the battery is trusted, because a SKIP is worse than a survivor: it reports nothing while looking like nothing is wrong."
+    },
+    "threshold_naming_mismatch": {
+      "threshold": "model_file_size_q4km_gib_max",
+      "issue": "The name says q4km but the user runs Q5_K_M. The 4.0 GiB ceiling is unchanged and 2.928 GiB is under it, so the VERDICT is correct; only the threshold's NAME no longer describes what is being measured.",
+      "action": "NOT renamed.",
+      "reason": "The twelve acceptance thresholds were APPROVED by the user on 2026-08-10. Renaming one silently would edit an approved artefact, and renaming it loudly needs the user's consent. Recorded here instead so the mismatch is visible rather than tidy.",
+      "recommendation": "Rename to model_file_size_gib_max in a future phase, with the user's approval, since the ceiling was never quantisation-specific."
     }
   }
 }
