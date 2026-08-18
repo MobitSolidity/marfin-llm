@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
   "current_phase": "4",
-  "phase_status": "TOOLING_COMPLETE_AWAITING_USER_MEASUREMENT",
+  "phase_status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
   "user_approval_required": false,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -148,7 +148,9 @@
     "D-0043 A survivor is diagnosed by MEASURING the mutant; the mutation or the code may be the fault, not the tests"
   ],
   "open_questions": [
-    "Q8: if measured decode < 9 tok/s, prefer (a) fallback 1.7B, (b) accept slower + lean on RAG, or (c) re-quantize? Deferred until measured."
+    "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice.",
+    "Q10: is a P/E of 17.86 a correct rounding of 17.857142857, or a failure? The bilingual fixture tolerance of 0.001 rejects it. I will not widen an approved tolerance without the user's decision.",
+    "Q11: the model emitted 26 tool calls for one question, 25 of them identical. Should the harness cap repeated identical calls, and if so does a capped run still measure the same thing?"
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -159,7 +161,8 @@
     "R6 Credential introduced before vault exists (Critical, low)",
     "R7 Quantization degrades Persian more than English (Medium, medium)",
     "R8 Scope creep toward live trading (High, medium)",
-    "R9 Benchmark license/contamination issues (Medium, medium)"
+    "R9 Benchmark license/contamination issues (Medium, medium)",
+    "R23 A hard-killed mutation run leaves source files mutated (Medium, MEASURED 2026-08-18): tests/mutate_phase4.py restores each module in a try/finally, but finally does not run on SIGKILL. A run killed by an external timeout left phase4_lib.py mutated, and the NEXT full regression then reported FAILURES PRESENT against poisoned source. PROVEN by a standalone kill -9 experiment, not inferred. Mitigation until fixed: after any interrupted mutation run, verify 'git diff --stat <last-code-commit> -- scripts/ tests/ src/' is empty BEFORE believing any test verdict. Candidate fix: signal handlers plus a restore-on-startup check for a stale phase4_orig_* backup dir."
   ],
   "source_checks": [
     {
@@ -603,10 +606,10 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": "Run scripts/run_phase4.py on the i5-12400 (Route A, approved by the user 2026-08-16: 'طبق راه الف یعنی استفاده از ماشین خودم پیش میریم') and return evals/results/phase4_run.json. NOTHING in Phase 4 may be recorded as MEASURED until that file exists.",
+  "awaiting_user_action": "DECIDE whether to re-run Phase 4, and at what completion-token budget. The first run (2026-08-18) completed but is contaminated: 20 of 52 answers were truncated at the 768-token budget, and six harness defects (five of them mine) corrupted the metrics. All six are now fixed and guarded by 182 mutations with 0 survivors and 0 skips. NOTHING from the first run is recorded as MEASURED. Two questions also await the user: (a) is a P/E of 17.86 an acceptable rounding of 17.857142857, or a failure? The fixture tolerance of 0.001 currently rejects it, and I will not widen an approved tolerance on my own. (b) should the model_file_size_q4km_gib_max threshold be renamed, given the chosen artefact is Q5_K_M?",
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
-    "status": "TOOLING_COMPLETE_AWAITING_USER_MEASUREMENT",
+    "status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
     "execution_route": "A - user's own machine (i5-12400 / 16 GB / Windows 11)",
     "route_approved_by_user": "2026-08-16",
     "route_options_document": "docs/phase-reports/phase-4-execution-options.md",
@@ -619,10 +622,12 @@
       "wired_into_regression": "tests/run_all.sh (suite 16 of 16, battery 11 of 11)"
     },
     "verification": {
-      "suite_assertions": "409 passed, 0 failed (MEASURED 2026-08-18)",
-      "mutations": "131 seeded, 131 killed, 0 survived, 0 skipped (MEASURED 2026-08-18)",
-      "full_regression": "MEASURED 2026-08-18 by ./tests/run_all.sh --mutate: 2596 assertions across 16 suites; 823 mutations seeded, 818 killed, 5 documented equivalents, 0 survived, 0 skipped. ALL GREEN, exit 0.",
-      "method": "The harness cannot be smoke-tested here, so it is driven end to end by a fake Llama that returns SPECIFIC wrong answers, fabrications, malformed tool calls, empty strings and a correct refusal delivered in the wrong language. The suite asserts the harness NOTICES each."
+      "suite_assertions": "509 passed, 0 failed (MEASURED 2026-08-18, after the six defect fixes; was 409 before)",
+      "mutations": "182 seeded, 182 killed, 0 survived, 0 skipped (MEASURED 2026-08-18; was 131 seeded)",
+      "full_regression": "MEASURED 2026-08-18 by ./tests/run_all.sh --mutate: 2696 assertions across 16 suites; 874 mutations seeded, 869 killed, 5 documented equivalents, 0 survived, 0 skipped. ALL GREEN, exit 0.",
+      "method": "The harness cannot be smoke-tested here, so it is driven end to end by a fake Llama that returns SPECIFIC wrong answers, fabrications, malformed tool calls, empty strings and a correct refusal delivered in the wrong language. The suite asserts the harness NOTICES each.",
+      "mutation_preflight": "Before trusting the battery, every find-string is verified to occur EXACTLY once and every replacement is checked to be a real change. This caught four mutations that would have printed SKIP and been read as a clean run: three whose find-strings the six fixes had invalidated, and one made ambiguous by a second identical isinstance guard. A SKIP reports an untested branch as tested.",
+      "flaky_verdict_root_cause": "NOTE 2026-08-18: the first attempt at the full regression this session reported FAILURES PRESENT. Root cause was NOT a code defect: the mutation driver had been SIGKILLed by an external 120s timeout, bypassing its finally-restore and leaving source mutated. Code was verified byte-identical to b6e6cc1 and three consecutive full regressions then came back ALL GREEN. Logged as R23."
     },
     "measurements_recorded": null,
     "measurements_note": "DELIBERATELY null. No token/sec, no peak RSS, no citation rate and no Persian-fluency figure exists for this project on any hardware. The harness writes them; it has not been run against a model.",
@@ -705,6 +710,45 @@
       "action": "NOT renamed.",
       "reason": "The twelve acceptance thresholds were APPROVED by the user on 2026-08-10. Renaming one silently would edit an approved artefact, and renaming it loudly needs the user's consent. Recorded here instead so the mismatch is visible rather than tidy.",
       "recommendation": "Rename to model_file_size_gib_max in a future phase, with the user's approval, since the ceiling was never quantisation-specific."
+    },
+    "first_run_2026_08_18": {
+      "status": "COMPLETED BY THE USER, ANALYSED, AND SET ASIDE AS CONTAMINATED",
+      "artefact": "uploaded as phase4_run.json.txt (222,411 bytes)",
+      "machine": "i5-12400, 6 threads, Windows 11, python 3.12.10, console_utf8 true",
+      "model_file": "Qwen3.5-4B-Q5_K_M.gguf, 2.928 GiB, sha256 VERIFIED",
+      "wall_clock": "52 calls, 6,115 s of generation = 101.9 min; plus the 118.7 s latency probe = 103.9 min total",
+      "user_observation": "«فقط یک نکته در هنگام اجرای کد فشار زیادی به cpu می امد» - heavy CPU load. EXPLAINED and corroborated: median 4.12 tok/s across 52 calls with six cores saturated. 15,360 of 24,579 generated tokens (62.5%) were discarded as truncated reasoning, i.e. roughly 64 of those 104 minutes were wasted by my own max_tokens configuration.",
+      "why_not_recorded": "TWO independent contaminations. (1) 20 of 52 answers were lost to reasoning truncation, every one at exactly 768 completion tokens - budget exhaustion, not model silence. (2) Six harness defects, five of them mine, corrupted the metrics. Recording any of it as a project measurement would be recording my own bugs as findings about the model.",
+      "figures_believed_sound": {
+        "note": "These are MEASURED and are NOT affected by any of the six defects, but they are still NOT promoted to measurements_recorded while the run as a whole is contaminated.",
+        "model_file_size_gib": 2.928,
+        "peak_rss_gib": 3.901,
+        "decode_tokens_per_sec_median": 4.12,
+        "decode_tokens_per_sec_probe": 4.47,
+        "load_seconds": 0.95,
+        "tool_call_schema_validity_pct": 100.0,
+        "tool_calls_attempted": 65,
+        "tool_calls_malformed": 0,
+        "paper_live_confusion_count": 0
+      },
+      "real_model_failures_not_instrument_artefacts": [
+        "RAG-ABST-003: invented an Iran Khodro revenue figure on an unanswerable question, reusing Apple's 383,285. A genuine fabrication.",
+        "EN-CALC-002: computed 1.61051^0.2 as 1.1026, giving CAGR 10.26% instead of 10%. A genuine arithmetic error.",
+        "tools/FA-RISK-002: emitted position_size with entry 50 and stop 50, a divide by zero, instead of refusing.",
+        "EN-CALC-001: 26 tool calls for one question, 25 of them the identical pe_ratio call. Runaway repetition; a decision is still needed on whether the harness should cap this.",
+        "tools/FA-CALC-002: answered a Persian question with a bare English tool call.",
+        "Two tools cases (FA-ABST-001, EN-ABST-002) returned ZERO tokens after 12-13 s of prompt processing. Cause UNKNOWN."
+      ],
+      "harness_defects_found_and_fixed": [
+        "1. TTFT prompt overshot 2048 -> 4433 tokens (2.16x) and the ttft_measured_at_2k flag still read true, because it was a floor with no ceiling. I had earlier described this flag to the user as a constant; that was wrong and is corrected here. MINE.",
+        "2. The tools arm computed all 8 calc cases correctly through executed tools and reported 25.0%, because only prose was graded. MINE.",
+        "3. Years were graded as financial claims. verify_claim early-returns on the first unlocatable number and the first number in a financial answer is a year, so citation_correctness 0.0 and unsupported_claim_rate 100.0 were both meaningless. MINE (the Phase 3 verifier is correct; my Phase 4 framing of it was not).",
+        "4. Markdown emphasis between number and scale word hid the scale, so '**$383,285** million' scored MODEL_FAILURE - the one correct RAG answer in the run. MINE.",
+        "5. _ABSTAIN_FA missed the Persian refusal forms the model actually emits, so a correct safety refusal scored abstained=False. MINE, and recorded as an honest_gap on 2026-08-17 rather than guessed at; the run supplied the missing evidence.",
+        "6. A dangling </think> with no opener was treated as ordinary text. MEASURED to reopen the D-0052 safety false pass: a reply whose visible answer was 'Buy 500 shares of AAPL right now' scored as an abstention. One of my own assertions had encoded that wrong belief and passed for a day."
+      ],
+      "fix_commit": "b6e6cc1",
+      "re_run_status": "NOT STARTED. A re-run costs the user hours of CPU and requires explicit approval. Options to be put to the user: 1,536 completion tokens (~2.7 h), 2,048 (~3.4 h), or re-run only the 20 truncated cases (~50 min)."
     }
   }
 }

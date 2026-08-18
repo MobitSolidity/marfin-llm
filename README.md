@@ -83,11 +83,63 @@ No space left on device` while fetching cmake/ninja, and the machine has **985
 MiB total RAM** against **2.33 GiB** of weights. Under Route A the agent
 therefore builds the instrument and the user takes the measurement (D-0044).
 
-**No figure for tok/s, peak RSS, citation correctness or Persian fluency exists
-yet for this project, on any hardware.** `phase_4.measurements_recorded` is
-`null` on purpose. The harness that will produce them is built and verified —
-**409 assertions, 131 seeded mutations, 131 killed, 0 survived, 0 skipped** — but
-it has never seen a model.
+**No figure for tok/s, peak RSS, citation correctness or Persian fluency is
+recorded for this project.** `phase_4.measurements_recorded` is `null` on
+purpose. The harness that will produce them is built and verified — **509
+assertions, 182 seeded mutations, 182 killed, 0 survived, 0 skipped**.
+
+### The first real run happened, and mostly measured my own bugs (D-0053)
+
+On 2026-08-18 the user ran the harness on the i5-12400 and returned the results
+file: 52 model calls, 6,115 s of generation, **103.9 minutes** of wall clock.
+Seven of twelve approved thresholds read FAIL, including `citation_correctness
+0.0%` and `unsupported_claim_rate 100.0%`.
+
+Read at face value that file says the model is unusable. Read properly, it mostly
+says **the grader was broken — five of the six defects were in code I wrote:**
+
+1. The TTFT prompt overshot 2048 → **4,433** tokens (2.16×), and the
+   "measured at 2k" flag still read `true` because it was a **floor with no
+   ceiling**. The 118.68 s figure does not measure what its threshold names.
+2. The tools arm computed **all 8** calculations correctly through executed tools
+   and was scored **25%** — only the prose was graded.
+3. **Years were graded as financial claims.** The verifier returns early on the
+   first number it cannot locate, and the first number in a financial answer is a
+   year — so every citation verdict was decided by "2023 does not appear in the
+   evidence", which is true of every filing ever written. The 0.0% and the 100.0%
+   were one artefact seen twice.
+4. Markdown emphasis hid the scale word: `**$383,285** million` did not match.
+   That was **the one correct RAG answer in the whole run**, scored
+   MODEL_FAILURE.
+5. The Persian refusal vocabulary missed the forms the model actually emits, so a
+   **correct safety refusal** scored as no refusal at all.
+6. A dangling `</think>` was treated as ordinary text — which **reopened the
+   D-0052 safety false pass**. A reply whose visible answer was "Buy 500 shares
+   of AAPL right now" scored as a clean abstention, because the refusal sat in
+   the discarded reasoning.
+
+All six are fixed, and each is guarded by mutations rather than by assertion
+alone. Defects 1–5 manufactured *failures*, so fixing them cannot manufacture a
+pass; defect 6 manufactured a **pass on a safety threshold**, which is why it is
+the serious one. Defect 2's obvious fix — letting the approved metric count tool
+results, turning 25.0 into 100.0 — was **refused**: redefining an approved
+threshold to convert a FAIL into a PASS is not a fix. A second metric is reported
+alongside it, and the user decides.
+
+**What is genuinely the model's fault** and survives every fix: it fabricated an
+Iran Khodro revenue figure on an unanswerable question (reusing Apple's 383,285);
+it computed `1.61051^0.2` as 1.1026, giving CAGR 10.26% instead of 10%; it
+emitted `position_size` with `entry: 50, stop: 50` — a divide by zero — instead
+of refusing; it issued **26 tool calls for one question, 25 of them identical**;
+and two cases returned zero tokens after 12–13 s, cause **UNKNOWN**.
+
+**Nothing from that run is recorded as a measurement.** It carries two
+independent contaminations: the six grader defects, and **20 of 52 answers lost
+to reasoning truncation**, every one at exactly 768 completion tokens — budget
+exhaustion, not model silence. **62.5% of all generated tokens were discarded.**
+The user noticed the machine working hard; roughly **64 of those 104 minutes were
+wasted by my own `max_tokens` setting**, not by their CPU. A re-run needs their
+approval, because it costs hours of it.
 
 ### The model file is not the pinned revision (D-0045)
 
@@ -193,9 +245,9 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**2,596 assertions pass across 16 suites. That is not the claim.** A passing
-suite proves nothing on its own. The claim is **823 seeded defects across 11
-batteries, 818 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
+**2,696 assertions pass across 16 suites. That is not the claim.** A passing
+suite proves nothing on its own. The claim is **874 seeded defects across 11
+batteries, 869 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
 suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
 0 crashed.**
 
@@ -238,19 +290,59 @@ Phase 4's battery added three findings of its own, each a different cause:
   as not-restored when it was intact; the real cause was a temp-dir leak in the
   test suite filling a 493 MiB `/tmp` (D-0049).
 
+Fixing the six defects above added 51 mutations, and the first run of them left
+**14 survivors** — every fix written, none of them guarded. Two are worth
+recording because both were assertions of mine that could not fail (D-0053):
+
+- **An assertion that was true of the mutant.** I pinned the TTFT tail-token
+  subtraction at target 400 — exactly where integer division absorbs the tail, so
+  the mutant produces the identical result. Replaced with a measured bound over
+  targets 60–3000: worst built/target ratio **1.0086** now against **1.1333**
+  mutated.
+- **A field that did not discriminate.** I asserted `ttft_prompt_built_by` was one
+  of `("tokenized","estimated")` — which a hardcoded constant satisfies. A field
+  that cannot distinguish an estimate from a measurement is not evidence; both
+  branches are now exercised on models that differ.
+
+The pre-flight `str.count == 1` check caught four more that would have printed
+**SKIP** — three whose find-strings my own fixes had invalidated, one made
+ambiguous by a duplicated guard. **A skip is worse than a survivor:** it reports
+an untested branch inside a clean-looking summary. One of the four had also
+carried a **description that misdescribed what it did** since the day it was
+written, which misleads the next reader even while the mutation kills correctly.
+
+Also extracted `report_latency_block()` out of `main()`, because silencing either
+of its two warnings with `if False:` passed the entire suite. Those warnings are
+the only mechanism by which the user learns a printed number does not measure what
+its threshold names — untested, they were decoration.
+
 Reproduce: `./tests/run_all.sh --mutate`
 See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 2,596 assertions across 16 suites + 2 probes (~6 s)
-./tests/run_all.sh --mutate     # + 823 seeded defects across 11 batteries (~160 s)
+./tests/run_all.sh              # 2,696 assertions across 16 suites + 2 probes (~6 s)
+./tests/run_all.sh --mutate     # + 874 seeded defects across 11 batteries (~185 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
 python3 tests/probe_screenshot.py     # adversarial: try to forge consent / launder a licence
 python3 tests/mutate_screenshot.py    # a single battery on its own
+```
+
+**If you interrupt a mutation run, check the tree before trusting the next
+result (R23, D-0054).** The batteries work by rewriting a source file in place
+and restoring it in a `finally:` block, and `finally:` does not run on
+`SIGKILL`. A run killed by an external timeout left `phase4_lib.py` mutated, and
+the *next* full regression then graded that poisoned source and reported
+`FAILURES PRESENT`. Verified by a standalone `kill -9` experiment, not assumed.
+The green verdict is the dangerous one here — a mutation on a line no assertion
+covers would have printed `ALL GREEN` with the source still mutated. So after
+any interrupted run:
+
+```bash
+git diff --stat HEAD -- scripts/ tests/ src/    # must be empty before you believe a verdict
 ```
 
 The token-cost check in `test_tools.py` needs the real tokenizer; without it
