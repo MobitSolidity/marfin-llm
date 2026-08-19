@@ -798,7 +798,7 @@ def grade_rag_case(gold, output, retrieved_doc_ids, citations=None):
 # name -> ("min" | "max"). Direction is explicit because reading it off the
 # suffix of the key would break the first time a key is renamed.
 THRESHOLD_DIRECTION = {
-    "model_file_size_q4km_gib_max": "max",
+    "model_file_size_gib_max": "max",
     "peak_rss_8k_gib_max": "max",
     "generation_tokens_per_sec_min": "min",
     "time_to_first_token_2k_sec_max": "max",

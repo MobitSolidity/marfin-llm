@@ -186,6 +186,76 @@ check_true("tolerance None rejects a near miss",
 check_raises("value_matches refuses expected=None rather than passing",
              lambda: L.value_matches(None, "anything", 0.1))
 
+# ---------------------------------------------------------------------------
+# THE FIXTURE'S OWN TOLERANCE, read from the file rather than restated here.
+#
+# The checks above pass a tolerance in as an argument, so they test
+# value_matches and say nothing about what the eval file actually demands. That
+# distinction stopped being academic on 2026-08-19: EN/FA-CALC-001 carried
+# tolerance 0.001 against 17.857142857..., which demands THREE decimals, and
+# the model answered "150/8.40 approximately 17.86" -- the division shown, the
+# quotient correctly rounded to two decimals, graded FAIL.
+#
+# 0.001 was therefore failing the model for the PRESENTATION of a correct
+# quotient, not for its arithmetic. Widened to 0.005 -- the half-unit-in-last-
+# place of two decimals -- with the user's explicit delegation.
+#
+# These assertions exist because a tolerance I widened by judgement is exactly
+# the kind of change that must not be able to drift further unnoticed. They
+# read the fixture, so editing the file without editing the reasoning here
+# fails the suite.
+# ---------------------------------------------------------------------------
+_bil = {}
+with io.open(os.path.join(_ROOT, "evals", "bilingual_eval_v1.jsonl"),
+             "r", encoding="utf-8") as _fh:
+    for _ln in _fh:
+        if _ln.strip():
+            _c = json.loads(_ln)
+            _bil[_c["id"]] = _c
+
+check("EN-CALC-001's tolerance is the 2-decimal half-ulp",
+      _bil["EN-CALC-001"]["tolerance"], 0.005, 0,
+      "(A) 0.005 = 0.5 * 10**-2, chosen for a reason, not to make a number "
+      "pass")
+check("FA-CALC-001 carries the same tolerance as its English twin",
+      _bil["FA-CALC-001"]["tolerance"], 0.005, 0,
+      "(D) a Persian case graded to a stricter standard than the identical "
+      "English one would report a language gap that is really a fixture bug")
+check_true("the observed answer 17.86 is now admitted",
+           L.value_matches(PE, "150/8.40 \u2248 17.86",
+                           _bil["EN-CALC-001"]["tolerance"]),
+           "(A) MEASURED from the real run: this is verbatim what the model "
+           "produced, and it is arithmetically right")
+check_true("...and a TRUNCATED 17.85 is still rejected",
+           not L.value_matches(PE, "P/E is 17.85",
+                               _bil["EN-CALC-001"]["tolerance"]),
+           "(D) 17.85 is 0.00714 away -- outside 0.005. Truncation is not "
+           "rounding, and widening far enough to admit it would stop the gate "
+           "discriminating")
+check_true("...and the rubric's own distractor 'about 18' is still rejected",
+           not L.value_matches(PE, "about 18",
+                               _bil["EN-CALC-001"]["tolerance"]),
+           "(D) EN-CALC-001's must_not names 'approximately 18 I think'. If a "
+           "widened tolerance ever admits it, the widening went too far")
+check_true("the wrong-EPS answer 18.75 is still rejected",
+           not L.value_matches(PE, "150/8 = 18.75",
+                               _bil["EN-CALC-001"]["tolerance"]),
+           "(D) 18.75 is dividing by 8 instead of 8.40 -- a real arithmetic "
+           "error, which is what this gate is for")
+check_true("the six other value-graded cases were NOT touched",
+           all(_bil[_i]["tolerance"] == _t for _i, _t in
+               (("EN-CALC-002", 0.0001), ("FA-CALC-002", 0.0001),
+                ("EN-RISK-001", 0.01), ("FA-RISK-001", 0.01),
+                ("EN-NUM-001", 0.01), ("FA-NUM-001", 0.01))),
+           "(D) MEASURED: each of these six has an expected_value that is "
+           "EXACT at 2 decimals, so the rounding argument does not apply to "
+           "them and their tolerances must stay where they were approved")
+check_true("every widened case records WHY it was widened",
+           all("tolerance_rationale" in _bil[_i]
+               for _i in ("EN-CALC-001", "FA-CALC-001")),
+           "(D) a tolerance changed by judgement and left unexplained is "
+           "indistinguishable from one relaxed to manufacture a pass")
+
 
 # ===========================================================================
 section("abstention detection")
@@ -1715,7 +1785,7 @@ check("...and a malformed-only reply scores 0% validity, not 100%",
 # for exactly this reason. A test that derives its expectation from the thing
 # under test asserts only that the code equals itself.
 _EXPECTED_DIRECTION = {
-    "model_file_size_q4km_gib_max": "max",
+    "model_file_size_gib_max": "max",
     "peak_rss_8k_gib_max": "max",
     "generation_tokens_per_sec_min": "min",
     "time_to_first_token_2k_sec_max": "max",

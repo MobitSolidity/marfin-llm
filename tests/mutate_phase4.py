@@ -63,6 +63,16 @@ EQUIVALENT = {}
 LIB = "scripts/phase4_lib.py"
 RUN = "scripts/run_phase4.py"
 
+# The eval fixture is a MUTATION TARGET, not just an input.
+#
+# Added 2026-08-19. Until now every mutation edited code, on the tacit
+# assumption that only code can be wrong. But the P/E tolerance is a threshold
+# that decides PASS or FAIL, and it lives in this data file -- so a value that
+# no assertion pins can be edited (by me, in a later session, to make an
+# inconvenient FAIL disappear) with the whole suite still green. Mutating the
+# fixture is the only way to prove the tolerances are actually held in place.
+EVAL = "evals/bilingual_eval_v1.jsonl"
+
 # (module, description, find, replace)
 MUTATIONS = [
 
@@ -1025,6 +1035,46 @@ MUTATIONS = [
     (LIB, "the stray-tag path keeps the tag in the answer",
      '            return {"answer": text[k + len(_THINK_CLOSE):].strip(),',
      '            return {"answer": text[k:].strip(),'),
+
+    # -- the P/E tolerance, widened by judgement on 2026-08-19 ---------------
+    # I widened EN/FA-CALC-001 from 0.001 to 0.005 myself, on the user's
+    # delegation. A threshold I moved by my own judgement is the single easiest
+    # thing in this project to move AGAIN, quietly, the next time a measurement
+    # is inconvenient. These mutations are the lock: they seed exactly the
+    # "drift" edits a future session would be tempted to make, in BOTH
+    # directions, and the suite must reject all of them.
+
+    (EVAL, "the P/E tolerance drifts wide enough to admit 'about 18'",
+     '"expected_tool": "pe_ratio", "expected_value": 17.857142857142858, '
+     '"tolerance": 0.005, "must_not": ["approximately 18 I think", "roughly"]',
+     '"expected_tool": "pe_ratio", "expected_value": 17.857142857142858, '
+     '"tolerance": 0.5, "must_not": ["approximately 18 I think", "roughly"]'),
+
+    (EVAL, "the P/E tolerance drifts wide enough to admit truncated 17.85",
+     '"tolerance": 0.005, "must_not": ["approximately 18 I think", "roughly"], '
+     '"rubric"',
+     '"tolerance": 0.008, "must_not": ["approximately 18 I think", "roughly"], '
+     '"rubric"'),
+
+    (EVAL, "the Persian P/E case is held to a STRICTER standard than English",
+     '"expected_tool": "pe_ratio", "expected_value": 17.857142857142858, '
+     '"tolerance": 0.005, "must_not": []',
+     '"expected_tool": "pe_ratio", "expected_value": 17.857142857142858, '
+     '"tolerance": 0.001, "must_not": []'),
+
+    (EVAL, "the widening is reverted, failing a correct 2dp answer again",
+     '"expected_tool": "pe_ratio", "expected_value": 17.857142857142858, '
+     '"tolerance": 0.005, "must_not": ["approximately 18 I think", "roughly"]',
+     '"expected_tool": "pe_ratio", "expected_value": 17.857142857142858, '
+     '"tolerance": 0.001, "must_not": ["approximately 18 I think", "roughly"]'),
+
+    (EVAL, "an UNRELATED case's tolerance is widened along for the ride",
+     '"expected_value": 0.1, "tolerance": 0.0001, "must_not": ["12.2%"]',
+     '"expected_value": 0.1, "tolerance": 0.005, "must_not": ["12.2%"]'),
+
+    (EVAL, "the rationale for the widening is deleted",
+     'no working fails.", "tolerance_rationale"',
+     'no working fails.", "tolerance_rationale_removed"'),
 ]
 
 

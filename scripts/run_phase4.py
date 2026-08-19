@@ -726,7 +726,7 @@ def main(argv=None):
     ev = report["summaries"].get("tools") or report["summaries"].get("plain") or {}
     rg = report["summaries"].get("rag") or {}
     measured = {
-        "model_file_size_q4km_gib_max": model_size_gib,
+        "model_file_size_gib_max": model_size_gib,
         "peak_rss_8k_gib_max": peak,
         "generation_tokens_per_sec_min": lat["decode_tokens_per_sec"],
         "time_to_first_token_2k_sec_max": lat["ttft_seconds"],

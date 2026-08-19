@@ -1360,3 +1360,203 @@ mitigation is a `git diff`, not a test.
 If the driver is made kill-safe and that safety is itself mutation-tested, R23
 closes and the manual `git diff` step becomes redundant. Until then it is
 mandatory.
+
+---
+
+## D-0055 — The P/E tolerance was failing a correct answer for its presentation; widened to the 2-decimal half-ulp
+
+**Date:** 2026-08-19
+**Status:** Accepted
+**Supersedes:** the `tolerance: 0.001` on EN-CALC-001 / FA-CALC-001
+**Related:** Q10, D-0053
+
+### Context
+
+The user delegated this one to me: "سوال ۱ را خودت با صلاح دید خودت جواب بده."
+A delegation to decide is not a licence to decide conveniently, so the rule I
+have been applying all along still holds — **never redefine an approved
+threshold's meaning to turn a FAIL into a PASS** — and the only way to honour
+both is to decide from measurement.
+
+### What the model actually produced
+
+MEASURED from the run artefact, `EN-CALC-001`, plain arm, visible answer after
+stripping reasoning:
+
+```
+نسبت P/E ... برابر با **۱۷.۸۶** است.
+$$ \text{P/E Ratio} = \frac{150}{8.40} \approx 17.86 $$
+```
+
+and `FA-CALC-001`:
+
+```
+$$P/E = \frac{150}{8.40} \approx 17.86$$
+```
+
+Both **show the division** `150/8.40` and both give `17.86`. The exact quotient
+is `17.857142857142858`; `17.86` is its correct 2-decimal rounding, off by
+`0.002857142857`.
+
+### The measurement that decided it
+
+`tolerance: 0.001` demands the answer land within 0.001 of the exact value.
+I computed the smallest number of decimals that satisfies each fixture's
+tolerance:
+
+| case | expected | tol | decimals demanded |
+|---|---|---|---|
+| EN/FA-CALC-001 | 17.857142857… | 0.001 | **3** |
+| EN/FA-CALC-002 | 0.1 | 0.0001 | 1 (exact) |
+| EN/FA-RISK-001 | 250.0 | 0.01 | 0 (exact) |
+| EN/FA-NUM-001 | 1000.0 | 0.01 | 0 (exact) |
+
+The P/E pair is the **only** pair whose expected value is not exact at two
+decimals, and therefore the only one where the tolerance silently became a
+demand about *presentation* rather than about *arithmetic*. Six of the eight
+value-graded cases are exact at 2dp, so their tolerances are untouched by this
+reasoning and I did not touch them.
+
+Then I measured what each candidate tolerance admits and rejects:
+
+| answer | meaning | 0.001 | **0.005** | 0.01 | 0.5 |
+|---|---|---|---|---|---|
+| 17.857142857 | exact | pass | pass | pass | pass |
+| 17.857 | 3dp | pass | pass | pass | pass |
+| **17.86** | **2dp rounded (observed)** | **fail** | **pass** | pass | pass |
+| 17.85 | 2dp **truncated** | fail | **fail** | pass | pass |
+| 17.9 | 1dp | fail | fail | fail | pass |
+| "about 18" | the rubric's own distractor | fail | **fail** | fail | **pass** |
+| 18.75 | `150/8`, wrong EPS | fail | fail | fail | fail |
+
+`0.005` is the only value that admits a correctly rounded 2dp answer while still
+rejecting truncation, 1-decimal answers, and the distractor the fixture's own
+`must_not` names. It is not a number I picked to make the failure go away: it is
+exactly the half-unit-in-last-place of two decimals, `0.5 × 10⁻²`.
+
+### Decision
+
+Widen EN-CALC-001 and FA-CALC-001 from `0.001` to `0.005`, record a
+`tolerance_rationale` in each case, and change nothing else.
+
+**What this does NOT relax.** The rubric says "Must call the P/E tool or show
+the exact division 150/8.40. A bare rounded number with no working fails."
+That requirement is graded separately from `value_ok`, and it is untouched. A
+model that emits a bare `17.86` with no working still fails on the rubric. What
+`0.005` fixes is only this: the model showed the division, got the quotient
+right, and was being marked wrong for writing two decimals instead of three.
+
+### Why I did not choose the alternatives
+
+- **Leave 0.001 and score it FAIL.** This is the "strict" option, and it is
+  wrong, because the recorded failure would not mean what the metric name says.
+  `deterministic_calc_correctness_pct` would be reporting a rounding convention,
+  and I would be building a headline number out of a mislabelled failure — the
+  same class of error as presenting ESTIMATED as MEASURED.
+- **Widen to 0.01.** Admits `17.85`, which is truncation rather than rounding.
+  A gate that cannot tell those apart has stopped measuring arithmetic.
+- **Change `expected_value` to 17.86.** Would make the fixture's stored truth
+  wrong. The exact quotient is the exact quotient.
+
+### Verification
+
+`0.005` is now pinned by 8 assertions that **read the fixture file** rather than
+restating the number, so editing the tolerance without editing the reasoning
+fails the suite. They assert: the value is the 2dp half-ulp; the Persian twin
+carries the identical tolerance (a Persian case graded more strictly than its
+English twin would report a language gap that is really a fixture bug); `17.86`
+is admitted; `17.85`, "about 18" and `18.75` are still rejected; the other six
+cases are unchanged; and a rationale is present on both widened cases.
+
+**The eval fixture is now a mutation target.** This is new. Every mutation until
+now edited code, on the tacit assumption that only code can be wrong — but a
+threshold that decides PASS/FAIL lives in this data file, and an unpinned number
+there can be quietly edited later, by me, to make an inconvenient result
+disappear, with the suite still green. Six mutations now seed exactly that
+drift, in both directions: widening to admit the distractor, widening to admit
+truncation, reverting to 0.001, making the Persian case stricter than the
+English one, dragging an unrelated case's tolerance along, and deleting the
+rationale. I also verified each mutant remains **valid JSONL**, so each is killed
+by an assertion rather than by a parse crash — a mutant that merely corrupts the
+file proves nothing.
+
+Totals after this change: **517 assertions** in the Phase 4 suite, **188
+mutations seeded, 188 killed, 0 survived, 0 skipped**; project-wide **2,704
+assertions**, `ALL GREEN`.
+
+Two of the six mutations, as first written, edited a `category` field while their
+descriptions claimed they moved a tolerance. That is precisely the misdescribed-
+mutation defect I corrected in D-0053, reappearing within a day. The pre-flight
+`count == 1` / no-op check caught a third as ambiguous. Both were fixed before
+the battery was believed.
+
+### Reversal
+
+If a future run shows a model exploiting `0.005` — for example answering `17.86`
+by luck while its working is wrong — the fix is to strengthen the *rubric* grading
+of shown working, not to narrow this tolerance back to a number that punishes
+correct rounding.
+
+---
+
+## D-0056 — `model_file_size_q4km_gib_max` renamed to `model_file_size_gib_max`
+
+**Date:** 2026-08-19
+**Status:** Accepted
+**Supersedes:** the threshold identifier approved 2026-08-10
+**Related:** D-0053
+
+### Context
+
+The ceiling was derived while Q4_K_M was the candidate quantisation, and the
+quantisation went into the identifier. The user then chose **Q5_K_M**. From that
+moment the name described something the harness was not measuring.
+
+### Decision
+
+Rename to `model_file_size_gib_max` at all five live sites, with the user's
+explicit consent ("سوال ۲ را هم اسم فعلی را تغییر بده").
+
+- `PROJECT_STATE.acceptance_thresholds`
+- `phase4_lib.THRESHOLD_DIRECTION`
+- `run_phase4`'s `measured{}` dict
+- `test_phase4_harness._EXPECTED_DIRECTION`
+- the Persian setup guide
+
+**The number and the direction did not change.** `4.0` and `"max"` are
+byte-identical to the 2026-08-10 approval. Only the identifier moved. No verdict
+was ever wrong: the measured artefact is 2.928 GiB, under the ceiling on either
+name.
+
+### A note on why the rename was safe to make mechanically
+
+`phase4_lib.py` carries this comment above the direction table:
+
+> Direction is explicit because reading it off the suffix of the key would break
+> the first time a key is renamed.
+
+That decision — made earlier, for its own reasons — is what made today's rename a
+five-line edit instead of a hunt for a silent behaviour change. The direction is
+data, not something inferred from the string, so renaming the key could not flip
+a `max` into a `min`.
+
+The guarding assertion compares `THRESHOLD_DIRECTION` against a **literal table**
+in the test file rather than deriving its expectation from the code under test.
+Both sides had to be renamed together, which is the correct amount of friction:
+a test that reads its expectation from the thing it tests would have accepted the
+rename silently, and would equally have accepted a corrupted direction.
+
+### Verification
+
+Full Phase 4 suite (**517 assertions**) and the mutation battery (**188 seeded,
+188 killed, 0 survived, 0 skipped**) re-run after the rename; project-wide
+`ALL GREEN` at **2,704 assertions**. The old name survives in two places on
+purpose — `former_name` and the issue text in
+`PROJECT_STATE.phase_4.threshold_naming_mismatch` — so the history of the
+identifier stays legible.
+
+### Reversal
+
+None expected. If a future phase constrains several model files with different
+per-quantisation ceilings, the honest change is separate keys per artefact, not a
+return to encoding one quantisation in a name that governs all of them.

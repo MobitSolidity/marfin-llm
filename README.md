@@ -85,8 +85,8 @@ therefore builds the instrument and the user takes the measurement (D-0044).
 
 **No figure for tok/s, peak RSS, citation correctness or Persian fluency is
 recorded for this project.** `phase_4.measurements_recorded` is `null` on
-purpose. The harness that will produce them is built and verified — **509
-assertions, 182 seeded mutations, 182 killed, 0 survived, 0 skipped**.
+purpose. The harness that will produce them is built and verified — **517
+assertions, 188 seeded mutations, 188 killed, 0 survived, 0 skipped**.
 
 ### The first real run happened, and mostly measured my own bugs (D-0053)
 
@@ -245,9 +245,9 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**2,696 assertions pass across 16 suites. That is not the claim.** A passing
-suite proves nothing on its own. The claim is **874 seeded defects across 11
-batteries, 869 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
+**2,704 assertions pass across 16 suites. That is not the claim.** A passing
+suite proves nothing on its own. The claim is **880 seeded defects across 11
+batteries, 875 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
 suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
 0 crashed.**
 
@@ -304,6 +304,27 @@ recording because both were assertions of mine that could not fail (D-0053):
   that cannot distinguish an estimate from a measurement is not evidence; both
   branches are now exercised on models that differ.
 
+**The eval fixture is now a mutation target too (D-0055).** Every mutation until
+2026-08-19 edited *code*, on the tacit assumption that only code can be wrong.
+But a tolerance decides PASS or FAIL and lives in
+`evals/bilingual_eval_v1.jsonl`, so an unpinned number there could be quietly
+edited later — by me, in a future session, to make an inconvenient failure go
+away — with the whole suite still green. Six mutations now seed exactly that
+drift in both directions (widen to admit the distractor, widen to admit
+truncation, revert, make the Persian case stricter than its English twin, drag an
+unrelated case along, delete the rationale). Each mutant was also checked to
+remain **valid JSONL**, because a mutant that merely corrupts the file is killed
+by a parse crash and proves nothing about the assertion it was meant to test.
+
+That guard exists because of the change it guards. The P/E cases carried
+`tolerance: 0.001` against `17.857142857…`, which demands **three** decimals; the
+model showed the division `150/8.40` and answered `17.86`, a correct 2-decimal
+rounding, and was graded FAIL for its *presentation* rather than its arithmetic.
+Widened to `0.005`, the half-unit-in-last-place of two decimals — measured to
+still reject truncated `17.85`, 1-decimal `17.9`, the rubric's own distractor
+"about 18", and the wrong-EPS `18.75`. The rubric's requirement to show the
+working is graded separately and was **not** relaxed.
+
 The pre-flight `str.count == 1` check caught four more that would have printed
 **SKIP** — three whose find-strings my own fixes had invalidated, one made
 ambiguous by a duplicated guard. **A skip is worse than a survivor:** it reports
@@ -322,8 +343,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 2,696 assertions across 16 suites + 2 probes (~6 s)
-./tests/run_all.sh --mutate     # + 874 seeded defects across 11 batteries (~185 s)
+./tests/run_all.sh              # 2,704 assertions across 16 suites + 2 probes (~6 s)
+./tests/run_all.sh --mutate     # + 880 seeded defects across 11 batteries (~185 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write

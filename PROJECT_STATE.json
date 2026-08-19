@@ -149,7 +149,7 @@
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice.",
-    "Q10: is a P/E of 17.86 a correct rounding of 17.857142857, or a failure? The bilingual fixture tolerance of 0.001 rejects it. I will not widen an approved tolerance without the user's decision.",
+    "Q10 [RESOLVED 2026-08-19, D-0055, by the user's explicit delegation]: the P/E tolerance on EN/FA-CALC-001 was 0.001, which demanded THREE decimals of a value that is 17.857142857...; the model showed the division 150/8.40 and answered 17.86, a correct 2-decimal rounding, and was graded FAIL for its presentation rather than its arithmetic. Widened to 0.005 -- the half-unit-in-last-place of two decimals -- which MEASURABLY still rejects truncated 17.85, 1-decimal 17.9, the rubric's own distractor 'about 18', and the wrong-EPS 18.75. The rubric requirement to show working or call the tool is graded separately and was NOT relaxed. The other six value-graded cases are exact at 2dp and were left untouched. Pinned by 8 fixture-reading assertions and 6 new mutations; the eval file is now itself a mutation target.",
     "Q11: the model emitted 26 tool calls for one question, 25 of them identical. Should the harness cap repeated identical calls, and if so does a capped run still measure the same thing?"
   ],
   "risks": [
@@ -212,7 +212,7 @@
   ],
   "acceptance_thresholds": {
     "status": "APPROVED by user 2026-08-10",
-    "model_file_size_q4km_gib_max": 4.0,
+    "model_file_size_gib_max": 4.0,
     "peak_rss_8k_gib_max": 6.0,
     "generation_tokens_per_sec_min": 8,
     "time_to_first_token_2k_sec_max": 3.0,
@@ -233,7 +233,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-08-18",
+  "last_updated": "2026-08-19",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -606,7 +606,7 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": "DECIDE whether to re-run Phase 4, and at what completion-token budget. The first run (2026-08-18) completed but is contaminated: 20 of 52 answers were truncated at the 768-token budget, and six harness defects (five of them mine) corrupted the metrics. All six are now fixed and guarded by 182 mutations with 0 survivors and 0 skips. NOTHING from the first run is recorded as MEASURED. Two questions also await the user: (a) is a P/E of 17.86 an acceptable rounding of 17.857142857, or a failure? The fixture tolerance of 0.001 currently rejects it, and I will not widen an approved tolerance on my own. (b) should the model_file_size_q4km_gib_max threshold be renamed, given the chosen artefact is Q5_K_M?",
+  "awaiting_user_action": "DECIDE whether to re-run Phase 4, and at what completion-token budget. The first run (2026-08-18) completed but is contaminated: 20 of 52 answers were truncated at the 768-token budget, and six harness defects (five of them mine) corrupted the metrics. All six are now fixed and guarded by 182 mutations with 0 survivors and 0 skips. NOTHING from the first run is recorded as MEASURED. Both previously open questions are now CLOSED: the P/E tolerance was decided by delegation and widened to the 2dp half-ulp 0.005 (D-0055), and the model_file_size threshold was renamed with consent (D-0056). The re-run budget is the ONLY thing still awaiting the user.",
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
@@ -627,7 +627,11 @@
       "full_regression": "MEASURED 2026-08-18 by ./tests/run_all.sh --mutate: 2696 assertions across 16 suites; 874 mutations seeded, 869 killed, 5 documented equivalents, 0 survived, 0 skipped. ALL GREEN, exit 0.",
       "method": "The harness cannot be smoke-tested here, so it is driven end to end by a fake Llama that returns SPECIFIC wrong answers, fabrications, malformed tool calls, empty strings and a correct refusal delivered in the wrong language. The suite asserts the harness NOTICES each.",
       "mutation_preflight": "Before trusting the battery, every find-string is verified to occur EXACTLY once and every replacement is checked to be a real change. This caught four mutations that would have printed SKIP and been read as a clean run: three whose find-strings the six fixes had invalidated, and one made ambiguous by a second identical isinstance guard. A SKIP reports an untested branch as tested.",
-      "flaky_verdict_root_cause": "NOTE 2026-08-18: the first attempt at the full regression this session reported FAILURES PRESENT. Root cause was NOT a code defect: the mutation driver had been SIGKILLed by an external 120s timeout, bypassing its finally-restore and leaving source mutated. Code was verified byte-identical to b6e6cc1 and three consecutive full regressions then came back ALL GREEN. Logged as R23."
+      "flaky_verdict_root_cause": "NOTE 2026-08-18: the first attempt at the full regression this session reported FAILURES PRESENT. Root cause was NOT a code defect: the mutation driver had been SIGKILLed by an external 120s timeout, bypassing its finally-restore and leaving source mutated. Code was verified byte-identical to b6e6cc1 and three consecutive full regressions then came back ALL GREEN. Logged as R23.",
+      "assertions_phase4": 517,
+      "mutations_phase4": 188,
+      "project_wide_assertions": 2704,
+      "eval_fixture_is_mutation_target": "NEW 2026-08-19 (D-0055). Until now every mutation edited code, on the tacit assumption that only code can be wrong. But tolerances decide PASS/FAIL and live in evals/bilingual_eval_v1.jsonl, so an unpinned number there could be quietly edited later to make an inconvenient result disappear with the suite still green. Six mutations now seed that drift in both directions, and each mutant was verified to remain valid JSONL so it is killed by an assertion rather than by a parse crash."
     },
     "measurements_recorded": null,
     "measurements_note": "DELIBERATELY null. No token/sec, no peak RSS, no citation rate and no Persian-fluency figure exists for this project on any hardware. The harness writes them; it has not been run against a model.",
@@ -705,11 +709,13 @@
       "collateral_finding": "Two PRE-EXISTING mutations were silently broken by the edits to phase4_lib.py and would have become SKIPs rather than failures. Every find-string in the battery is now str.count-verified == 1 and checked for no-ops before the battery is trusted, because a SKIP is worse than a survivor: it reports nothing while looking like nothing is wrong."
     },
     "threshold_naming_mismatch": {
-      "threshold": "model_file_size_q4km_gib_max",
-      "issue": "The name says q4km but the user runs Q5_K_M. The 4.0 GiB ceiling is unchanged and 2.928 GiB is under it, so the VERDICT is correct; only the threshold's NAME no longer describes what is being measured.",
-      "action": "NOT renamed.",
-      "reason": "The twelve acceptance thresholds were APPROVED by the user on 2026-08-10. Renaming one silently would edit an approved artefact, and renaming it loudly needs the user's consent. Recorded here instead so the mismatch is visible rather than tidy.",
-      "recommendation": "Rename to model_file_size_gib_max in a future phase, with the user's approval, since the ceiling was never quantisation-specific."
+      "status": "RESOLVED 2026-08-19 with the user's explicit consent",
+      "threshold": "model_file_size_gib_max",
+      "former_name": "model_file_size_q4km_gib_max",
+      "issue": "The old name said q4km but the user runs Q5_K_M, so the name no longer described what was being measured. The 4.0 GiB ceiling and its 'max' direction were correct throughout, and 2.928 GiB was under it, so no VERDICT was ever wrong.",
+      "action": "Renamed at all 5 live sites (PROJECT_STATE.acceptance_thresholds, phase4_lib.THRESHOLD_DIRECTION, run_phase4 measured{}, test_phase4_harness._EXPECTED_DIRECTION, and the Persian guide). The NUMBER 4.0 and the direction 'max' are byte-identical to the 2026-08-10 approval; only the identifier changed.",
+      "why_the_name_was_quantisation_specific_at_all": "The ceiling was derived for Q4_K_M and then reused when the user chose Q5_K_M. The generic name is now honest about what it constrains: the size of whatever single model file is loaded, regardless of quantisation.",
+      "verification": "Full harness and the 182-mutation battery re-run after the rename; the direction-table assertion that guards this key still passes because BOTH sides were renamed together, and that assertion derives its expectation from a literal table, not from the code under test."
     },
     "first_run_2026_08_18": {
       "status": "COMPLETED BY THE USER, ANALYSED, AND SET ASIDE AS CONTAMINATED",
