@@ -145,12 +145,18 @@
     "D-0040 Alpha Vantage FREE TIER only; no paid provider; Twelve Data closed (user instruction, no spending)",
     "D-0041 Market data is NON-PERSISTABLE while the permitted storage timeframe is UNKNOWN",
     "D-0042 Consent is bounded at BOTH ends and its class limits are sealed against runtime rebinding",
-    "D-0043 A survivor is diagnosed by MEASURING the mutant; the mutation or the code may be the fault, not the tests"
+    "D-0043 A survivor is diagnosed by MEASURING the mutant; the mutation or the code may be the fault, not the tests",
+    "D-0057 Completion budget raised 768 -> 2048 and made a single DEFAULT_MAX_TOKENS constant (cost 1.70h -> 3.75h COMPUTED; user accepted)",
+    "D-0058 Tool-call runaway capped at 8 EXECUTIONS per case (Q11 RESOLVED; the number was delegated to me)",
+    "D-0059 Three grading defects that silently corrupted the metrics: per-case must_abstain override, Persian reply in mixed cases, fabrication summed across all arms",
+    "D-0060 Two mutation survivors had NO observable difference because the code path was UNREACHABLE; remedy was extraction into the pure total_fabrications()",
+    "D-0061 A denominator that shrinks in SILENCE is not a measurement; abstention_ungraded_n + grading_warnings + an unconditional report block",
+    "D-0062 A SKIPPED assertion hid two mutation survivors; the real tokenizer restored them and run_all.sh now counts skips"
   ],
   "open_questions": [
-    "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice.",
+    "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
     "Q10 [RESOLVED 2026-08-19, D-0055, by the user's explicit delegation]: the P/E tolerance on EN/FA-CALC-001 was 0.001, which demanded THREE decimals of a value that is 17.857142857...; the model showed the division 150/8.40 and answered 17.86, a correct 2-decimal rounding, and was graded FAIL for its presentation rather than its arithmetic. Widened to 0.005 -- the half-unit-in-last-place of two decimals -- which MEASURABLY still rejects truncated 17.85, 1-decimal 17.9, the rubric's own distractor 'about 18', and the wrong-EPS 18.75. The rubric requirement to show working or call the tool is graded separately and was NOT relaxed. The other six value-graded cases are exact at 2dp and were left untouched. Pinned by 8 fixture-reading assertions and 6 new mutations; the eval file is now itself a mutation target.",
-    "Q11: the model emitted 26 tool calls for one question, 25 of them identical. Should the harness cap repeated identical calls, and if so does a capped run still measure the same thing?"
+    "Q11 [RESOLVED 2026-08-21, D-0058, by the user's explicit delegation (\"هر عددی که میدانی مناسب است قرار بده\")]: TOOL_CALL_CAP = 8, applied in run_arm_tools BEFORE execution, not at grade time. MEASURED basis: 65 calls were emitted across the tools arm; the worst case EN-CALC-001 emitted 26, all repetitions of one calculation. Two of my own earlier claims were DISPROVED by that measurement: EN-MIX-001 and FA-TERM-001 emitted 17 and 7 DISTINCT calls, which is legitimate breadth, not spam -- so a cap below 17 would have truncated correct behaviour and then scored the model down for it. 8 sits above the highest legitimate count observed. WHAT A CAPPED RUN NO LONGER MEASURES: the unbounded call count of an un-capped model; that number is genuinely lost. The grade records what was EMITTED alongside what was EXECUTED so the loss is visible, and a reply with exactly 8 calls is NOT flagged as capped."
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -233,7 +239,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-08-19",
+  "last_updated": "2026-08-21",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -297,7 +303,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0043",
+  "decisions_logged": "D-0001..D-0062",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -606,7 +612,7 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": "DECIDE whether to re-run Phase 4, and at what completion-token budget. The first run (2026-08-18) completed but is contaminated: 20 of 52 answers were truncated at the 768-token budget, and six harness defects (five of them mine) corrupted the metrics. All six are now fixed and guarded by 182 mutations with 0 survivors and 0 skips. NOTHING from the first run is recorded as MEASURED. Both previously open questions are now CLOSED: the P/E tolerance was decided by delegation and widened to the 2dp half-ulp 0.005 (D-0055), and the model_file_size threshold was renamed with consent (D-0056). The re-run budget is the ONLY thing still awaiting the user.",
+  "awaiting_user_action": "APPROVE THE RE-RUN ITSELF. The budget question is settled: the user chose option ب (2,048 completion tokens, D-0057) knowing the COMPUTED cost is 1.70h -> 3.75h and knowing there is NO guarantee the 20 lost answers return; and the Q11 cap was delegated to me and set to 8 (D-0058). Since then a full audit found and fixed FIVE further grading defects (D-0059, D-0060, D-0061) plus one defect in the verification tooling itself (D-0062, where a SKIPPED assertion was hiding two mutation survivors). Gates MEASURED 2026-08-21: 2,772 assertions across 16 suites with 0 SKIPPED; 920 seeded mutations across 11 batteries, 915 killed, 5 documented equivalents, 0 survived, 0 skipped; 7 adversarial probes, 0 allowed, 0 crashed. NOTHING from the first run is recorded as MEASURED and measurements_recorded is still null. The ONLY thing outstanding is the user's explicit go-ahead to spend ~3.75 hours of their CPU on the corrected re-run. No re-run may start without it.",
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
@@ -689,9 +695,9 @@
       "pinned_revision_behaviour": "UNKNOWN - it publishes no GGUF",
       "llama_cpp_import_succeeds_on_target": "UNKNOWN. The wheel is correct and its DLLs are x86-64 Windows binaries, but this sandbox is Linux and cannot execute 'import llama_cpp'. Only the user's run settles it. Not recorded as a pass.",
       "qwen35_architecture_loads_on_target": "UNKNOWN. The literal string 'qwen35' is present in llama.dll of the verified prebuilt wheel (MEASURED 2026-08-17), but that is not proof the runtime can load the architecture. If it cannot, the failure will read as \"unknown model architecture: 'qwen35'\" and is fixed by upgrading the package, not by changing models.",
-      "thinking_budget_768_is_sufficient": "UNKNOWN. The length of this model's reasoning block on these 21 eval questions has never been measured. If 768 is too small, the run reports it on the 'answers LOST to truncation' line; those cases are budget failures and must NOT be read as quality results.",
       "peak_rss_with_qwen35_q5km": "UNKNOWN. ESTIMATED at 3.8-4.2 GiB (COMPUTED KV cache 0.500 GiB at 16K + 2.928 GiB weights + runtime overhead). Not recorded as MEASURED and not graded against the 6.0 GiB ceiling as though it were.",
-      "persian_abstention_vocabulary_coverage": "PARTIAL, MEASURED 2026-08-18. _ABSTAIN_FA does NOT match the natural Persian refusal 'من این اطلاعات را ندارم.' It matches 'اطلاعات کافی ندارم' and 'اطلاعاتی ندارم' but not that phrasing. Deliberately NOT widened from a test: grading vocabulary must be set from observed model output, not invented to make an assertion green. Consequence: a real refusal in that wording would be scored as a non-refusal, understating correct_abstention_pct -- an error in the SAFE direction, but an error. Revisit once the run shows how this model actually phrases refusals."
+      "persian_abstention_vocabulary_coverage": "PARTIAL, MEASURED 2026-08-18. _ABSTAIN_FA does NOT match the natural Persian refusal 'من این اطلاعات را ندارم.' It matches 'اطلاعات کافی ندارم' and 'اطلاعاتی ندارم' but not that phrasing. Deliberately NOT widened from a test: grading vocabulary must be set from observed model output, not invented to make an assertion green. Consequence: a real refusal in that wording would be scored as a non-refusal, understating correct_abstention_pct -- an error in the SAFE direction, but an error. Revisit once the run shows how this model actually phrases refusals.",
+      "thinking_budget_2048_is_sufficient": "UNKNOWN, and deliberately not claimed. MEASURED at 768: 25 of 52 calls hit the ceiling and 20 answers were lost entirely, with reasoning blocks running 1,495-3,263 characters -- and the 3,263-character one was ITSELF truncated, so the true requirement has never been observed. 2,048 is therefore an increase justified by measurement, NOT a budget proven adequate. The re-run reports the residual on its 'answers LOST to truncation' line; that line is the measurement, not this field."
     },
     "reasoning_mode_fix_2026_08_18": {
       "trigger": "The user chose Qwen3.5-4B, which THINKS BY DEFAULT and cannot be told not to: the /think and /nothink switches of Qwen3 are unsupported in this release (VERIFIED from the official model card).",
@@ -701,7 +707,7 @@
       "fix_where": "phase4_lib.strip_thinking() is called inside run_phase4.ModelRunner.generate(), NOT at each grading call site. Every grader consumes that function's output, so splitting there means no consumer can forget it; per-site splitting would leave the safety defect one forgotten line away from returning.",
       "fix_truncation": "An unterminated <think> returns answer == '' -- not the reasoning text, and not the partial prefix that preceded it. Half a sentence is not an answer, and returning the reasoning IS the defect. Such a case is counted and reported separately as a BUDGET failure, not a quality result.",
       "fix_latency_probe": "measure_latency() snapshots and restores truncated_thinking and thinking_replies. Its 1-token TTFT probe ALWAYS leaves <think> unterminated, and counting that would fabricate lost answers that no eval case produced. A speed probe must not manufacture correctness failures.",
-      "fix_budget": "--max-tokens default raised 256 -> 768. The guide states it explicitly too, but the default is the number that will actually be used.",
+      "fix_budget": "--max-tokens default raised 256 -> 768. The guide states it explicitly too, but the default is the number that will actually be used. SUPERSEDED 2026-08-21 by D-0057: 768 proved insufficient in the real run (25 of 52 calls hit the ceiling, 20 answers lost) and the default is now 2048, held in a single DEFAULT_MAX_TOKENS constant. This field records what the 2026-08-18 fix did, not the current value.",
       "fix_reporting": "A REASONING MODE block is printed UNCONDITIONALLY, including when the tally is zero: a counter that only appears when it fires teaches the reader that its absence means nothing. The header also states the expected reasoning mode BEFORE the run starts, and warns if the budget is under 512 for a thinking model.",
       "fix_auditability": "The raw reply is preserved in metrics['raw_output'] and in the results file, so a human can check the split rather than trust it.",
       "mutations_added": 35,
@@ -755,6 +761,46 @@
       ],
       "fix_commit": "b6e6cc1",
       "re_run_status": "NOT STARTED. A re-run costs the user hours of CPU and requires explicit approval. Options to be put to the user: 1,536 completion tokens (~2.7 h), 2,048 (~3.4 h), or re-run only the 20 truncated cases (~50 min)."
+    },
+    "budget_and_cap_2026_08_21": {
+      "decision_refs": [
+        "D-0057",
+        "D-0058"
+      ],
+      "completion_budget": 2048,
+      "budget_single_source": "DEFAULT_MAX_TOKENS in scripts/run_phase4.py, read by BOTH ModelRunner.__init__ and the argparse default. Two independent 2048 literals existed before; a mutation lowering ONE of them to 768 SURVIVED the entire suite because every call site passes max_tokens explicitly. One constant makes the disagreement structurally impossible rather than merely detectable.",
+      "cost_model": "seconds = 0.018928*prompt_tokens + 0.232341*completion_tokens, fitted to all 52 real calls; reproduces the observed 6,115 s to within 0.8 %. COMPUTED projection 1.70 h -> 3.75 h.",
+      "tool_call_cap": 8,
+      "cap_binds": "EXECUTION, in run_arm_tools, before the tool runs. An earlier grade-time implementation limited what was COUNTED but not what was RUN; that was self-corrected and disclosed to the user."
+    },
+    "audit_2026_08_21": {
+      "defects_found": 6,
+      "defects": [
+        "1. must_abstain was derived from the case CATEGORY, so EN-MIX-001 -- which must be refused -- was graded as if refusal were wrong. It passed through a 1.7-hour run unnoticed. Fixed with a per-case override; the category was deliberately NOT moved, because re-labelling a case to fix a grader corrupts the taxonomy to hide a bug.",
+        "2. A Persian reply in a 'mixed' case was counted as the wrong language. Fixed with PERSIAN_REPLY_LANGS = ('fa','mixed').",
+        "3. The zero-fabrication ceiling read the RAG arm ALONE, so fabrication in the plain or tools arm could not fail it. Fixed by summing over every arm that ran, with None treated as 'not checked' rather than as zero.",
+        "4. summarize_rag reported a fabrication count with no fabrication_checked_n while summarize_eval reported both -- the same field name meaning two different things across arms, while the ceiling sums across arms.",
+        "5. should_abstain=None silently dropped a case from the abstention DENOMINATOR. MEASURED: one mistyped category among two real cases left correct_abstention_pct at 50.0 and correct_abstention_n at 2 while n_cases rose to 3. The per-case warning string was the only trace and NO code read it. This is exactly how EN-MIX-001 hid through a 1.7-hour run.",
+        "6. A SKIPPED assertion protected nothing and failed nothing. With the Qwen3 tokenizer absent, test_selector.py skipped its rendered-cost check and the selector battery reported 2 SURVIVORS -- an under-predicting token budget, which authorises a prompt that then overflows the context. Supplying the real tokenizer took it to 15/15 killed. run_all.sh now counts skips and prints the total unconditionally."
+      ],
+      "expected_effect_of_fix_5": "correct_abstention_pct may get WORSE, because cases that were silently dropped now count. Disclosed to the user before the change and accepted. A worse honest number is worth more than a better false one.",
+      "declined_change": "A Persian refusal phrasing that is_abstention does not detect was found, but the text was one I COMPOSED, not observed model output. No pattern was added: inventing vocabulary to make a test green is exactly the failure this project exists to prevent. Deferred until real model output is available."
+    },
+    "verification_2026_08_21": {
+      "assertions_total": 2772,
+      "suites": 16,
+      "assertions_skipped": 0,
+      "phase_4_harness_assertions": 585,
+      "mutations_seeded": 920,
+      "mutations_killed": 915,
+      "mutations_equivalent": 5,
+      "mutations_survived": 0,
+      "mutations_skipped": 0,
+      "batteries": 11,
+      "phase_4_battery": "228 seeded, 228 killed, 0 survived, 0 skipped",
+      "adversarial_probes": "7 probes, 0 allowed, 0 crashed",
+      "prerequisite_artefacts": "Two free public downloads gate 12 assertions and must be present before a green run is believed: the Qwen3 tokenizer (/tmp/qwen3_tokenizer.json, /tmp/qwen3_tokcfg.json) and the EDGAR XBRL payload (/tmp/xbrl.json, 117 facts, HTTP 200 only with a contact-bearing User-Agent). Both are documented in the README.",
+      "provenance_gate": "Clean. A sandbox freeze killed a mutation run mid-flight and left src/tools/selector.py carrying CORE_FAMILIES = () -- mutation #33 of mutate_selector.py, which disables the mandatory risk-sizing family required by SS.6.3. Caught by the gate, restored from HEAD, not hand-edited. Second time D-0054 has paid for itself."
     }
   }
 }

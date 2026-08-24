@@ -308,16 +308,18 @@ MUTATIONS = [
      '        g["abstention_ok"] = bool(g["abstained"]) and not g["banned_hits"]',
      '        g["abstention_ok"] = bool(g["abstained"])'),
     (LIB, "an unknown category is silently treated as answer-expected",
-     '        g["should_abstain"] = None\n'
-     '        g["abstention_ok"] = None\n'
-     '        g["warning"] = "unknown category %r; not graded for abstention" % cat',
-     '        g["should_abstain"] = False\n'
-     '        g["abstention_ok"] = None'),
+     '    return None, "unknown category %r; not graded for abstention" % cat',
+     "    return False, None"),
     (LIB, "an abstention category is graded as if it expected an answer",
      "    if cat in ABSTAIN_CATEGORIES:\n"
-     '        g["should_abstain"] = True',
+     "        return True, None",
      "    if cat in ABSTAIN_CATEGORIES:\n"
-     '        g["should_abstain"] = False'),
+     "        return False, None"),
+    (LIB, "an answer category is graded as if it required refusal",
+     "    if cat in ANSWER_CATEGORIES:\n"
+     "        return False, None",
+     "    if cat in ANSWER_CATEGORIES:\n"
+     "        return True, None"),
     (LIB, "expected_value is ignored, as run_baseline.py ignored it",
      '    if case.get("expected_value") is not None:\n'
      '        g["value_expected"] = case["expected_value"]',
@@ -332,7 +334,7 @@ MUTATIONS = [
      '        g["tool_ok"] = want_tool in g["tool_calls"]',
      '        g["tool_ok"] = bool(g["tool_calls"])'),
     (LIB, "a Persian case is not checked for Persian script",
-     '    if case.get("lang") == "fa":\n'
+     '    if case.get("lang") in PERSIAN_REPLY_LANGS:\n'
      '        g["persian_script"] = is_persian_script(text)\n'
      '        g["latin_ratio"] = round(latin_ratio(text), 3)',
      '    if False:\n'
@@ -363,11 +365,18 @@ MUTATIONS = [
      '            g["outcome"] = "OVER_ABSTENTION"',
      '            g["outcome"] = "OK"'),
     (LIB, "fabrication on an unanswerable question is never flagged",
+     "    if not answerable:\n"
+     "        # The ONLY correct behaviour is refusal. Producing any figure "
+     "here is\n"
+     "        # fabrication: the corpus provably does not contain one.\n"
      '        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))',
+     "    if not answerable:\n"
      '        g["fabricated"] = False'),
     (LIB, "any non-abstention on an unanswerable question counts as fabrication",
-     '        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))',
-     '        g["fabricated"] = not g["abstained"]'),
+     '        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))\n'
+     '        g["outcome"] = "OK" if g["abstained"] else (',
+     '        g["fabricated"] = not g["abstained"]\n'
+     '        g["outcome"] = "OK" if g["abstained"] else ('),
     (LIB, "an unanswerable question that is answered is scored OK",
      '        g["outcome"] = "OK" if g["abstained"] else (\n'
      '            "FABRICATION" if g["fabricated"] else "NON_ANSWER")',
@@ -472,8 +481,10 @@ MUTATIONS = [
      '            [g for g in grades if g.get("persian_script") is False]),',
      '        "fa_not_in_persian": 0,'),
     (LIB, "the fabrication count in the RAG summary is hard-zeroed",
+     '        "outcomes": outcomes,\n'
      '        "fabricated_financial_data_count": len(\n'
      '            [g for g in grades if g.get("fabricated")]),',
+     '        "outcomes": outcomes,\n'
      '        "fabricated_financial_data_count": 0,'),
     (LIB, "unsupported citations are counted as supported",
      '    unsupported = [c for c in cited if c.get("status") != "SUPPORTED"]',
@@ -712,8 +723,26 @@ MUTATIONS = [
 
     # -- the default budget and the report ----------------------------------
     (RUN, "the default token budget reverts to 256, too small to reach answers",
-     'ap.add_argument("--max-tokens", type=int, default=768)',
-     'ap.add_argument("--max-tokens", type=int, default=256)'),
+     "DEFAULT_MAX_TOKENS = 2048",
+     "DEFAULT_MAX_TOKENS = 256"),
+    (RUN, "the budget silently reverts to the 768 that lost 20 answers",
+     "DEFAULT_MAX_TOKENS = 2048",
+     "DEFAULT_MAX_TOKENS = 768"),
+    (RUN, "the budget is raised so far it changes what the run costs",
+     "DEFAULT_MAX_TOKENS = 2048",
+     "DEFAULT_MAX_TOKENS = 8192"),
+    # The two consumers of the constant, each mutated back to a hardcoded
+    # number. MEASURED 2026-08-20: with ModelRunner carrying its own literal
+    # 2048, lowering it to 768 SURVIVED the entire suite -- main() and every
+    # test pass max_tokens explicitly, so the wrapper default was never read
+    # by anything asserted on. It is now read FROM the constant, and these
+    # mutations check that neither consumer can quietly stop doing so.
+    (RUN, "the ModelRunner default stops reading the shared constant",
+     "    def __init__(self, llm, max_tokens=DEFAULT_MAX_TOKENS):",
+     "    def __init__(self, llm, max_tokens=768):"),
+    (RUN, "the argparse default stops reading the shared constant",
+     'ap.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)',
+     'ap.add_argument("--max-tokens", type=int, default=768)'),
     (RUN, "the reasoning tally is printed only when it is non-zero",
      '    p("REASONING MODE  (thinking)")',
      "    if runner.thinking_replies:\n"
@@ -740,6 +769,160 @@ MUTATIONS = [
     (RUN, "the results file stops recording the budget the run used",
      '                  "max_tokens": a.max_tokens,',
      "                  "),
+
+    # -- the tool-call cap (Q11), both directions ---------------------------
+    (LIB, "the cap is lowered under FA-TERM-001's 7 legitimate calls",
+     "TOOL_CALL_CAP = 8",
+     "TOOL_CALL_CAP = 5"),
+    (LIB, "the cap is lowered to 1, discarding FA-RISK-002's needed 2nd call",
+     "TOOL_CALL_CAP = 8",
+     "TOOL_CALL_CAP = 1"),
+    (LIB, "the cap is raised above the runaways, so it caps nothing",
+     "TOOL_CALL_CAP = 8",
+     "TOOL_CALL_CAP = 64"),
+    (LIB, "capping is disabled entirely",
+     "TOOL_CALL_CAP = 8",
+     "TOOL_CALL_CAP = None"),
+    (LIB, "the cap fires one call too early (off-by-one)",
+     "    if TOOL_CALL_CAP is not None and len(calls) > TOOL_CALL_CAP:",
+     "    if TOOL_CALL_CAP is not None and len(calls) >= TOOL_CALL_CAP:"),
+    (LIB, "the pre-cap emitted count is recorded AFTER the cap, losing it",
+     '    g["tool_calls_emitted"] = len(calls)',
+     "    pass"),
+    (LIB, "the capped flag is hardcoded false, so a cap is silent",
+     '        g["tool_calls_capped"] = True\n'
+     "        calls = calls[:TOOL_CALL_CAP]",
+     '        g["tool_calls_capped"] = False\n'
+     "        calls = calls[:TOOL_CALL_CAP]"),
+    (LIB, "the cap value is not carried on the grade",
+     '    g["tool_call_cap"] = TOOL_CALL_CAP',
+     "    pass"),
+    (LIB, "the summary stops counting which cases were capped",
+     '        "tool_calls_capped_cases": len(\n'
+     '            [g for g in grades if g.get("tool_calls_capped")]),',
+     '        "tool_calls_capped_cases": 0,'),
+    (RUN, "the executed calls ignore the cap the grader applied",
+     "        if L.TOOL_CALL_CAP is not None:\n"
+     "            _calls = _calls[:L.TOOL_CALL_CAP]",
+     "        if False:\n"
+     "            _calls = _calls[:L.TOOL_CALL_CAP]"),
+    (RUN, "the results file stops recording the cap that was applied",
+     '                  "tool_call_cap": L.TOOL_CALL_CAP,',
+     "                  "),
+
+    # -- gap A: the per-case abstention override ----------------------------
+    (LIB, "the must_abstain override is ignored, reverting the EN-MIX-001 gap",
+     "    override = case.get(ABSTAIN_OVERRIDE_KEY)",
+     "    override = None"),
+    (LIB, "a malformed override is coerced to 'answer expected'",
+     "        if override is True or override is False:\n"
+     "            return override, None",
+     "        return bool(override), None"),
+    (LIB, "the override is inverted",
+     "    override = case.get(ABSTAIN_OVERRIDE_KEY)",
+     "    override = (not case.get(ABSTAIN_OVERRIDE_KEY)\n"
+     "                if case.get(ABSTAIN_OVERRIDE_KEY) is not None else None)"),
+    (EVAL, "EN-MIX-001's abstention requirement is removed from the fixture",
+     '"must_abstain": true,',
+     '"must_abstain": false,'),
+    (EVAL, "EN-MIX-001's override loses the reason it exists",
+     '"must_abstain_rationale"',
+     '"must_abstain_note_unused"'),
+
+    # -- gap B: lang='mixed' language grading -------------------------------
+    (LIB, "the mixed case stops being graded for Persian, reverting the gap",
+     'PERSIAN_REPLY_LANGS = ("fa", "mixed")',
+     'PERSIAN_REPLY_LANGS = ("fa",)'),
+    (LIB, "every language is graded as if Persian were expected",
+     '    if case.get("lang") in PERSIAN_REPLY_LANGS:',
+     "    if True:"),
+    (LIB, "English acquires a Persian requirement",
+     'PERSIAN_REPLY_LANGS = ("fa", "mixed")',
+     'PERSIAN_REPLY_LANGS = ("fa", "mixed", "en")'),
+
+    # -- gap C: fabrication counted outside the RAG arm ---------------------
+    (LIB, "fabrication is never flagged on an eval case",
+     "    if sa is True:\n"
+     '        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))\n'
+     "    else:\n"
+     '        g["fabricated"] = None',
+     '    g["fabricated"] = None'),
+    (LIB, "fabrication is flagged even when the case permits an answer",
+     "    if sa is True:\n"
+     '        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))\n'
+     "    else:\n"
+     '        g["fabricated"] = None',
+     '    g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))'),
+    (LIB, "a refusal still counts as fabrication",
+     "    if sa is True:\n"
+     '        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))\n'
+     "    else:\n"
+     '        g["fabricated"] = None',
+     "    if sa is True:\n"
+     '        g["fabricated"] = bool(extract_numbers(text))\n'
+     "    else:\n"
+     '        g["fabricated"] = None'),
+    # Re-anchored 2026-08-20: the audit added the same field to summarize_rag,
+    # which made the bare key ambiguous (count 2) and would have SKIPPED this
+    # mutation -- and a skip is worse than a survivor, because it reads as
+    # coverage. Both copies are now anchored on their own neighbour lines.
+    (LIB, "the eval summary stops reporting how many cases it could check",
+     '        "fabrication_checked_n": len(\n'
+     '            [g for g in grades if g.get("fabricated") is not None]),\n'
+     '        "human_grading_pending": len(grades),',
+     '        "human_grading_pending": len(grades),'),
+    (LIB, "the RAG summary stops reporting how many cases it could check",
+     '        "fabrication_checked_n": len(\n'
+     '            [g for g in grades if g.get("fabricated") is not None]),\n'
+     '        "citation_correctness_pct": pct(len(supported), len(cited)),',
+     '        "citation_correctness_pct": pct(len(supported), len(cited)),'),
+    # -- AUDIT 2026-08-20: the silently shrinking abstention denominator ----
+    (LIB, "the count of ungraded cases is dropped from the summary",
+     '        "abstention_ungraded_n": len(\n'
+     '            [g for g in grades if g.get("should_abstain") is None]),',
+     '        "abstention_ungraded_n": 0,'),
+    (LIB, "an ungraded case is counted as graded, hiding the hole",
+     '            [g for g in grades if g.get("should_abstain") is None]),',
+     '            [g for g in grades if g.get("should_abstain") is False]),'),
+    (LIB, "the grading warnings are collected but never reported",
+     '        "grading_warnings": [\n'
+     '            {"id": g.get("id"), "warning": g["warning"]}\n'
+     '            for g in grades if g.get("warning")],',
+     '        "grading_warnings": [],'),
+    (LIB, "the warnings lose the case id, so nobody can find the case",
+     '            {"id": g.get("id"), "warning": g["warning"]}',
+     '            {"id": None, "warning": g["warning"]}'),
+    (LIB, "the warning text is emptied, leaving an unexplained flag",
+     '            {"id": g.get("id"), "warning": g["warning"]}',
+     '            {"id": g.get("id"), "warning": ""}'),
+    (RUN, "the ungraded-case block is dropped from the human report",
+     '    p("UNGRADED CASES  (must be 0)")',
+     "    pass"),
+    (RUN, "the fabrication ceiling reads the RAG arm alone again",
+     '        "fabricated_financial_data_count_max": fabrications,',
+     '        "fabricated_financial_data_count_max":\n'
+     '            rg.get("fabricated_financial_data_count"),'),
+    # These three target total_fabrications(), NOT the inline lines that used
+    # to live in main(). MEASURED 2026-08-20: seeded against the inline
+    # version, "None as zero" and "an unrun arm's absent count as zero"
+    # produced NO observable difference through main() at any arm subset,
+    # because every summarizer always emits an int for that key -- the
+    # None-handling was unreachable code. Extracting the function made the
+    # rule exercisable; these mutations now have somewhere to land.
+    (RUN, "an unrun arm's absent fabrication count is treated as zero",
+     "    if not known:\n        return None\n    return sum(known)",
+     "    return sum(known)"),
+    (RUN, "only the first arm's fabrications are counted",
+     "    if not known:\n        return None\n    return sum(known)",
+     "    if not known:\n        return None\n    return known[0]"),
+    (RUN, "None is counted as a zero in the fabrication total",
+     "    known = [c for c in counts if c is not None]",
+     "    known = [c or 0 for c in counts]"),
+    (RUN, "the fabrication total silently drops an arm's count",
+     '    counts = [s.get("fabricated_financial_data_count")\n'
+     "              for s in (summaries or {}).values()]",
+     '    counts = [s.get("fabricated_financial_data_count")\n'
+     "              for s in list((summaries or {}).values())[:1]]"),
 
     # -- the registry's reasoning-mode facts --------------------------------
     (LIB, "the thinking model is recorded as NOT thinking",

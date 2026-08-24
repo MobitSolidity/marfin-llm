@@ -83,6 +83,38 @@ def rel(path):
 
 
 # ---------------------------------------------------------------------------
+# The completion-token budget: ONE constant, two consumers.
+#
+# 2048, raised from 768 on the user's approval 2026-08-20.
+#
+# MEASURED on the first real run (768): 25 of 52 calls hit the ceiling, and 20
+# of those 25 had thinking_truncated=True -- the reasoning was still OPEN when
+# the budget ran out, so the answer was never emitted and the case graded wrong
+# for a reason that has nothing to do with the model. Reasoning length at the
+# ceiling ranged 1495-3263 characters.
+#
+# What this does NOT claim: that 2048 is enough. This run gives NO evidence of
+# where those 20 reasoning traces would have closed, because every one of them
+# was cut off. 2048 may still be short. It is not a fix, it is a larger
+# measurement.
+#
+# The cost is time and the time was measured, not guessed. Fitting
+# seconds = 0.018928*prompt_tokens + 0.232341*completion_tokens to the 52 real
+# calls reproduces the observed 6115 s total to within 0.8%, and gives
+# 4.30 tok/s decode against 4.47 measured independently. On that model the full
+# run goes from 1.70 h (measured, at 768) to 3.75 h worst case.
+#
+# WHY A CONSTANT AND NOT TWO LITERALS, MEASURED 2026-08-20: ModelRunner and the
+# argparse default each carried their own 2048. The mutation battery lowered
+# ModelRunner's back to 768 and the change SURVIVED the entire suite, because
+# main() and every test pass max_tokens explicitly -- so the wrapper's default
+# was never read by anything asserted on, while still being the value any
+# future caller that omits the argument would silently receive. Two copies of
+# a number that must agree is a drift waiting to happen; one constant makes the
+# disagreement impossible rather than merely detectable.
+DEFAULT_MAX_TOKENS = 2048
+
+# ---------------------------------------------------------------------------
 # Model wrapper.
 #
 # Every call to the model goes through here, so the fake used by the test suite
@@ -93,7 +125,7 @@ def rel(path):
 class ModelRunner(object):
     """Thin wrapper over llama_cpp.Llama that records timing per call."""
 
-    def __init__(self, llm, max_tokens=768):
+    def __init__(self, llm, max_tokens=DEFAULT_MAX_TOKENS):
         self.llm = llm
         self.max_tokens = max_tokens
         self.calls = 0
@@ -304,6 +336,42 @@ def run_arm_plain(runner, cases, schemas_by_name):
     return out
 
 
+def total_fabrications(summaries):
+    """
+    Sum `fabricated_financial_data_count` over EVERY arm that ran.
+
+    Returns None when NOTHING was checked, and an int otherwise.
+
+    DEFECT FOUND 2026-08-20: the approved ceiling
+    fabricated_financial_data_count_max is 0, and main() was feeding it only
+    the RAG arm's count. MEASURED on the first real run: EN-MIX-001 in the
+    TOOLS arm emitted 23 invented Apple prices on a case whose rubric demanded
+    refusal, and the reported total stayed at 1 -- the RAG arm's own case. A
+    ceiling of zero blind to two of three arms is not a ceiling.
+
+    None is NOT treated as zero. A fabrication that was never looked for must
+    not be reported as an absence of fabrication: "checked, found none" and
+    "not checked" are different facts, and only the first is evidence.
+
+    WHY THIS IS A FUNCTION AND NOT FOUR INLINE LINES, MEASURED 2026-08-20:
+    inline in main(), the None-handling was UNREACHABLE. Both summarize_eval
+    and summarize_rag always emit an int for that key, so `_fab_counts` could
+    only ever be a list of ints or empty, and the mutation battery proved it:
+    seeding "None is counted as a zero" and "an unrun arm's absent count is
+    treated as zero" produced NO observable difference through main() at all.
+    A rule no code path can exercise is exactly the shape of the three defects
+    found earlier today -- a requirement that comes out clean by not looking.
+    Extracting it makes the rule directly testable with a None in hand, before
+    a future summarizer starts emitting one.
+    """
+    counts = [s.get("fabricated_financial_data_count")
+              for s in (summaries or {}).values()]
+    known = [c for c in counts if c is not None]
+    if not known:
+        return None
+    return sum(known)
+
+
 def run_arm_tools(runner, cases, schemas_by_name):
     from tools.selector import schemas_for
     from tools.registry import call_tool
@@ -321,8 +389,14 @@ def run_arm_tools(runner, cases, schemas_by_name):
         # Execute whatever the model actually asked for, and record what came
         # back. This is what turns "the model emitted a tool call" into "the
         # tool produced the right number" -- Phase 4 task 1's real question.
+        # The SAME cap the grader applied. Executing calls the grade discarded
+        # would let tool_value_ok be decided by a call outside the cap, so the
+        # capped run would still be scored on uncapped behaviour.
+        _calls = L.parse_tool_calls(text)[0]
+        if L.TOOL_CALL_CAP is not None:
+            _calls = _calls[:L.TOOL_CALL_CAP]
         executed = []
-        for call in L.parse_tool_calls(text)[0]:
+        for call in _calls:
             res = call_tool(call["name"], call["arguments"])
             executed.append({"name": call["name"],
                              "arguments": call["arguments"],
@@ -591,11 +665,10 @@ def main(argv=None):
     ap.add_argument("--corpus", default="evals/rag_corpus_v1.jsonl")
     ap.add_argument("--gold", default="evals/rag_gold_v1.jsonl")
     ap.add_argument("--state", default="PROJECT_STATE.json")
-    # 768, not 256. Qwen3.5 thinks by default and its reasoning routinely runs
-    # past 256 tokens, in which case the answer is never emitted and the case
-    # grades as wrong for a reason that has nothing to do with the model. The
-    # cost is time, and time is measured; a lost answer is not recoverable.
-    ap.add_argument("--max-tokens", type=int, default=768)
+    # The budget, its measurement and its cost are documented at
+    # DEFAULT_MAX_TOKENS. Read from the constant so this default and
+    # ModelRunner's cannot disagree.
+    ap.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     ap.add_argument("--top-k", type=int, default=4)
     ap.add_argument("--out", default="evals/results/phase4_run.json")
     ap.add_argument("--arms", default="plain,tools,rag",
@@ -653,7 +726,9 @@ def main(argv=None):
         if a.max_tokens < 512:
             p("              WARNING: --max-tokens %d is low for a thinking"
               % a.max_tokens)
-            p("              model. Answers may never be reached. 768+ advised.")
+            p("              model. Answers may never be reached. 2048 advised")
+            p("              (MEASURED at 768: 20 of 52 answers were lost")
+            p("              inside an unfinished <think> block).")
     elif tbd is False:
         p("thinking    : no")
     else:
@@ -725,6 +800,12 @@ def main(argv=None):
     # ---- threshold verdicts ---------------------------------------------
     ev = report["summaries"].get("tools") or report["summaries"].get("plain") or {}
     rg = report["summaries"].get("rag") or {}
+
+    # Summed over EVERY arm that ran, not read off the RAG arm, and None when
+    # nothing was checked. Rationale and the measurement behind it are in
+    # total_fabrications()'s docstring, where they can be tested.
+    fabrications = total_fabrications(report["summaries"])
+
     measured = {
         "model_file_size_gib_max": model_size_gib,
         "peak_rss_8k_gib_max": peak,
@@ -735,8 +816,7 @@ def main(argv=None):
         "unsupported_claim_rate_pct_max": rg.get("unsupported_claim_rate_pct"),
         "citation_correctness_pct_min": rg.get("citation_correctness_pct"),
         "correct_abstention_pct_min": ev.get("correct_abstention_pct"),
-        "fabricated_financial_data_count_max":
-            rg.get("fabricated_financial_data_count"),
+        "fabricated_financial_data_count_max": fabrications,
         # Persian fluency regression needs a human reader and a prior
         # measurement to regress against. Neither exists yet -> PENDING.
         "persian_fluency_regression_pct_max": None,
@@ -788,6 +868,25 @@ def main(argv=None):
         for k, n in sorted(rg.get("outcomes", {}).items()):
             p("  %-20s %d" % (k, n))
 
+    # ---- cases that were graded for NOTHING -------------------------------
+    # AUDIT FINDING 2026-08-20. A case whose category is unrecognised, or whose
+    # must_abstain override is neither true nor false, leaves the abstention
+    # denominator without a word. MEASURED: one mistyped category among two
+    # real cases left correct_abstention_pct reading 50.0 while n_cases said 3.
+    # A percentage over a denominator that can shrink in silence is not a
+    # measurement, and that silence is exactly how EN-MIX-001 survived a
+    # 1.7-hour run. Printed for every arm that ran, including when it is zero.
+    p("")
+    p("UNGRADED CASES  (must be 0)")
+    for _arm in ("plain", "tools"):
+        _s = report["summaries"].get(_arm)
+        if not _s:
+            continue
+        p("  %-6s not graded for abstention : %d of %d"
+          % (_arm, _s.get("abstention_ungraded_n", 0), _s.get("n_cases", 0)))
+        for _w in (_s.get("grading_warnings") or []):
+            p("    WARNING  %s: %s" % (_w.get("id"), _w.get("warning")))
+
     p("")
     p("Persian fluency and rubric compliance are NOT graded here. Every case")
     p("carries human_grade=null and must be read by a person before Phase 4")
@@ -811,6 +910,11 @@ def main(argv=None):
                   "ctx": a.ctx, "threads": a.threads,
                   "load_seconds": load_s,
                   "max_tokens": a.max_tokens,
+                  # The tool-call cap is written into the payload so a capped
+                  # run can never be mistaken for an uncapped one. It changes
+                  # the tool_calls_attempted denominator, and a metric whose
+                  # denominator moved silently is not comparable to itself.
+                  "tool_call_cap": L.TOOL_CALL_CAP,
                   "thinking_replies": runner.thinking_replies,
                   "answers_lost_to_thinking_truncation":
                       runner.truncated_thinking,

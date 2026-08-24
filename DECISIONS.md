@@ -1560,3 +1560,331 @@ identifier stays legible.
 None expected. If a future phase constrains several model files with different
 per-quantisation ceilings, the honest change is separate keys per artefact, not a
 return to encoding one quantisation in a name that governs all of them.
+
+---
+
+## D-0057 — Completion budget raised 768 → 2048, and made a single constant
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Supersedes:** the 768-token budget set in D-0052
+**Related:** D-0052, D-0053
+
+### Context
+
+The user chose option ب (2,048) after being shown the cost and the honest
+unknown. The 768-token budget was not a style preference; it destroyed answers.
+
+MEASURED, from the user's own `phase4_run.json`:
+
+| Quantity | Value |
+|---|---|
+| Calls that hit the ceiling | **25 of 52** |
+| Answers lost entirely (`thinking_truncated=True`) | **20** |
+| Reasoning-block length observed | 1,495 – 3,263 chars |
+| Generated tokens discarded inside `<think>` | 15,360 of 24,579 (62.5 %) |
+
+### Decision
+
+`DEFAULT_MAX_TOKENS = 2048`.
+
+**Cost, COMPUTED (not estimated by feel).** A linear model was fitted to all 52
+real calls:
+
+```
+seconds = 0.018928 * prompt_tokens + 0.232341 * completion_tokens
+```
+
+It reproduces the observed 6,115 s total to within **0.8 %**, and the implied
+decode rate (4.30 tok/s) agrees with the measured median (4.47 tok/s). Projected
+wall time: **1.70 h → 3.75 h**. The user was told this figure and accepted it.
+
+**What this decision does NOT claim.** There is no evidence that 2,048 is
+*enough*. The longest reasoning block observed was 3,263 characters and it was
+itself truncated, so the true requirement has never been measured. **There is no
+guarantee the 20 lost answers return.** The run reports the residual on its
+`answers LOST to truncation` line, and that line is the measurement — not this
+decision.
+
+### Why a constant, not two literals
+
+The budget previously existed as two independent `2048` literals: `ModelRunner`'s
+default and the argparse default. A mutation lowering **one** of them to 768
+**SURVIVED the entire suite**, because every call site passes `max_tokens`
+explicitly, so no test exercised either default's value.
+
+The first repair I reached for was an assertion comparing the two. I then
+verified there was no API to reach the parser's default (`RP._argparser()` was
+something I had invented while writing the test), and abandoned that approach
+rather than assert against a function that does not exist. Both consumers now
+read one constant, which makes disagreement **structurally impossible** rather
+than merely detectable. Three assertions pin the constant, pin that
+`ModelRunner` reads it rather than copying it, and pin that it exceeds the
+measured 768 ceiling.
+
+### Reversal
+
+Raise it further only on evidence — specifically, a re-run whose
+`answers LOST to truncation` line is still non-zero. Lowering it re-creates the
+contamination that voided the first run.
+
+---
+
+## D-0058 — Tool-call runaway capped at 8 executions per case (Q11 RESOLVED)
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Related:** D-0057
+
+### Context
+
+Q11 asked what limit should stop a tool-call runaway. The user delegated the
+number to me ("هر عددی که میدانی مناسب است قرار بده").
+
+MEASURED, from the real run: 65 tool calls emitted across the tools arm. Worst
+case `EN-CALC-001` emitted **26 calls, all repetitions of one calculation**.
+
+**Two of my own earlier claims were disproved by this measurement.** I had
+described `EN-MIX-001` and `FA-TERM-001` as runaways too; they emitted **17 and
+7 DISTINCT** calls respectively — legitimate breadth, not spam. Only
+`EN-CALC-001` is a genuine runaway. Capping at a number below 17 would have
+truncated correct behaviour and then scored the model down for it.
+
+### Decision
+
+`TOOL_CALL_CAP = 8`, applied in `run_arm_tools` **before execution**.
+
+I first implemented the cap at grade time, which limited what was *counted* but
+not what was *run* — so the runaway still cost the wall-clock time the cap
+exists to save. That was self-corrected and disclosed. Four assertions now prove
+the cap binds **execution**: a seeded 26-call reply executes exactly 8, records
+26 as emitted, flags the case as capped, and executes the **first** 8 rather
+than an arbitrary sample.
+
+**What a capped run no longer measures.** The unbounded call count of an
+un-capped model. That number is genuinely lost; it is traded for a run that
+cannot expand without limit. The grade records what was *emitted* alongside what
+was *executed*, so the loss is visible rather than silent.
+
+Boundary behaviour is asserted explicitly: a reply with **exactly** 8 calls is
+NOT flagged as capped, and all 8 are still graded.
+
+### Reversal
+
+If a future eval legitimately needs more than 8 distinct tools in one answer,
+raise the cap to just above the measured distinct-call maximum — never below it.
+
+---
+
+## D-0059 — Three grading defects that silently corrupted the metrics
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Related:** D-0053
+
+### Context
+
+While implementing D-0057 and D-0058 I audited the grader against the real run
+rather than against my expectations. Three defects were found. All three were
+MEASURED before being changed.
+
+### Decision
+
+**(A) Per-case `must_abstain` override.** The abstention requirement was derived
+from the case *category*, so `EN-MIX-001` — a code-switching case that must be
+refused — was graded as if refusal were wrong. It passed through a 1.7-hour run
+unnoticed. Added `ABSTAIN_OVERRIDE_KEY` and `_should_abstain()`; the eval file
+now carries the override with a written rationale. The category was deliberately
+**not** moved: the case really is a code-switching case, and re-labelling it to
+fix a grader would have corrupted the taxonomy to hide a bug.
+
+**(B) `PERSIAN_REPLY_LANGS = ("fa", "mixed")`.** A Persian reply in a `mixed`
+case was counted as the wrong language.
+
+**(C) Fabrication counted across every arm.** The zero-fabrication ceiling read
+the RAG arm alone, so fabrication in the plain or tools arm could not fail it.
+
+### Verification against the real run
+
+Re-grading the user's own results file with the fixes: plain abstention
+62.5 → 66.67, tools 0.0 → 11.11, tool calls 65 → 32 under the cap, schema
+validity unchanged at 100 %. The changes move the numbers that should move and
+leave the rest alone.
+
+### Reversal
+
+None. Each fix makes a stated rule actually evaluated. Reverting restores a
+metric that cannot fail.
+
+---
+
+## D-0060 — Unreachable logic extracted into `total_fabrications()`
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Related:** D-0059
+
+### Context
+
+After D-0059 the mutation battery left 8 survivors. Rather than reading the
+diffs and reasoning about them, I built an isolated harness
+(`/tmp/measure_survivors.py`) that copies the repo to `/tmp`, mutates the
+**copy**, runs both versions and prints only the differing keys. The working
+tree was never touched.
+
+Six survivors produced a clear observable difference and were killed by
+assertions written against those differences. **Two produced NO observable
+difference at any arm subset.**
+
+### The finding
+
+A mutation with no observable difference does not mean the mutation is bad. It
+means **the code path is unreachable**. Both summarizers always emit an `int`
+for `fabricated_financial_data_count`, so the `None`-handling in `main()` could
+never execute: `[c for c in [] if c is not None]` and `[c or 0 for c in []]` are
+indistinguishable when the list can never contain `None`. The rule was written,
+reviewed, and dead.
+
+### Decision
+
+Extract `total_fabrications(summaries)` as a pure named function, where the rule
+can be exercised with a `None` in hand. Eight unit assertions cover: no arms,
+one arm, three arms, ordering with a leading zero, one `None` among ints, all
+`None`, a missing key, and a genuine zero.
+
+**One survivor persisted even then.** "The ceiling reads the RAG arm alone"
+still survived, because the function was proven correct but **no assertion read
+that verdict off a real payload** — a correct function not wired to the
+threshold is still a threshold measuring the wrong thing. Fixed by measuring the
+suite's own responder through `main()` (fabrication per arm: plain 0 / tools 9 /
+rag 1) and asserting at payload level. The fixture is deliberately
+**asymmetric** — sum(10) ≠ rag-alone(1) — because a fixture where they agreed
+would go green under the very defect it exists to catch.
+
+### Reversal
+
+None. Inlining this logic returns it to being unreachable.
+
+---
+
+## D-0061 — A denominator that shrinks in silence is not a measurement
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Related:** D-0059
+
+### Context
+
+Continuing the audit after the battery was clean at 221/221.
+
+### The defect, MEASURED
+
+A case whose category is unrecognised — or whose `must_abstain` override is
+neither `true` nor `false` — gets `should_abstain=None` and is dropped from the
+abstention denominator **without a word**. Measured: one mistyped category among
+two real cases left `correct_abstention_pct` reading **50.0** and
+`correct_abstention_n` at **2** while `n_cases` rose to **3**. Nothing in the
+summary, the report, or the thresholds said so. The per-case `warning` string
+was the only trace, and **no code read it**.
+
+This is the same shape as D-0059(A): a rule that no code path evaluates. It is
+also precisely how `EN-MIX-001` survived a 1.7-hour run.
+
+A second, smaller defect was found alongside it: `summarize_rag` reported a
+fabrication count with no `fabrication_checked_n`, while `summarize_eval`
+reported both — the same field name meaning two different things across arms,
+while the ceiling sums across arms.
+
+### Decision
+
+Add `abstention_ungraded_n` and `grading_warnings` to `summarize_eval`, and
+`fabrication_checked_n` to `summarize_rag`. Print an **unconditional** report
+block, including when it is zero:
+
+```
+UNGRADED CASES  (must be 0)
+  plain  not graded for abstention : 0 of 21
+  tools  not graded for abstention : 0 of 21
+```
+
+A line that appears only when it fires teaches the reader that its absence means
+nothing — and the absence is the reading they must be able to trust.
+
+**Disclosed to the user before the change: this may make
+`correct_abstention_pct` WORSE**, because cases that were silently dropped now
+count. The user accepted ("جواب ۳: بله اصلاح کن"). A worse honest number is
+worth more than a better false one.
+
+### A defect in my own fix, caught before it landed
+
+Adding `fabrication_checked_n` to `summarize_rag` made an existing mutation's
+find-string match **twice**, which would have become a SKIP — and a SKIP is
+worse than a survivor, because it reads as coverage. Caught in pre-flight; both
+copies re-anchored with neighbour-line context.
+
+### Reversal
+
+None.
+
+---
+
+## D-0062 — A SKIPPED assertion hid two mutation survivors; skips are now counted
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Related:** D-0054
+
+### Context
+
+A sandbox freeze killed `run_all.sh --mutate` mid-flight. Per D-0054, `finally`
+does not run on `SIGKILL`, so the provenance gate was run first — and it found a
+**sixth** changed file, `src/tools/selector.py`, carrying
+`CORE_FAMILIES = ()` instead of `("returns_risk",)`. That is mutation #33 of
+`mutate_selector.py`, left on disk by the kill. It disables the mandatory
+risk-sizing family required by SS.6.3. It was restored from HEAD, not
+hand-edited.
+
+Re-running that battery then revealed **2 survivors**. I verified against a
+pristine `git archive` of HEAD that both pre-existed and were **not** caused by
+my work.
+
+### The finding
+
+The only assertion that kills those two mutations sits behind
+`if os.path.exists("/tmp/qwen3_tokenizer.json")`. With the tokenizer absent it
+printed `SKIP` — and `run_all.sh` **printed the SKIP without failing on it**.
+The run still ended `ALL GREEN`.
+
+What the skip was protecting is not cosmetic: the two survivors are
+"family token cost understated" and "estimate under-predicts (half the real
+cost)". An under-predicting token budget authorises a prompt that then overflows
+the context window. The suite's own comment says it: *"A budget that
+under-predicts is worse than no budget."*
+
+### Decision
+
+**Fix the cause, not the symptom.** The tokenizer is a free public download
+already documented in the README; it was `/tmp` being wiped by the sandbox reset
+that removed it. Fetched the real artefacts (`tokenizer.json`,
+`tokenizer_config.json` — Qwen3-4B-Instruct-2507) and the real EDGAR payload
+that gates 11 assertions in `test_rag.py` (HTTP 200 with a contact-bearing
+User-Agent; **117 facts**, matching the figure MEASURED in `phase-3.md`).
+
+Results: `test_selector.py` 68 → **69** passed with 0 skips; the selector battery
+2 survivors → **15/15 killed**; `test_rag.py` 206 → **224**.
+
+**Then fix the reporting**, because the artefacts can go missing again:
+`run_all.sh` counts skips across all suites and prints the total
+**unconditionally, including the zero**, with a warning naming this incident when
+it is non-zero. The README now documents both fetches as prerequisites for
+believing a green run.
+
+### Verification
+
+`2,772 assertions across 16 suites, SKIPPED: 0`; **920 seeded mutations across
+11 batteries, 915 killed, 5 documented equivalents, 0 survived, 0 skipped**;
+7 adversarial probes, 0 allowed, 0 crashed. Provenance gate clean afterwards.
+
+### Reversal
+
+None. A gate that cannot distinguish "verified" from "not run" is not a gate.

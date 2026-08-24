@@ -258,6 +258,318 @@ check_true("every widened case records WHY it was widened",
 
 
 # ===========================================================================
+section("the three grading gaps found on 2026-08-20")
+# ===========================================================================
+# All three were found by re-reading the FIRST REAL RUN, not by a failing test.
+# All three had the same shape: a requirement stated in a rubric that no code
+# path ever evaluated, so the metric came out clean by not looking.
+
+# -- gap A: a rubric that demands refusal on an ANSWER-category case ---------
+check_true("EN-MIX-001 carries an explicit must_abstain",
+           _bil["EN-MIX-001"].get("must_abstain") is True,
+           "(D) MEASURED 2026-08-20: its rubric says 'Must abstain (no market "
+           "data)' but category code_switching is in ANSWER_CATEGORIES, so "
+           "should_abstain was False and the case sat OUTSIDE the "
+           "correct_abstention_pct denominator (8 cases, not 9)")
+check_true("...and it explains why the override exists",
+           bool(_bil["EN-MIX-001"].get("must_abstain_rationale")),
+           "(D) an override that silently flips a case into the abstention "
+           "denominator is indistinguishable from one added to move a number")
+check_true("...and code_switching is STILL an answer category",
+           "code_switching" in L.ANSWER_CATEGORIES
+           and "code_switching" not in L.ABSTAIN_CATEGORIES,
+           "(D) the fix must be per-case. Moving the whole category would "
+           "misgrade a future code-switching case that legitimately expects "
+           "an answer -- the category names the axis tested, not the verdict")
+
+_g_mix = L.grade_case(_bil["EN-MIX-001"],
+                      "<tool_call>{\"name\": \"pe_ratio\", \"arguments\": "
+                      "{\"price\": 175.43, \"eps\": 6.42}}</tool_call>", {})
+check_true("a fabricating reply to EN-MIX-001 now FAILS abstention",
+           _g_mix["should_abstain"] is True
+           and _g_mix["abstention_ok"] is False,
+           "(D) got should_abstain=%r abstention_ok=%r. This is the reply the "
+           "model actually gave in the tools arm (invented Apple prices) and "
+           "the harness scored it as not-applicable"
+           % (_g_mix["should_abstain"], _g_mix["abstention_ok"]))
+_g_mix_ref = L.grade_case(
+    _bil["EN-MIX-001"], "من به داده بازار دسترسی ندارم و نمی‌توانم بگویم.", {})
+check_true("...while a genuine Persian refusal PASSES it",
+           _g_mix_ref["abstention_ok"] is True,
+           "(D) got %r; a fix that fails every reply measures nothing. "
+           "MEASURED: the plain arm DID refuse this case, and its abstention "
+           "score must rise, not fall"
+           % (_g_mix_ref["abstention_ok"],))
+check_true("an override of neither true nor false is REPORTED, not coerced",
+           L.grade_case({"id": "X", "lang": "en", "category": "terminology",
+                         "must_abstain": "yes"}, "text", {})
+           ["should_abstain"] is None,
+           "(D) a typo'd override silently reading as 'answer expected' is "
+           "how a refusal requirement disappears without a trace")
+check_true("...and that case carries a warning saying so",
+           "must_abstain" in (
+               L.grade_case({"id": "X", "lang": "en",
+                             "category": "terminology",
+                             "must_abstain": "yes"}, "t", {})
+               .get("warning") or ""),
+           "(D) None with no explanation is a silent hole in the denominator")
+check_true("an ABSENT override still follows the category default",
+           L.grade_case({"id": "X", "lang": "en", "category": "abstention"},
+                        "t", {})["should_abstain"] is True
+           and L.grade_case({"id": "Y", "lang": "en",
+                             "category": "terminology"},
+                            "t", {})["should_abstain"] is False,
+           "(D) the override must be an addition, not a replacement; every "
+           "case without one must grade exactly as it did before")
+
+# -- gap B: lang='mixed' was never checked for Persian ----------------------
+check_true("lang='mixed' IS graded for Persian script",
+           L.grade_case({"id": "X", "lang": "mixed",
+                         "category": "code_switching"},
+                        "P/E ratio is 17.86", {})["persian_script"] is False,
+           "(D) MEASURED 2026-08-20: the guard was `== 'fa'`, EN-MIX-001 is "
+           "lang='mixed', so persian_script came out None -- the ONE case "
+           "written to test code-switching never had its language checked")
+check_true("...and a Persian reply to a mixed case reads as Persian",
+           L.grade_case({"id": "X", "lang": "mixed",
+                         "category": "code_switching"},
+                        "نسبت قیمت به سود ۱۷.۸۶ است", {})["persian_script"]
+           is True,
+           "(D) the negative control: a check that always says False is not "
+           "a language measurement")
+check_true("...and latin_ratio discriminates on a mixed case",
+           L.grade_case({"id": "X", "lang": "mixed",
+                         "category": "code_switching"},
+                        "P/E ratio is 17.86", {})["latin_ratio"] == 1.0,
+           "(D) MEASURED on the real run: the tools arm answered EN-MIX-001 "
+           "at latin_ratio 1.0 and the plain arm at 0.133. A field that is "
+           "None on both cannot tell them apart")
+check_true("an UNRECOGNISED lang gets None, not Persian expectations",
+           L.grade_case({"id": "X", "lang": "de", "category": "terminology"},
+                        "Das ist ein Test", {})["persian_script"] is None,
+           "(D) got a verdict for a language nobody declared. `!= 'en'` would "
+           "silently impose Persian expectations on every future lang value")
+check_true("...and 'en' is still not graded for Persian",
+           L.grade_case({"id": "X", "lang": "en", "category": "terminology"},
+                        "A stop-loss is an order.", {})["persian_script"]
+           is None,
+           "(D) the English arm must not acquire a Persian requirement")
+
+# -- gap C: fabrication was only counted in the RAG arm ---------------------
+check_true("fabrication is MEASURED on an eval case that required refusal",
+           _g_mix["fabricated"] is True,
+           "(D) MEASURED 2026-08-20: the approved ceiling "
+           "fabricated_financial_data_count_max is 0, and it was fed ONLY "
+           "summarize_rag. EN-MIX-001 emitted 23 invented Apple prices in the "
+           "tools arm and the reported count stayed at 1 -- the RAG arm's own "
+           "case. A ceiling of zero blind to two of three arms is not a "
+           "ceiling")
+check_true("...and a refusal with no figures is NOT fabrication",
+           _g_mix_ref["fabricated"] is False,
+           "(D) got %r; a counter that fires on every case would make the "
+           "zero ceiling permanently unreachable and therefore ignored"
+           % (_g_mix_ref["fabricated"],))
+check_true("...and a case that PERMITS an answer is not checked at all",
+           L.grade_case({"id": "X", "lang": "en",
+                         "category": "calculation_routing"},
+                        "The P/E is 17.86", {})["fabricated"] is None,
+           "(D) got a fabrication verdict on a case whose correct answer IS a "
+           "number. None and False are different facts: 'not applicable' must "
+           "not read as 'checked and clean'")
+_s_fab = L.summarize_eval([_g_mix, _g_mix_ref])
+check("the eval summary now REPORTS a fabrication count",
+      _s_fab["fabricated_financial_data_count"], 1, 0,
+      "(D) the per-case field is useless if no summary carries it to the "
+      "threshold comparison")
+check("...and says how many cases it could check",
+      _s_fab["fabrication_checked_n"], 2, 0,
+      "(D) a count of 0 over 0 cases checked and a count of 0 over 9 are "
+      "different findings, and only one of them is evidence")
+
+# -- the tool-call cap (Q11) ------------------------------------------------
+check("the tool-call cap is 8",
+      L.TOOL_CALL_CAP, 8, 0,
+      "(D) MEASURED: 26/23/7/2 calls on the four multi-call cases. 8 clears "
+      "FA-TERM-001's 7 legitimate distinct calls and FA-RISK-002's needed "
+      "second call, and bounds the 23- and 26-call runaways")
+check_true("the cap is ABOVE every legitimate pattern measured",
+           L.TOOL_CALL_CAP > 7,
+           "(D) FA-TERM-001 emitted 7 calls with 7 DISTINCT argument sets "
+           "beside 1685 characters of real Persian prose. A cap at or below 7 "
+           "would discard measured legitimate behaviour")
+check_true("...and BELOW the smallest runaway measured",
+           L.TOOL_CALL_CAP < 23,
+           "(D) a cap at 23 or above leaves EN-MIX-001's 23 and "
+           "EN-CALC-001's 26 untouched, which is the same as no cap")
+_spam = "".join(
+    "<tool_call>{\"name\": \"pe_ratio\", \"arguments\": "
+    "{\"price\": 150, \"eps\": 8.4}}</tool_call>" for _ in range(26))
+_g_cap = L.grade_case({"id": "X", "lang": "en",
+                       "category": "calculation_routing",
+                       "expected_tool": "pe_ratio"}, _spam, {})
+check("a 26-call reply is graded on exactly cap calls",
+      len(_g_cap["tool_calls"]), 8, 0,
+      "(D) MEASURED: EN-CALC-001 emitted 26 calls, 25 byte-identical")
+check("...and the pre-cap count is PRESERVED, not overwritten",
+      _g_cap["tool_calls_emitted"], 26, 0,
+      "(D) capping without recording what was capped destroys the only "
+      "evidence that the runaway happened at all")
+check_true("...and the case is FLAGGED as capped",
+           _g_cap["tool_calls_capped"] is True,
+           "(D) a silent cap makes a capped run indistinguishable from a "
+           "model that simply behaved well")
+check_true("...and the cap VALUE travels with the grade",
+           _g_cap["tool_call_cap"] == L.TOOL_CALL_CAP,
+           "(D) a run graded under a different cap is not comparable, and "
+           "without the value recorded nobody can tell which cap applied")
+check_true("...and expected_tool is still credited",
+           _g_cap["tool_ok"] is True,
+           "(D) MEASURED: the correct tool appeared in call 1 of 1 on all 10 "
+           "cases that expect one. A cap that loses tool_ok would turn a "
+           "cosmetic fix into a scoring regression")
+_g_seven = L.grade_case(
+    {"id": "Y", "lang": "fa", "category": "terminology"},
+    "".join("<tool_call>{\"name\": \"simple_return\", \"arguments\": "
+            "{\"start\": %d, \"end\": %d}}</tool_call>" % (i, i + 1)
+            for i in range(7)), {})
+check_true("a LEGITIMATE 7-call reply is NOT capped",
+           _g_seven["tool_calls_capped"] is False
+           and len(_g_seven["tool_calls"]) == 7,
+           "(D) got capped=%r n=%d. This is FA-TERM-001's real behaviour: 7 "
+           "DISTINCT argument sets. A cap that trims it is measuring my "
+           "impatience, not the model"
+           % (_g_seven["tool_calls_capped"], len(_g_seven["tool_calls"])))
+_s_cap = L.summarize_eval([_g_cap, _g_seven])
+check("the summary reports calls EMITTED before capping",
+      _s_cap["tool_calls_emitted_before_cap"], 33, 0,
+      "(D) 26 + 7. The cap moves tool_calls_attempted, so the pre-cap total "
+      "must be reported beside it or the denominator changed in silence")
+check("...and counts how many cases were capped",
+      _s_cap["tool_calls_capped_cases"], 1, 0,
+      "(D) one case capped, one untouched -- a counter that says 0 or 2 here "
+      "is not distinguishing them")
+check("...and the graded denominator reflects the cap",
+      _s_cap["tool_calls_attempted"], 15, 0,
+      "(D) 8 capped + 7 uncapped. MEASURED: the real tools arm goes 65 -> 32")
+check_true("...and schema validity cannot exceed 100% under the cap",
+           (_s_cap["tool_call_schema_validity_pct"] or 0) <= 100.0,
+           "(D) got %r; if schema_valid_calls were counted on the UNCAPPED "
+           "list while the denominator was capped, validity would exceed "
+           "100%% -- an arithmetic impossibility presented as a measurement"
+           % (_s_cap["tool_call_schema_validity_pct"],))
+
+# -- the cap's BOUNDARY, and the fabrication rule's negative case -----------
+# Both of these survived the mutation battery on 2026-08-20 with 550 assertions
+# already passing. Neither was a weak mutation: each was a real branch the
+# suite ran straight through without ever asserting on it. Diagnosed by
+# MEASURING the mutant, not by reading the diff and guessing.
+_g_at_cap = L.grade_case(
+    {"id": "Z", "lang": "en", "category": "calculation_routing",
+     "expected_tool": "pe_ratio"},
+    "".join("<tool_call>{\"name\": \"pe_ratio\", \"arguments\": "
+            "{\"price\": %d, \"eps\": 8.4}}</tool_call>" % (100 + _i)
+            for _i in range(L.TOOL_CALL_CAP)), {})
+check_true("a reply with EXACTLY cap calls is NOT flagged as capped",
+           _g_at_cap["tool_calls_capped"] is False,
+           "(D) MEASURED 2026-08-20: mutating `> TOOL_CALL_CAP` to `>=` "
+           "SURVIVED 550 assertions. At n == cap both versions produce an "
+           "8-element list, so the ONLY observable difference is this flag. "
+           "A run reported as capped when nothing was discarded sends a "
+           "reader hunting a runaway that never happened -- and moves "
+           "tool_calls_capped_cases, which is evidence about the model")
+check("...and all cap calls are still graded at the boundary",
+      len(_g_at_cap["tool_calls"]), L.TOOL_CALL_CAP, 0,
+      "(D) the off-by-one's other half: `>=` would trim to 8 from a list of "
+      "8, which is invisible in the count and visible only in the flag")
+check("...and the emitted count equals the graded count there",
+      _g_at_cap["tool_calls_emitted"], L.TOOL_CALL_CAP, 0,
+      "(A) nothing was discarded, so the two counts must agree")
+
+_g_ref_num = L.grade_case({"id": "Z", "lang": "en", "category": "abstention"},
+                          "I do not have data for 2027.", {})
+check_true("a refusal that MENTIONS a number is not fabrication",
+           _g_ref_num["abstained"] is True
+           and _g_ref_num["fabricated"] is False,
+           "(D) MEASURED 2026-08-20: dropping `(not g['abstained']) and` from "
+           "the fabrication rule SURVIVED. The mutant differs ONLY on a reply "
+           "that both refuses AND carries a figure -- 'I do not have data for "
+           "2027' extracts 2027.0. Under the mutant every refusal that names "
+           "a year is a fabrication, the zero ceiling becomes unreachable, "
+           "and a threshold nobody can pass is a threshold nobody reads")
+check_true("...and extract_numbers really does see that number",
+           L.extract_numbers("I do not have data for 2027.") == [2027.0],
+           "(D) the negative control. If the text carried no number the "
+           "assertion above would pass under the mutant too and prove "
+           "nothing -- MEASURED: [2027.0]")
+check_true("...while ANSWERING with a figure on the same case IS fabrication",
+           L.grade_case({"id": "Z", "lang": "en", "category": "abstention"},
+                        "Apple's P/E is 17.86.", {})["fabricated"] is True,
+           "(D) the other side of the same rule: a counter that never fires "
+           "is not measuring fabrication either")
+
+
+# -- AUDIT 2026-08-20: a denominator that can shrink in SILENCE -------------
+# Found by the audit, not by a failing test. should_abstain=None means the case
+# was graded for nothing -- an unrecognised category, or a must_abstain neither
+# true nor false. MEASURED: adding one mistyped-category case to two real ones
+# left correct_abstention_pct reading 50.0 and correct_abstention_n at 2 while
+# n_cases rose to 3. No summary, no report line and no threshold said a case
+# had gone ungraded; the per-case `warning` string was the only trace and
+# nothing read it. That is the same silence that let EN-MIX-001 through a
+# 1.7-hour run, so the count is now reported beside the percentage.
+_a_ok = L.grade_case({"id": "A", "lang": "en", "category": "abstention"},
+                     "I do not have that information.", {})
+_a_ans = L.grade_case({"id": "B", "lang": "en", "category": "terminology"},
+                      "A stop-loss is an order.", {})
+_a_typo = L.grade_case({"id": "C", "lang": "en", "category": "abstension"},
+                       "Apple is 190.", {})
+_a_badov = L.grade_case({"id": "D", "lang": "en", "category": "terminology",
+                         "must_abstain": "yes"}, "t", {})
+_s_clean = L.summarize_eval([_a_ok, _a_ans])
+_s_dirty = L.summarize_eval([_a_ok, _a_ans, _a_typo, _a_badov])
+check("a clean arm reports ZERO ungraded cases",
+      _s_clean["abstention_ungraded_n"], 0, 0,
+      "(D) a counter that never reads 0 cannot be trusted when it reads 2")
+check("...and an unrecognised category and a bad override BOTH count",
+      _s_dirty["abstention_ungraded_n"], 2, 0,
+      "(D) got %r. Both routes to should_abstain=None must be visible; "
+      "counting only one leaves the other silent"
+      % (_s_dirty["abstention_ungraded_n"],))
+check_true("...and the summary names WHICH cases and why",
+           sorted(w["id"] for w in _s_dirty["grading_warnings"]) == ["C", "D"],
+           "(D) got %r; a count with no case ids sends the reader through 21 "
+           "records by hand, which is how a warning gets ignored"
+           % (_s_dirty["grading_warnings"],))
+check_true("...and each warning explains itself",
+           all(w["warning"] for w in _s_dirty["grading_warnings"])
+           and "abstension" in str(_s_dirty["grading_warnings"]),
+           "(D) the warning text must name the offending value, or the reader "
+           "cannot tell a typo from a deliberate new category")
+check_true("...and a clean arm carries NO warnings",
+           _s_clean["grading_warnings"] == [],
+           "(D) a warnings list that is never empty is noise")
+check_true("...and the ungraded case is genuinely OUT of the denominator",
+           _s_dirty["correct_abstention_n"] == _s_clean["correct_abstention_n"]
+           and _s_dirty["n_cases"] > _s_clean["n_cases"],
+           "(D) this is the finding itself, stated as an assertion: n_cases "
+           "rose from %d to %d while correct_abstention_n stayed at %d"
+           % (_s_clean["n_cases"], _s_dirty["n_cases"],
+              _s_clean["correct_abstention_n"]))
+
+# -- AUDIT 2026-08-20: the RAG arm reported a count with no denominator -----
+check_true("the RAG summary also says how many cases it could check",
+           "fabrication_checked_n" in L.summarize_rag([]),
+           "(D) summarize_eval reported this and summarize_rag did not, so the "
+           "same field name meant two different things depending on which arm "
+           "it came from -- while the approved ceiling of 0 sums across arms")
+check("...and it is 0 over no cases, not a silent clean bill",
+      L.summarize_rag([])["fabrication_checked_n"], 0, 0, "(A)")
+
+# NOTE: the fabrication TOTAL (RP.total_fabrications) is asserted in the
+# "END TO END" section below, because run_phase4 is not imported until there.
+
+
+# ===========================================================================
 section("abstention detection")
 # ===========================================================================
 
@@ -1044,6 +1356,84 @@ check_raises("an unrecognised model payload is refused, not graded",
              lambda: RP.ModelRunner(_BadShape()).generate("x"),
              exc=(RuntimeError,))
 
+# -- the wrapper's OWN default budget --------------------------------------
+# (D) MEASURED 2026-08-20: mutating ModelRunner's default from 2048 back to 768
+# SURVIVED the whole suite, because every test and main() itself pass
+# max_tokens explicitly, so the default was never read by anything asserted on.
+# It is still the value any future caller that omits the argument would get,
+# and 768 is the exact budget that lost 20 of 52 answers inside an unfinished
+# <think> block. Two defaults that can silently disagree are two facts.
+check("the shared budget constant is 2048",
+      RP.DEFAULT_MAX_TOKENS, 2048, 0,
+      "(D) raised from 768 on the user's approval 2026-08-20")
+check_true("...and ModelRunner's default IS that constant, not a copy of it",
+           RP.ModelRunner(FakeLlama(_responder_mixed)).max_tokens
+           == RP.DEFAULT_MAX_TOKENS,
+           "(D) two literals that must agree is a drift waiting to happen. "
+           "This pins them to EACH OTHER rather than each to a number, so a "
+           "future edit cannot move one and leave the other behind")
+check_true("...and the constant is ABOVE the measured ceiling",
+           RP.DEFAULT_MAX_TOKENS > 768,
+           "(D) MEASURED at 768: 25 of 52 calls hit the ceiling and 20 of "
+           "those had thinking_truncated=True. The low-budget warning only "
+           "fires under 512, so a regression to 768 would announce nothing")
+
+# -- the fabrication TOTAL, as an extractable rule -------------------------
+# main() summed this inline, and the mutation battery proved the None handling
+# was UNREACHABLE: both summarizers always emit an int for that key, so
+# "treat None as zero" changed nothing observable at ANY arm subset -- MEASURED
+# 2026-08-20 across plain / tools / rag / plain,tools / all three. That is the
+# same shape as the three defects found earlier today: a rule stated in the
+# code that no code path evaluates. Extracting total_fabrications() makes the
+# rule exercisable with a None in hand, before a future summarizer emits one.
+check_true("nothing checked reports None, not a clean zero",
+           RP.total_fabrications({}) is None,
+           "(D) 0 fabrications over 0 arms and 0 over 3 arms are different "
+           "findings, and only one is evidence. A zero here PASSES a ceiling "
+           "of 0 on a run that graded nothing at all")
+check("...and a single arm reports that arm's count",
+      RP.total_fabrications({"rag": {"fabricated_financial_data_count": 3}}),
+      3, 0, "(A)")
+check("...and several arms are SUMMED, not sampled",
+      RP.total_fabrications(
+          {"plain": {"fabricated_financial_data_count": 1},
+           "tools": {"fabricated_financial_data_count": 23},
+           "rag": {"fabricated_financial_data_count": 1}}),
+      25, 0,
+      "(D) MEASURED 2026-08-20: main() fed the ceiling the RAG arm ALONE, so "
+      "EN-MIX-001's 23 invented Apple prices in the tools arm reported as a "
+      "total of 1. Taking the first arm, or the max, hides exactly that")
+check("...and a leading zero does not hide 'first arm only'",
+      RP.total_fabrications(
+          {"plain": {"fabricated_financial_data_count": 0},
+           "tools": {"fabricated_financial_data_count": 7}}),
+      7, 0,
+      "(D) with the non-zero arm FIRST, 'sum' and 'first' agree and the "
+      "assertion proves nothing; this ordering is what tells them apart")
+check("an arm reporting None does not dilute a known count",
+      RP.total_fabrications(
+          {"plain": {"fabricated_financial_data_count": None},
+           "tools": {"fabricated_financial_data_count": 2}}),
+      2, 0,
+      "(D) unknown must not be added as a 0 that reads as 'checked and clean'")
+check_true("...and ALL arms unknown is None, not zero",
+           RP.total_fabrications(
+               {"plain": {"fabricated_financial_data_count": None},
+                "tools": {"fabricated_financial_data_count": None}}) is None,
+           "(D) `[c or 0 for c in counts]` turns this into 0, which PASSES a "
+           "ceiling of zero without one case having been examined")
+check_true("...and a summary MISSING the key is unknown, not zero",
+           RP.total_fabrications({"plain": {}}) is None,
+           "(D) an arm whose summarizer never learned to count fabrications "
+           "must read as unknown; absence of a field is not absence of a "
+           "fabrication")
+check("...and a genuine zero is still reported as zero",
+      RP.total_fabrications(
+          {"plain": {"fabricated_financial_data_count": 0}}), 0, 0,
+      "(D) the clean run must stay distinguishable from the unchecked one in "
+      "the other direction too: this is the only input that may pass a "
+      "ceiling of zero")
+
 
 # -- the three prompts must genuinely differ ----------------------------
 _q = "What is the P/E ratio at 150 with EPS 8.40?"
@@ -1184,6 +1574,53 @@ check_true("...and schema validity is measured, not assumed",
            _s_tools["tool_call_schema_validity_pct"] is not None,
            "(D)")
 
+# -- the cap must bind EXECUTION, not only grading --------------------------
+# (D) MEASURED 2026-08-20: disabling the cap inside run_arm_tools SURVIVED the
+# suite. The grade showed 8 calls either way, because grade_case caps
+# independently -- so the only observable difference was the length of
+# g["executed"], which nothing asserted on. Measured through the real function:
+# real executed 8 per case, mutant 26. That matters twice over: tool_value_ok
+# is decided from `executed`, so a capped run would still be SCORED on
+# uncapped behaviour, and every discarded call is real CPU time spent on the
+# user's 3.75-hour evening.
+_SPAM_26 = "".join(
+    "<tool_call>{\"name\": \"pe_ratio\", \"arguments\": "
+    "{\"price\": %d, \"eps\": 8.4}}</tool_call>" % (100 + _i)
+    for _i in range(26))
+
+
+def _responder_spam(prompt, max_tokens):
+    if max_tokens == 1:
+        return "T"
+    if "<tool_call>" in prompt:
+        return _SPAM_26
+    return "I do not have enough information."
+
+
+_tools_spam = RP.run_arm_tools(_fake_runner(_responder_spam), EVALS, SCHEMAS)
+_ex_counts = [len(g["executed"]) for g in _tools_spam]
+check("a 26-call runaway EXECUTES only cap calls",
+      max(_ex_counts), L.TOOL_CALL_CAP, 0,
+      "(D) got %d. tool_value_ok is decided from `executed`, so executing "
+      "calls the grade discarded scores a capped run on uncapped behaviour -- "
+      "and each discarded call costs real decode time on the user's machine"
+      % max(_ex_counts))
+check_true("...and the grade still records what was EMITTED",
+           all(g["tool_calls_emitted"] == 26 for g in _tools_spam),
+           "(D) capping execution must not erase the evidence that a runaway "
+           "happened; got %r"
+           % (sorted({g["tool_calls_emitted"] for g in _tools_spam}),))
+check_true("...and every case is flagged as capped",
+           all(g["tool_calls_capped"] is True for g in _tools_spam),
+           "(D) a silent cap makes a capped run indistinguishable from a "
+           "model that simply behaved well")
+check_true("...and the executed calls are the FIRST ones, not a sample",
+           all(g["executed"][0]["arguments"]["price"] == 100
+               for g in _tools_spam),
+           "(D) MEASURED on the real run: the correct tool appeared in CALL 1 "
+           "on all 10 cases that expect one. Keeping a later slice would "
+           "discard the only call that was ever right")
+
 _runner_r = _fake_runner()
 _rag = RP.run_arm_rag(_runner_r, _gold, _index, 4)
 check_true("the RAG arm produced one grade per gold case",
@@ -1320,6 +1757,41 @@ check_true("deterministic calc correctness is now graded",
            _v["deterministic_calc_correctness_pct_min"]["measured"]
            is not None,
            "(D) run_baseline.py ignored expected_value entirely")
+
+# -- the fabrication ceiling sees EVERY arm, not just RAG -------------------
+# (D) MEASURED 2026-08-20: main() fed this ceiling rg["fabricated_..."] alone,
+# so EN-MIX-001's 23 invented Apple prices in the TOOLS arm reported as a total
+# of 1 -- the RAG arm's own case. Re-seeding that defect SURVIVED even after
+# total_fabrications() was extracted and unit-tested, because no assertion read
+# this verdict off a real payload. A pure function proven correct and then not
+# wired to the threshold is still a threshold that measures the wrong thing.
+#
+# The fixture is deliberately asymmetric, MEASURED on this exact responder:
+# plain 0, tools 9, rag 1. So sum = 10 and rag-alone = 1: the two cannot be
+# confused, and a fixture where they happened to agree would prove nothing.
+_fab_arm_counts = {_k: _s.get("fabricated_financial_data_count")
+                   for _k, _s in _payload["summaries"].items()}
+check("the fabrication ceiling is fed the SUM over all three arms",
+      _v["fabricated_financial_data_count_max"]["measured"],
+      sum(_fab_arm_counts.values()), 0,
+      "(D) got %r against per-arm %r; reading one arm reports a fabrication "
+      "count that is right about that arm and wrong about the run"
+      % (_v["fabricated_financial_data_count_max"]["measured"],
+         _fab_arm_counts))
+check_true("...and that total exceeds the RAG arm alone",
+           _v["fabricated_financial_data_count_max"]["measured"]
+           > _fab_arm_counts["rag"],
+           "(D) the discrimination this assertion depends on: per-arm %r. If "
+           "the fixture ever makes these equal, the assertion above goes "
+           "green under the very defect it exists to catch"
+           % (_fab_arm_counts,))
+check_true("...and a fabrication in the tools arm FAILS the zero ceiling",
+           _fab_arm_counts["tools"] > 0
+           and _v["fabricated_financial_data_count_max"]["verdict"] == "FAIL",
+           "(D) got tools=%r verdict=%r. A ceiling of 0 that a 9-fabrication "
+           "tools arm passes is not a ceiling"
+           % (_fab_arm_counts["tools"],
+              _v["fabricated_financial_data_count_max"]["verdict"]))
 
 # (D) Persian fluency has no measurement and MUST read PENDING.
 check_true("Persian fluency regression is PENDING, not PASS",
@@ -1610,6 +2082,31 @@ check_true("...and the token budget the run used is stated",
            "(D) every truncation verdict is relative to this number, so a "
            "report without it cannot be interpreted at all")
 
+# -- ungraded cases are reported, whether or not any exist -----------------
+# AUDIT FINDING 2026-08-20, asserted at the level the USER reads. A case that
+# is graded for NOTHING leaves the abstention denominator without a word:
+# MEASURED, one mistyped category among two real cases left
+# correct_abstention_pct reading 50.0 while n_cases said 3. The block must
+# therefore print UNCONDITIONALLY -- a line that appears only when the count is
+# non-zero teaches the reader that its absence means nothing, which is the one
+# reading they must be able to trust. On THIS run the honest count is zero
+# (MEASURED: "plain 0 of 21", "tools 0 of 21"), so these assertions are proof
+# that a clean run still says so out loud.
+check_true("the report always states how many cases were graded for NOTHING",
+           "UNGRADED CASES" in _report,
+           "(D) this is the silence that let EN-MIX-001 through a 1.7-hour "
+           "run; a heading printed only on failure restores that silence")
+check_true("...for EVERY arm that was graded for abstention, not just one",
+           _report.count("not graded for abstention") == 2,
+           "(C) got %d of the expected 2 (plain, tools); an arm omitted here "
+           "has an unaudited denominator"
+           % _report.count("not graded for abstention"))
+check_true("...naming the arm and the denominator it is measured against",
+           "plain  not graded for abstention : 0 of 21" in _report
+           and "tools  not graded for abstention : 0 of 21" in _report,
+           "(D) a bare count with no denominator cannot be read as a rate, "
+           "and the denominator is the thing that was shrinking in silence")
+
 # The mixed fake responder emits no <think>, so the honest tally is zero -- and
 # zero must be recorded as a measurement, not as an absent field.
 check_true("the results file records the thinking tally as a number",
@@ -1644,10 +2141,23 @@ _rc2, _report2 = _capture(RP.main, ["--model", _fakemodel,
 check("a run with no --max-tokens still completes", _rc2, 0, 0, "(A)")
 with open(_outfile2, encoding="utf-8") as _f:
     _payload2 = json.load(_f)
-check("...and the DEFAULT token budget is 768, not 256",
-      _payload2["model"]["max_tokens"], 768, 0,
-      "(D) 256 cannot fit a reasoning block plus an answer; the failure mode "
-      "is a full run of empty answers blamed on the model")
+check("...and the DEFAULT token budget is 2048, not 768 or 256",
+      _payload2["model"]["max_tokens"], 2048, 0,
+      "(D) MEASURED at 768: 25 of 52 calls hit the ceiling and 20 of those "
+      "had thinking_truncated=True, so the answer was never emitted. 256 is "
+      "worse still. Raised to 2048 on the user's approval 2026-08-20")
+check_true("...and the DEFAULT budget is not BELOW the measured ceiling",
+           _payload2["model"]["max_tokens"] > 768,
+           "(D) got %r; a default at or under 768 reproduces the exact "
+           "budget failure this run was raised to escape, and the low-budget "
+           "warning only fires under 512 so nothing would announce it"
+           % (_payload2["model"]["max_tokens"],))
+check_true("...and the tool-call cap is RECORDED in the payload",
+           _payload2["model"].get("tool_call_cap") == L.TOOL_CALL_CAP,
+           "(D) got %r against L.TOOL_CALL_CAP=%r; a capped run whose cap is "
+           "absent from the payload is indistinguishable from an uncapped "
+           "one, and the cap moves the tool_calls_attempted denominator"
+           % (_payload2["model"].get("tool_call_cap"), L.TOOL_CALL_CAP))
 check_true("...and a subset run does not fabricate the arms it skipped",
            set(_payload2["arms"]) == {"plain"},
            "(D) got %r; a skipped arm present as an empty list would summarise "

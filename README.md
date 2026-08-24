@@ -85,8 +85,8 @@ therefore builds the instrument and the user takes the measurement (D-0044).
 
 **No figure for tok/s, peak RSS, citation correctness or Persian fluency is
 recorded for this project.** `phase_4.measurements_recorded` is `null` on
-purpose. The harness that will produce them is built and verified — **517
-assertions, 188 seeded mutations, 188 killed, 0 survived, 0 skipped**.
+purpose. The harness that will produce them is built and verified — **585
+assertions, 228 seeded mutations, 228 killed, 0 survived, 0 skipped**.
 
 ### The first real run happened, and mostly measured my own bugs (D-0053)
 
@@ -185,7 +185,7 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Item | Status |
 |---|---|
 | Calculation engine (84 fns, 5 families) | **VERIFIED** — 56/56 mutations killed |
-| Financial RAG pipeline (9 modules) | **VERIFIED** — 194 assertions, 80 mutations, 0 survivors |
+| Financial RAG pipeline (9 modules) | **VERIFIED** — 224 assertions, 99 mutations, 0 survivors |
 | Source access terms | **ENFORCED** — `check_access()` gates every ingestion entry point |
 | EDGAR period-mixing / restatement hazards | **MEASURED** on live data (117 facts, 46 restated) |
 | Persian numeral parsing | **VERIFIED** by execution |
@@ -245,9 +245,10 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**2,704 assertions pass across 16 suites. That is not the claim.** A passing
-suite proves nothing on its own. The claim is **880 seeded defects across 11
-batteries, 875 killed, 5 documented equivalents, 0 survivors, 0 skips** — every guard was deliberately broken and the
+**2,772 assertions pass across 16 suites, and 0 are SKIPPED. That is not the
+claim.** A passing suite proves nothing on its own. The claim is **920 seeded
+defects across 11 batteries, 915 killed, 5 documented equivalents, 0 survivors,
+0 skips** — every guard was deliberately broken and the
 suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
 0 crashed.**
 
@@ -258,6 +259,11 @@ The batteries have repeatedly found tests that could not fail:
   the missing factor equals 1.
 - `check_raises()` defaulted to `Exception`, accepting a **crash** as a refusal.
   **106 of 113** assertions across all suites relied on that default (D-0036).
+- A **SKIPPED** assertion reported nothing and failed nothing. With the Qwen3
+  tokenizer absent, `test_selector.py` skipped its one rendered-cost check and
+  the selector battery reported **2 survivors** — an under-predicting token
+  budget, which authorises a prompt that then overflows the context. Supplying
+  the real tokenizer took it to 15/15 killed (D-0062).
 - Asserting rank order could not distinguish a reranking **weight** from the
   sort's secondary **tie-break** key.
 - An access gate was tested only on the code path that re-checks it downstream,
@@ -343,8 +349,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 2,704 assertions across 16 suites + 2 probes (~6 s)
-./tests/run_all.sh --mutate     # + 880 seeded defects across 11 batteries (~185 s)
+./tests/run_all.sh              # 2,772 assertions across 16 suites + 7 probes (~6 s)
+./tests/run_all.sh --mutate     # + 920 seeded defects across 11 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -366,8 +372,10 @@ any interrupted run:
 git diff --stat HEAD -- scripts/ tests/ src/    # must be empty before you believe a verdict
 ```
 
-The token-cost check in `test_tools.py` needs the real tokenizer; without it
-that one assertion SKIPs rather than guessing:
+The token-cost checks in `test_tools.py` and `test_selector.py` need the real
+tokenizer; without it they SKIP rather than guessing. **Fetch these before you
+believe a green run** — a skipped assertion protects nothing, and this exact
+skip was measured hiding two mutation survivors (D-0062):
 
 ```bash
 curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer.json \
@@ -375,6 +383,18 @@ curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokeniz
 curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer_config.json \
   -o /tmp/qwen3_tokcfg.json
 ```
+
+`test_rag.py` likewise gates 11 assertions on a live EDGAR payload. Public, free,
+and it requires a contact-bearing User-Agent (403 without one):
+
+```bash
+curl -sS -H "User-Agent: marfin-llm/0.1 (contact@example.com)" \
+  "https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax.json" \
+  -o /tmp/xbrl.json
+```
+
+`run_all.sh` now counts skips and prints the total unconditionally, including the
+zero. If it is not zero, the run is not green no matter what the last line says.
 
 ### Running Phase 4 (on the target machine, not here)
 
@@ -397,7 +417,7 @@ pin. The wheel is tagged `py3-none`, contains zero `.pyd` files and binds via
 3.12 and 3.13. Visual Studio is **not** required.
 
 Defaults are already correct for the target (`--ctx 16384`, `--threads 6` for the
-i5-12400's six physical cores, `--max-tokens 768`). It writes
+i5-12400's six physical cores, `--max-tokens 2048`). It writes
 `evals/results/phase4_run.json`; that file is the deliverable.
 
 ### The chosen model thinks by default, and that broke the safety grader (D-0052)
@@ -430,7 +450,10 @@ each grading call site, so no consumer can forget it; an **unterminated**
 `<think>` returns an empty answer rather than the reasoning or a half sentence,
 and is counted and reported separately as a budget failure. The raw text is kept
 in `raw_output` so a human can audit the split. The default budget rose 256 →
-768. The run always prints the tally, including when it is zero:
+768 → **2048** (D-0057; the 768 run lost 20 of 52 answers). It lives in a single
+`DEFAULT_MAX_TOKENS` constant that both `ModelRunner` and the argparse default
+read, because lowering one of the two former copies SURVIVED the entire suite.
+The run always prints the tally, including when it is zero:
 
 ```
 REASONING MODE  (thinking)

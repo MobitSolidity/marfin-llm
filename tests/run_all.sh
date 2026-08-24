@@ -9,6 +9,7 @@ find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null
 
 fail=0
 total_pass=0
+total_skip=0
 echo "=============================================================="
 echo "DETERMINISTIC CALCULATION VERIFICATION SUITE"
 echo "=============================================================="
@@ -41,6 +42,16 @@ for t in $SUITES; do
   echo "$out" | grep "^RESULT"
   n=$(echo "$out" | sed -n 's/^RESULT: \([0-9]*\) passed.*/\1/p')
   total_pass=$((total_pass + ${n:-0}))
+  # AUDIT FINDING 2026-08-21. A SKIP was printed here but changed NOTHING: the
+  # run still ended "ALL GREEN". MEASURED consequence: with the Qwen3 tokenizer
+  # absent, test_selector.py skipped its one rendered-cost assertion and the
+  # selector battery reported 2 SURVIVORS ("family token cost understated",
+  # "estimate under-predicts") -- an under-predicting token budget, which
+  # authorises a prompt that then overflows the context. Supplying the real
+  # tokenizer took both to 15/15 killed. So a skipped assertion is not a
+  # cosmetic gap; it was the whole protection. Counted and surfaced from here on.
+  s=$(echo "$out" | grep -c "^  SKIP")
+  total_skip=$((total_skip + s))
   if [ $status -ne 0 ]; then
     fail=1
   fi
@@ -52,6 +63,14 @@ echo
 # running entirely.
 n_suites=$(echo $SUITES | wc -w)
 echo "  TOTAL: $total_pass assertions passed across $n_suites suites"
+# Printed UNCONDITIONALLY, including the zero. A line that appears only when it
+# is non-zero teaches the reader that its absence means nothing.
+echo "  SKIPPED: $total_skip assertions did not run"
+if [ $total_skip -ne 0 ]; then
+  echo "  WARNING: a skipped assertion protects nothing. This suite has already"
+  echo "           hidden 2 mutation survivors behind one skip. Fetch the real"
+  echo "           tokenizer (see README) and re-run before trusting a green run."
+fi
 
 # The TradingView wall is the one thing in this project whose failure mode is
 # legal rather than numerical, so its adversarial probe runs on every pass rather

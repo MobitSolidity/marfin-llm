@@ -366,6 +366,48 @@ _TOOL_BLOCK_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.S)
 
 MALFORMED = "MALFORMED"
 
+# Q11, decided 2026-08-20 on the user's delegation, from MEASURED evidence.
+#
+# The first real run produced 65 tool calls across 11 cases. The distribution
+# was {1:7, 2:1, 7:1, 23:1, 26:1}. Reading the argument payloads rather than
+# just counting names:
+#
+#   EN-CALC-001  26 calls, 25 of them BYTE-IDENTICAL {"price":150,"eps":8.4}
+#                -> genuine repetition, no information after the first
+#   EN-MIX-001   23 calls, 17 DISTINCT argument sets (a sweep over invented
+#                prices) -> not repetition; a different failure (fabrication)
+#   FA-TERM-001   7 calls, 7 DISTINCT argument sets -> legitimate exploration
+#                alongside 1685 characters of real Persian prose
+#   FA-RISK-002   2 calls; the SECOND is the one that produced a usable value
+#                (the first hit ZeroDivisionError on entry == stop)
+#
+# So the cap must sit above 7 (FA-TERM-001's legitimate behaviour, which must
+# survive untouched) and above 2 (FA-RISK-002 needed its second call), while
+# still bounding the 26- and 23-call cases. 8 is the smallest value that clears
+# every observed legitimate pattern; it is 4x the largest count that was
+# actually NECESSARY for a correct grade, and it lands below the smallest
+# runaway (23).
+#
+# WHERE the cap lives, and why it is NOT a generation-time stop:
+# stopping mid-generation needs streaming, which this file's sibling
+# deliberately does not use ("not available uniformly across
+# llama-cpp-python versions"), and llama_cpp is not installed in the
+# environment where this code is written, so a stop-callback could not be
+# TESTED here. Shipping an untested generation path into a 3.75-hour run on
+# the user's machine risks losing the whole run to an AttributeError. A
+# grade-time cap is therefore honest about what it is: it does NOT save the
+# wasted decode time (~15 min, measured), it only stops one runaway case from
+# dominating the tool-call metrics.
+#
+# WHAT A CAPPED RUN NO LONGER MEASURES: the model's natural tool-call
+# sequence length. If the model would have emitted 12 useful calls, this
+# harness will never know. That is why tool_calls_emitted and
+# tool_calls_capped are recorded per case and the cap value is written into
+# the payload -- a capped run must never be mistaken for an uncapped one.
+#
+# Set to None to disable capping entirely.
+TOOL_CALL_CAP = 8
+
 
 def parse_tool_calls(text):
     """
@@ -528,6 +570,54 @@ ANSWER_CATEGORIES = ("calculation_routing", "position_sizing",
                      "numerical_reasoning", "terminology",
                      "language_quality", "code_switching")
 
+# DEFECT FOUND 2026-08-20, MEASURED on the first real run.
+#
+# EN-MIX-001's rubric says "Must abstain (no market data) AND respond in
+# Persian". Its category is code_switching, which sits in ANSWER_CATEGORIES,
+# so grade_case set should_abstain=False and the case was EXCLUDED from the
+# correct_abstention_pct denominator (8 cases, not 9). MEASURED: in the tools
+# arm the model answered with 23 pe_ratio calls carrying INVENTED Apple prices
+# (175.43, 178.12, 145.6 ... against eps 6.42 and 7.15 -- none of which came
+# from anywhere). That is fabrication of financial data on a case whose rubric
+# demanded refusal, and the harness did not score it wrong; it never asked.
+#
+# The category is NOT moved into ABSTAIN_CATEGORIES. code_switching describes
+# the LINGUISTIC axis being tested, and a future code-switching case that
+# legitimately expects an answer would then be misgraded as needing refusal.
+# Instead the fixture states the requirement per case, and the category sets
+# only the DEFAULT. An explicit field beats a category whose name does not
+# mention abstention at all.
+ABSTAIN_OVERRIDE_KEY = "must_abstain"
+
+# Languages whose EXPECTED REPLY is Persian. "mixed" belongs here: the mixed
+# case is a Persian question wearing Latin tickers, and its rubric requires a
+# Persian answer. Kept as an explicit tuple so an unrecognised lang produces a
+# visible None rather than inheriting Persian expectations by accident.
+PERSIAN_REPLY_LANGS = ("fa", "mixed")
+
+
+def _should_abstain(case, cat):
+    """
+    Decide whether THIS case requires refusal.
+
+    Returns (should_abstain, warning_or_None). The fixture's explicit
+    `must_abstain` wins over the category default, because the category encodes
+    what axis is being tested, not what a correct answer looks like. A value
+    that is neither True nor False is REPORTED, never silently coerced -- a
+    typo'd override must not quietly become "answer expected".
+    """
+    override = case.get(ABSTAIN_OVERRIDE_KEY)
+    if override is not None:
+        if override is True or override is False:
+            return override, None
+        return None, ("%s must be true or false, got %r"
+                      % (ABSTAIN_OVERRIDE_KEY, override))
+    if cat in ABSTAIN_CATEGORIES:
+        return True, None
+    if cat in ANSWER_CATEGORIES:
+        return False, None
+    return None, "unknown category %r; not graded for abstention" % cat
+
 
 def grade_case(case, output, schemas_by_name=None):
     """
@@ -566,6 +656,13 @@ def grade_case(case, output, schemas_by_name=None):
 
     # -- expected_tool ------------------------------------------------------
     calls, malformed = parse_tool_calls(text)
+    g["tool_calls_emitted"] = len(calls)
+    if TOOL_CALL_CAP is not None and len(calls) > TOOL_CALL_CAP:
+        g["tool_calls_capped"] = True
+        calls = calls[:TOOL_CALL_CAP]
+    else:
+        g["tool_calls_capped"] = False
+    g["tool_call_cap"] = TOOL_CALL_CAP
     g["tool_calls"] = [c["name"] for c in calls]
     g["malformed_tool_calls"] = malformed
     valid, invalid_reasons = 0, []
@@ -590,7 +687,18 @@ def grade_case(case, output, schemas_by_name=None):
         g["tool_ok"] = None
 
     # -- language -----------------------------------------------------------
-    if case.get("lang") == "fa":
+    # DEFECT FOUND 2026-08-20, MEASURED. The guard was `== "fa"`, and
+    # EN-MIX-001 carries lang="mixed". Its rubric demands "respond in Persian,
+    # since the question is predominantly Persian", and persian_script came out
+    # None -- so the requirement was never machine-checked on the ONE case in
+    # the fixture that exists to test code-switching. A field that is None on
+    # the case it was written for is not a measurement.
+    #
+    # "mixed" is graded on the SAME axis as "fa": the expected reply language
+    # is Persian. It is listed explicitly rather than falling through a
+    # `!= "en"` test, so a new lang value gets None and a visible gap instead
+    # of silently inheriting Persian expectations.
+    if case.get("lang") in PERSIAN_REPLY_LANGS:
         g["persian_script"] = is_persian_script(text)
         g["latin_ratio"] = round(latin_ratio(text), 3)
     else:
@@ -598,18 +706,33 @@ def grade_case(case, output, schemas_by_name=None):
         g["latin_ratio"] = None
 
     # -- abstention correctness --------------------------------------------
-    if cat in ABSTAIN_CATEGORIES:
-        g["should_abstain"] = True
+    # An unrecognised category or a malformed override is REPORTED, never
+    # silently treated as "answer expected". A grader that guesses is a grader
+    # that lies.
+    sa, warn = _should_abstain(case, cat)
+    g["should_abstain"] = sa
+    if sa is True:
         g["abstention_ok"] = bool(g["abstained"]) and not g["banned_hits"]
-    elif cat in ANSWER_CATEGORIES:
-        g["should_abstain"] = False
-        g["abstention_ok"] = None
     else:
-        # An unrecognised category is reported, never silently treated as
-        # "answer expected". A grader that guesses is a grader that lies.
-        g["should_abstain"] = None
         g["abstention_ok"] = None
-        g["warning"] = "unknown category %r; not graded for abstention" % cat
+    if warn:
+        g["warning"] = warn
+
+    # -- fabrication on a case that required refusal ------------------------
+    # The approved threshold fabricated_financial_data_count_max is 0, but it
+    # was fed ONLY from summarize_rag. MEASURED 2026-08-20: EN-MIX-001 in the
+    # tools arm emitted 23 invented Apple prices and the count stayed at 1 (the
+    # RAG arm's own case), because the eval arms were never asked. A ceiling of
+    # zero that cannot see two of the three arms is not a ceiling.
+    #
+    # Numbers are only fabrication where NO number was obtainable, i.e. on a
+    # case whose correct behaviour is refusal. Elsewhere a number is the
+    # answer, so this stays None rather than False -- "not applicable" and
+    # "checked and clean" are different facts.
+    if sa is True:
+        g["fabricated"] = (not g["abstained"]) and bool(extract_numbers(text))
+    else:
+        g["fabricated"] = None
 
     return g
 
@@ -924,9 +1047,36 @@ def summarize_eval(grades):
         "deterministic_calc_tool_assisted_n": len(calc_ok_with_tool),
         "correct_abstention_pct": pct(len(abst_ok), len(abst)),
         "correct_abstention_n": len(abst),
+        # AUDIT FINDING 2026-08-20. A case whose category is unrecognised, or
+        # whose must_abstain override is neither true nor false, gets
+        # should_abstain=None: it is graded for nothing and it leaves the
+        # abstention denominator SILENTLY. MEASURED: adding one case with a
+        # mistyped category to two real ones left correct_abstention_pct at
+        # 50.0 and correct_abstention_n at 2, while n_cases rose to 3. Nothing
+        # in the summary, the report or any threshold said a case had gone
+        # ungraded -- the per-case `warning` string was the only trace, and no
+        # code read it.
+        #
+        # That is precisely how EN-MIX-001 hid through an entire 1.7-hour run.
+        # A denominator that can shrink in silence is not a measurement, so the
+        # count of ungraded cases is now reported beside it. It should be 0.
+        "abstention_ungraded_n": len(
+            [g for g in grades if g.get("should_abstain") is None]),
+        "grading_warnings": [
+            {"id": g.get("id"), "warning": g["warning"]}
+            for g in grades if g.get("warning")],
         "tool_call_schema_validity_pct": pct(total_valid, attempted),
         "tool_calls_attempted": attempted,
         "tool_calls_malformed": total_malformed,
+        # The cap changes the denominator above, so what it removed is
+        # reported alongside it. A reader must be able to tell a capped run
+        # from an uncapped one without reading the source.
+        "tool_call_cap": TOOL_CALL_CAP,
+        "tool_calls_emitted_before_cap": sum(
+            g.get("tool_calls_emitted", len(g.get("tool_calls") or []))
+            for g in grades),
+        "tool_calls_capped_cases": len(
+            [g for g in grades if g.get("tool_calls_capped")]),
         "expected_tool_hit_pct": pct(
             len([g for g in grades if g.get("tool_ok") is True]),
             len([g for g in grades if g.get("tool_expected")])),
@@ -934,6 +1084,13 @@ def summarize_eval(grades):
         "empty_outputs": len([g for g in grades if g.get("empty_output")]),
         "fa_cases": len(fa),
         "fa_not_in_persian": len(fa_wrong_script),
+        # Fabrication on a case that required refusal. Reported per arm so the
+        # approved ceiling of 0 can see the eval arms too, not the RAG arm
+        # alone (defect found 2026-08-20).
+        "fabricated_financial_data_count": len(
+            [g for g in grades if g.get("fabricated")]),
+        "fabrication_checked_n": len(
+            [g for g in grades if g.get("fabricated") is not None]),
         "human_grading_pending": len(grades),
     }
 
@@ -986,6 +1143,18 @@ def summarize_rag(grades):
         "outcomes": outcomes,
         "fabricated_financial_data_count": len(
             [g for g in grades if g.get("fabricated")]),
+        # AUDIT FINDING 2026-08-20: summarize_eval reports how many cases it
+        # COULD check for fabrication and this did not, so the same count meant
+        # two different things depending on which arm it came from. The
+        # approved ceiling of 0 is summed across arms, and "0 fabrications out
+        # of 10 checked" and "0 fabrications out of 0 checked" are different
+        # findings. MEASURED: grade_rag_case assigns g["fabricated"] on every
+        # path, so today this always equals n_cases -- which is exactly why it
+        # must be reported rather than assumed: if a future path ever leaves it
+        # unset, the discrepancy becomes visible instead of silently deflating
+        # the count that the zero ceiling reads.
+        "fabrication_checked_n": len(
+            [g for g in grades if g.get("fabricated") is not None]),
         "citation_correctness_pct": pct(len(supported), len(cited)),
         "unsupported_claim_rate_pct": pct(len(unsupported), len(cited)),
         "n_claims_checked": len(cited),
