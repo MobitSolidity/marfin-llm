@@ -23,6 +23,7 @@ paper/live trading controls.
 | `scripts/run_baseline.py` | Phase 2 baseline harness. **Superseded by `run_phase4.py`; 9 MEASURED defects, never executed.** Kept for the audit trail. |
 | `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
 | `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
+| `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
 | `src/calc/valuation.py` | DCF, DDM, multiples, margins, leverage (26 fns). |
@@ -409,6 +410,26 @@ pip install llama-cpp-python psutil \
   --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 python scripts/run_phase4.py --model <path>Qwen3.5-4B-Q5_K_M.gguf
 ```
+
+The run is ~3.4 h on the target CPU and `run_phase4.py` writes its output file
+only **once, at the very end**, so an interruption in hour three loses
+everything. RECOMMENDED: split it with `--arms`, which exists for exactly this
+("comma-separated subset, for resuming a run"), and give each invocation its own
+`--out` — otherwise each command overwrites the previous one's file.
+
+```bash
+python scripts/run_phase4.py --model <path> --arms rag   --out evals/results/p4_rag.json    # 0.88 h
+python scripts/run_phase4.py --model <path> --arms tools --out evals/results/p4_tools.json  # 1.17 h
+python scripts/run_phase4.py --model <path> --arms plain --out evals/results/p4_plain.json  # 1.41 h
+python scripts/merge_phase4.py evals/results/p4_*.json --out evals/results/phase4_merged.json
+```
+
+Splitting costs **5 extra minutes**, not more: MEASURED per-invocation fixed
+overhead is 148 s (model load 0.95 s + TTFT probe 118.68 s + decode probe 28.6 s,
+read from the `latency` block of the user's own run), paid 3x instead of 1x.
+`rag` runs first because it had the highest truncation rate (6 of 10 = 60 %, vs
+plain 38 % and tools 29 %), so a single completed chunk already carries most of
+the information about whether the 2048 budget suffices.
 
 MEASURED 2026-08-17: that index serves `llama_cpp_python-0.3.35-py3-none-win_amd64.whl`
 (7,086,788 bytes, sha256 `31590ea0...80bb`), which pip selects with no version

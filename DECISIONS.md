@@ -1888,3 +1888,118 @@ believing a green run.
 ### Reversal
 
 None. A gate that cannot distinguish "verified" from "not run" is not a gate.
+
+## D-0063 — The 3.4-hour run is split per arm, and the merge tool refuses rather than guesses
+
+**Date:** 2026-08-24
+**Status:** ADOPTED
+**Requested by:** the user, who chose "option ج" (take the full three-arm run)
+and separately instructed that heavy work be done in chunks.
+
+### The decision
+
+The full Phase 4 run is executed as **three `--arms` invocations**, each with its
+own `--out`, and reassembled by a new `scripts/merge_phase4.py`.
+
+### Why splitting, and what it costs
+
+`run_phase4.py` persists its result with a single `open(out_path, "w")` at line
+945, **after every arm has finished**. The run is COMPUTED at 3.38 h on the
+target CPU. An interruption at any point before the end therefore yields nothing
+at all. `--arms` already existed for this purpose; its own help text says
+"comma-separated subset, for resuming a run".
+
+The cost of splitting was MEASURED, not assumed. Each invocation pays a fixed
+overhead, read from the `latency` block of the user's real run:
+
+    model load    0.95 s
+    TTFT probe  118.68 s   (measure_latency, max_tokens=1 at a ~2K prompt)
+    decode probe 28.60 s   (128 tokens at 4.47 tok/s)
+    TOTAL       148.23 s
+
+Paying that three times instead of once costs 2 x 148 = 297 s = **4.9 min**:
+
+    --arms rag      0.88 h
+    --arms tools    1.17 h
+    --arms plain    1.41 h
+    sum             3.46 h   vs 3.38 h for one command
+
+`rag` is ordered first because it has the highest truncation rate (6 of 10 =
+60 %, vs plain 8/21 = 38 % and tools 6/21 = 29 %), so the first completed chunk
+already carries most of the evidence about whether 2048 suffices.
+
+`--out` is mandatory per invocation. Without it all three write the default path
+and each silently destroys its predecessor.
+
+### Why a merge tool, and what it refuses to do
+
+Three per-arm files are not concatenable, because three blocks are re-derived
+per invocation:
+
+* `latency` is re-measured each time. Averaging three measurements would publish
+  a number nobody measured; silently picking one would hide the spread. The
+  merged file keeps **all** of them plus min/max, and says in the payload that
+  no single value is "the" latency of the run.
+* `peak_rss_gib` is a per-process maximum, so the merge takes the **max**.
+  Summing would report memory that was never simultaneously resident.
+* `threshold_verdicts` in a per-arm file was computed over that arm alone. The
+  merge sets it to **`null`** and records the per-arm verdicts under
+  `threshold_verdicts_status` instead. The tool has no model and therefore
+  cannot measure; a verdict is a claim, so it does not make one.
+* `thinking_replies` and `answers_lost_to_thinking_truncation` are per-process
+  counters and genuinely **sum** (VERIFIED: 3 x 30 = 90, 3 x 20 = 60).
+
+The label is `MEASURED_PER_ARM_MERGED`, not `MEASURED`. Every number inside was
+measured, but the file is an assembly and a reader must see that from the label
+without having to find this script.
+
+The tool exits non-zero and explains itself when an arm is missing, when an arm
+appears twice, or when the inputs disagree on
+`(model, ctx, threads, max_tokens, tool_call_cap, sha256)`.
+
+### A defect found in my own tool by adversarial testing
+
+The first version, given the rag file alone, printed `arms MISSING: plain, tools`
+and then two lines later `No problems detected. All three arms present.` and
+exited **0**. That is the same class of silence this project has already been
+bitten by twice: a printed SKIP that failed nothing (D-0062), and a printed
+truncation that graded nothing (D-0059/D-0061). An incomplete run that exits 0
+invites a verdict to be read off it. Fixed: a missing arm is now appended to
+`problems`, so `complete` goes False and the exit code goes non-zero. VERIFIED at
+1 arm (exit 1), 2 arms (exit 1) and 3 arms (exit 0).
+
+A second suspected defect was **disproved** rather than "fixed": a test that
+mutated `max_tokens` to 768 failed to trigger the signature check. Measurement
+showed the baseline file is itself a 768-budget run, so there was no
+disagreement to detect. The check is correct; the test was wrong. Re-tested with
+a genuine `ctx` mismatch, it fires and names both signatures.
+
+### Addendum, same day — a guard that guarded nothing
+
+While writing the state update I asserted
+`d.get('measurements_recorded') is None`. That assertion PASSED, and it was
+worthless: the key does not exist at the top level at all. Its real path is
+`phase_4/measurements_recorded`. `dict.get` returns None for an absent key, so
+the guard was indistinguishable from success no matter what the file contained.
+The same wrong-path mistake was made on 2026-08-21 against
+`phase_4/honest_gaps/...` and caught then too.
+
+The lesson is not "be careful with paths". It is that **a guard written against
+a path nobody verified is a guard that cannot fail**, and a check that cannot
+fail is worse than no check, because it reports safety. The invariant was
+subsequently verified at its real path (`None`), along with
+`live_trading_enabled` (False), `active_mode` (ANALYSIS_ONLY) and the 13
+acceptance-threshold keys (byte-identical), and the whole edit was audited by
+flatten-diff: ADDED 47, REMOVED 1, CHANGED 2 — exactly the intended change.
+
+Any future guard must assert **presence** before it asserts **value**:
+
+    assert 'measurements_recorded' in d['phase_4']
+    assert d['phase_4']['measurements_recorded'] is None
+
+### What this does NOT establish
+
+Nothing about the model. No run has been executed. The 3.46 h figure is COMPUTED
+from a fitted cost model (`seconds = 0.018928*prompt + 0.232341*completion`,
+reproducing the observed 6,115 s to within 0.8 %), not MEASURED, and may differ
+by roughly +/-15 %. `measurements_recorded` remains `None`.

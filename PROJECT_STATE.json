@@ -239,7 +239,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-08-21",
+  "last_updated": "2026-08-24",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -303,7 +303,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0062",
+  "decisions_logged": "D-0001..D-0063",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -612,7 +612,19 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": "APPROVE THE RE-RUN ITSELF. The budget question is settled: the user chose option ب (2,048 completion tokens, D-0057) knowing the COMPUTED cost is 1.70h -> 3.75h and knowing there is NO guarantee the 20 lost answers return; and the Q11 cap was delegated to me and set to 8 (D-0058). Since then a full audit found and fixed FIVE further grading defects (D-0059, D-0060, D-0061) plus one defect in the verification tooling itself (D-0062, where a SKIPPED assertion was hiding two mutation survivors). Gates MEASURED 2026-08-21: 2,772 assertions across 16 suites with 0 SKIPPED; 920 seeded mutations across 11 batteries, 915 killed, 5 documented equivalents, 0 survived, 0 skipped; 7 adversarial probes, 0 allowed, 0 crashed. NOTHING from the first run is recorded as MEASURED and measurements_recorded is still null. The ONLY thing outstanding is the user's explicit go-ahead to spend ~3.75 hours of their CPU on the corrected re-run. No re-run may start without it.",
+  "awaiting_user_action": {
+    "what": "Run the three per-arm commands on the i5-12400 and return the merged file.",
+    "commands": [
+      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms rag   --out evals\\results\\p4_rag.json",
+      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms tools --out evals\\results\\p4_tools.json",
+      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms plain --out evals\\results\\p4_plain.json",
+      "python scripts\\merge_phase4.py evals\\results\\p4_rag.json evals\\results\\p4_tools.json evals\\results\\p4_plain.json --out evals\\results\\phase4_merged.json"
+    ],
+    "model_path_confirmed_by_user": "C:\\models",
+    "expected_wall_clock": "3.46 h total, COMPUTED, splittable across sessions",
+    "file_to_return": "evals/results/phase4_merged.json (the three raw per-arm files are also welcome)",
+    "approval_status": "The user chose option ج on 2026-08-24 and supplied the model directory. The commands are prepared. No run has been launched by me and none can be: the harness runs on the user's machine, not here."
+  },
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
@@ -801,6 +813,60 @@
       "adversarial_probes": "7 probes, 0 allowed, 0 crashed",
       "prerequisite_artefacts": "Two free public downloads gate 12 assertions and must be present before a green run is believed: the Qwen3 tokenizer (/tmp/qwen3_tokenizer.json, /tmp/qwen3_tokcfg.json) and the EDGAR XBRL payload (/tmp/xbrl.json, 117 facts, HTTP 200 only with a contact-bearing User-Agent). Both are documented in the README.",
       "provenance_gate": "Clean. A sandbox freeze killed a mutation run mid-flight and left src/tools/selector.py carrying CORE_FAMILIES = () -- mutation #33 of mutate_selector.py, which disables the mandatory risk-sizing family required by SS.6.3. Caught by the gate, restored from HEAD, not hand-edited. Second time D-0054 has paid for itself."
+    },
+    "chunked_run_2026_08_24": {
+      "label": "DECIDED",
+      "decision": "D-0063",
+      "what": "The full three-arm Phase 4 run is executed as three separate --arms invocations, each with its own --out, then reassembled by scripts/merge_phase4.py.",
+      "why": "run_phase4.py writes its output file once, at the very end (a single open(out_path,'w') after every arm). The run is COMPUTED at 3.38 h on the target CPU, so any interruption before the end yields nothing.",
+      "cost_of_splitting": {
+        "label": "MEASURED",
+        "per_invocation_fixed_overhead_seconds": 148.23,
+        "components": {
+          "model_load": 0.95,
+          "ttft_probe": 118.68,
+          "decode_probe": 28.6
+        },
+        "source": "latency block of the user's 2026-08-18 run",
+        "extra_cost_seconds": 297,
+        "extra_cost_minutes": 4.9
+      },
+      "per_arm_cost_hours": {
+        "label": "COMPUTED",
+        "rag": 0.88,
+        "tools": 1.17,
+        "plain": 1.41,
+        "sum": 3.46,
+        "one_command_for_comparison": 3.38,
+        "model": "seconds = 0.018928*prompt_tokens + 0.232341*completion_tokens",
+        "model_accuracy": "reproduces the observed 6115 s to within 0.8 %",
+        "uncertainty": "roughly +/-15 %; COMPUTED, not MEASURED"
+      },
+      "arm_order_rationale": {
+        "label": "MEASURED",
+        "truncation_rates": {
+          "rag": "6 of 10 = 60 %",
+          "plain": "8 of 21 = 38 %",
+          "tools": "6 of 21 = 29 %"
+        },
+        "why": "rag runs first because one completed chunk then already carries most of the evidence about whether the 2048 budget suffices"
+      },
+      "out_flag_is_mandatory": "Without a distinct --out, all three invocations write evals/results/phase4_run.json and each silently destroys its predecessor.",
+      "merge_tool": {
+        "path": "scripts/merge_phase4.py",
+        "latency": "all per-invocation measurements kept, plus min/max spread; never averaged",
+        "peak_rss": "max across invocations, never summed",
+        "counters": "thinking_replies and answers_lost_to_thinking_truncation are summed (VERIFIED 3x30=90, 3x20=60)",
+        "threshold_verdicts": "set to null on purpose; per-arm verdicts preserved under threshold_verdicts_status",
+        "label_emitted": "MEASURED_PER_ARM_MERGED, not MEASURED",
+        "refuses_on": [
+          "a missing arm",
+          "a duplicate arm",
+          "inputs disagreeing on (model, ctx, threads, max_tokens, tool_call_cap, sha256)"
+        ],
+        "own_defect_found_and_fixed": "the first version reported 'No problems detected' and exited 0 with two arms missing; a missing arm is now a problem, so complete goes False and the exit code goes non-zero. VERIFIED at 1 arm (exit 1), 2 arms (exit 1), 3 arms (exit 0).",
+        "one_suspected_defect_disproved": "a max_tokens mismatch test did not fire because the baseline file is itself a 768-budget run; the check is correct, the test was wrong. Re-verified with a genuine ctx mismatch."
+      }
     }
   }
 }
