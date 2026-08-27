@@ -188,6 +188,103 @@ class ModelRunner(object):
         }
 
 
+class RemoteRunner(object):
+    """
+    A remote API provider wearing ModelRunner's interface.
+
+    WHY A SEPARATE CLASS AND NOT A FLAG INSIDE ModelRunner: the two have
+    genuinely different failure modes. ModelRunner cannot fail to authenticate,
+    cannot be rate limited and cannot cost money; RemoteRunner cannot run out of
+    RAM and has no load time. Folding both into one class would mean every
+    branch carrying an `if self.remote`, and the local path -- the one the user
+    insisted must remain -- would be the one at risk from a change made for the
+    remote path.
+
+    What IS shared is the return contract, exactly: (answer, metrics) with the
+    <think> block already removed by the same L.strip_thinking. Every grader in
+    this harness consumes that contract, so a provider swap cannot change how
+    anything is scored. That is the property that makes local-versus-API results
+    comparable at all.
+    """
+
+    def __init__(self, provider, model_id, max_tokens=DEFAULT_MAX_TOKENS,
+                 base_url=None, allow_paid=False, timeout=None):
+        from llm import clients as LC
+        self._c = LC
+        self.provider = provider
+        self.model_id = model_id
+        self.base_url = base_url
+        self.allow_paid = bool(allow_paid)
+        self.timeout = timeout or LC.DEFAULT_TIMEOUT_S
+        self.max_tokens = max_tokens
+        self.calls = 0
+        self.truncated_thinking = 0
+        self.thinking_replies = 0
+        # Counted so the run report can state how much of the user's quota the
+        # run consumed. A retry is a request the provider counted even though
+        # the harness only asked once, and a free-tier user needs that number.
+        self.http_attempts = 0
+        self.tokens_in = 0
+        self.tokens_out = 0
+        # Validate the credential and the endpoint NOW, before any arm starts.
+        # MEASURED cost of not doing this: the local 52-case run takes hours, so
+        # discovering a bad key at case 1 of arm 3 wastes everything before it.
+        from llm.providers import get_api_key, resolve_base_url
+        # Resolve first, gate second: the gate exempts a loopback endpoint, and
+        # it can only recognise one from the resolved url.
+        self.endpoint = resolve_base_url(provider, base_url)
+        self.gate = self._c.spend_gate(provider, allow_paid=self.allow_paid,
+                                       base_url=self.endpoint)
+        get_api_key(provider)
+        if not str(model_id or "").strip():
+            raise ValueError(
+                "no --model-id for %s. There is no default: the model id "
+                "decides both the answer and the price. Hint: %s"
+                % (provider, self._c.MODEL_HINTS.get(provider, "see the docs")))
+
+    def generate(self, prompt, max_tokens=None):
+        self.calls += 1
+        n = max_tokens or self.max_tokens
+        t0 = time.time()
+        res = self._c.chat(self.provider, prompt, n,
+                           model_id=self.model_id,
+                           base_url=self.base_url,
+                           timeout=self.timeout,
+                           allow_paid=self.allow_paid)
+        elapsed = time.time() - t0
+        text = res["text"]
+        self.http_attempts += res.get("attempts", 1)
+        self.tokens_in += res.get("prompt_tokens", 0)
+        self.tokens_out += res.get("completion_tokens", 0)
+
+        # The SAME splitter as the local path. A remote thinking model that
+        # spends its whole budget reasoning produces the identical failure --
+        # MEASURED locally in 9 of 52 cases -- and it must be counted the same
+        # way, not hidden behind a different code path.
+        split = L.strip_thinking(text)
+        if split["had_thinking"]:
+            self.thinking_replies += 1
+        if split["truncated"]:
+            self.truncated_thinking += 1
+
+        return split["answer"], {
+            "seconds": round(elapsed, 3),
+            "prompt_tokens": res.get("prompt_tokens", 0),
+            "completion_tokens": res.get("completion_tokens", 0),
+            "decode_tps": res.get("decode_tps"),
+            "had_thinking": split["had_thinking"],
+            "thinking_truncated": split["truncated"],
+            "reasoning_chars": len(split["reasoning"]),
+            "raw_output": text,
+            # Remote-only facts. Present so a merged or compared report can
+            # never mistake an API run for a local one.
+            "provider": self.provider,
+            "model_id": self.model_id,
+            "http_attempts": res.get("attempts", 1),
+            "finish_reason": res.get("finish_reason"),
+        }
+
+
 def peak_rss_gib(proc):
     """
     Peak RSS in GiB, preferring a TRUE peak over a point sample.
@@ -656,7 +753,33 @@ def measure_latency(runner, ctx_target=2048):
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Phase 4 measurement harness (run on the target machine)")
-    ap.add_argument("--model", required=True, help="path to the GGUF file")
+    # --model stays REQUIRED for the local provider and becomes optional only
+    # for a remote one, checked after parsing. Making it optional outright
+    # would let a typo in --provider start a run with no model at all.
+    ap.add_argument("--model", default=None, help="path to the GGUF file "
+                                                 "(required for --provider local)")
+    # THE DEFAULT IS local, DELIBERATELY AND PERMANENTLY.
+    #
+    # The user's instruction was explicit: "مدل محلی حتماً باید باقی بماند و
+    # فقط api به آن اضافه گردد" -- the local model must remain and the API is
+    # only added to it. So every existing command line keeps working unchanged
+    # and keeps measuring the local model; using an API requires asking for one
+    # by name. A default that silently went to the network would also send
+    # financial prompts off the machine without the user choosing to.
+    ap.add_argument("--provider", default="local",
+                    help="local (default) or a remote API provider. "
+                         "Run scripts/panel.py to see them all.")
+    ap.add_argument("--model-id", default=None,
+                    help="the remote model id. No default: the id decides both "
+                         "the answer and the price.")
+    ap.add_argument("--base-url", default=None,
+                    help="override the endpoint; required for --provider custom")
+    ap.add_argument("--allow-paid", action="store_true",
+                    help="permit a provider that is paid, or whose free tier is "
+                         "UNKNOWN. Off by default: your recorded constraint is "
+                         "to spend nothing.")
+    ap.add_argument("--timeout", type=float, default=None,
+                    help="per-request seconds for a remote provider")
     ap.add_argument("--ctx", type=int, default=16384)
     ap.add_argument("--threads", type=int, default=6,
                     help="i5-12400 has 6 physical P-cores; hyperthreads "
@@ -675,16 +798,73 @@ def main(argv=None):
                     help="comma-separated subset, for resuming a run")
     a = ap.parse_args(argv)
 
-    if not os.path.isfile(a.model):
-        p("ERROR: model file not found: %s" % a.model)
+    # ---- provider selection -------------------------------------------
+    # Everything here runs BEFORE the model is loaded and before any case is
+    # graded, because the cheapest place to refuse is the first one.
+    try:
+        from llm.providers import get_provider
+        prov_spec = get_provider(a.provider)
+    except Exception as exc:
+        p("ERROR: %s" % exc)
         return 2
+    remote = prov_spec["wire"] != "local"
+
+    if remote:
+        if a.model:
+            p("ERROR: --model is a local GGUF path and --provider %s is a "
+              "remote API. Refusing to run: one of the two was a mistake, and "
+              "guessing which would either waste hours or send your prompts "
+              "somewhere you did not intend." % a.provider)
+            return 2
+        try:
+            from llm import clients as LC
+            runner = RemoteRunner(a.provider, a.model_id,
+                                  max_tokens=a.max_tokens,
+                                  base_url=a.base_url,
+                                  allow_paid=a.allow_paid,
+                                  timeout=a.timeout)
+        except (LookupError, ValueError, OSError) as exc:
+            # ProviderError subclasses Exception directly, so it is caught by
+            # name below rather than by this tuple.
+            p("ERROR: %s" % exc)
+            return 2
+        except Exception as exc:
+            # DEFECT FOUND BY MEASUREMENT 2026-08-27: this used to be a bare
+            # `except Exception` printing "ERROR: %s". A missing `import re` in
+            # clients.py therefore surfaced as `ERROR: name 're' is not
+            # defined` -- formatted exactly like a deliberate refusal, in the
+            # same place a refusal appears. A bug wearing a refusal's clothes is
+            # worse than a traceback, because the user reads it as "the tool
+            # decided not to" and goes looking for the wrong cause. Programming
+            # errors are now separated from refusals and named as bugs.
+            from llm.providers import ProviderError as _PE
+            if isinstance(exc, _PE):
+                p("ERROR: %s" % exc)
+                return 2
+            p("INTERNAL ERROR (%s): %s" % (type(exc).__name__, exc))
+            p("       This is a bug in the harness, not a refusal and not a")
+            p("       problem with your key or your provider. Nothing was sent.")
+            return 3
+    else:
+        if not a.model:
+            p("ERROR: --model is required for --provider local.")
+            return 2
+        if a.model_id or a.base_url:
+            p("ERROR: --model-id and --base-url apply to a remote provider. "
+              "--provider is 'local', so they would be silently ignored.")
+            return 2
+        if not os.path.isfile(a.model):
+            p("ERROR: model file not found: %s" % a.model)
+            return 2
 
     try:
         from llama_cpp import Llama
     except ImportError:
-        p("ERROR: llama-cpp-python is not installed.")
-        p("       pip install llama-cpp-python")
-        return 2
+        if not remote:
+            p("ERROR: llama-cpp-python is not installed.")
+            p("       pip install llama-cpp-python")
+            return 2
+        Llama = None   # a remote run needs no local runtime at all
     try:
         import psutil
     except ImportError:
@@ -696,7 +876,8 @@ def main(argv=None):
     thresholds = L.load_thresholds(rel(a.state))
 
     proc = psutil.Process() if psutil else None
-    model_size_gib = round(os.path.getsize(a.model) / 1024.0 ** 3, 3)
+    model_size_gib = (round(os.path.getsize(a.model) / 1024.0 ** 3, 3)
+                      if not remote else None)
 
     p("=" * 78)
     p("PHASE 4 -- RAG AND TOOL-ENABLED EVALUATION (MEASURED ON TARGET)")
@@ -705,18 +886,59 @@ def main(argv=None):
     p("cpu         : %s" % (platform.processor() or "unreported by OS"))
     p("python      : %s" % platform.python_version())
     p("console utf8: %s" % CONSOLE_UTF8)
-    p("model       : %s" % os.path.basename(a.model))
-    p("size        : %.3f GiB" % model_size_gib)
-    # Hash BEFORE loading. It costs seconds on a GiB-sized file and it is the
-    # only thing that ties the numbers below to specific weights. Printed too,
-    # because the user should see what they are about to measure.
-    model_identity = L.identify_model(a.model)
-    p("sha256      : %s" % model_identity["sha256"])
-    p("identity    : %s" % model_identity["label"])
-    if model_identity.get("is_pinned_revision") is False:
-        p("              NOTE: %s" % model_identity["note"])
-    elif model_identity["label"] == "UNKNOWN":
-        p("              NOTE: %s" % model_identity["note"])
+    p("provider    : %s  [%s]" % (a.provider, prov_spec["label"]))
+
+    if remote:
+        # A remote run has no GGUF, so there is no sha256 to tie the numbers to
+        # specific weights. That is a REAL loss of provenance and it is stated
+        # plainly rather than left for the reader to notice: a provider can
+        # change what a model id points at without telling anyone, so two runs
+        # of the same id are not guaranteed to be the same model.
+        p("model id    : %s" % a.model_id)
+        # The RESOLVED endpoint, not the flag. resolve_base_url already
+        # validated and normalised it, and printing the resolved value is what
+        # tells the user where their prompts are actually going.
+        p("endpoint    : %s" % runner.endpoint)
+        p("provenance  : NO sha256. A remote model id is not a pinned")
+        p("              revision; the provider may change what it serves.")
+        p("              Local runs remain the reproducible reference.")
+        p("cost        : %s" % prov_spec.get("cost", "UNKNOWN"))
+        # DEFECT FOUND BY MEASUREMENT 2026-08-27: this line used to fire on
+        # `free_tier is not True` alone, so a `custom` provider pointed at
+        # http://localhost:8080/v1 printed "--allow-paid was given; this run may
+        # be BILLED" when --allow-paid had NOT been given and nothing could be
+        # billed. That is a false statement in the run header -- the precise
+        # failure mode this project treats as most serious, and it was produced
+        # by reading a registry field instead of the gate's actual decision. It
+        # now reports what the gate decided.
+        gate = getattr(runner, "gate", {}) or {}
+        if gate.get("local_endpoint"):
+            p("              endpoint is on THIS machine: nothing can be")
+            p("              billed, so --allow-paid was not required.")
+        elif gate.get("billable"):
+            p("              --allow-paid was given; this run may be BILLED.")
+        else:
+            p("              provider documents a free tier; no --allow-paid")
+            p("              needed. The QUOTA is still UNKNOWN to this project.")
+        model_identity = {"sha256": None, "label": "REMOTE_API",
+                          "thinking_by_default": None,
+                          "note": "remote provider; no local file to hash"}
+        load_s = 0.0
+    else:
+        p("model       : %s" % os.path.basename(a.model))
+        p("size        : %.3f GiB" % model_size_gib)
+        # Hash BEFORE loading. It costs seconds on a GiB-sized file and it is
+        # the only thing that ties the numbers below to specific weights.
+        # Printed too, because the user should see what they are about to
+        # measure.
+        model_identity = L.identify_model(a.model)
+        p("sha256      : %s" % model_identity["sha256"])
+        p("identity    : %s" % model_identity["label"])
+        if model_identity.get("is_pinned_revision") is False:
+            p("              NOTE: %s" % model_identity["note"])
+        elif model_identity["label"] == "UNKNOWN":
+            p("              NOTE: %s" % model_identity["note"])
+
     # State the reasoning-mode expectation UP FRONT. If the model thinks and the
     # budget is small, the run can burn an hour and produce no gradable answers
     # at all; the reader deserves to know before that happens, not after.
@@ -732,19 +954,25 @@ def main(argv=None):
     elif tbd is False:
         p("thinking    : no")
     else:
-        p("thinking    : UNKNOWN for this file (handled either way)")
-    p("ctx         : %d   threads: %d   top_k: %d" % (a.ctx, a.threads, a.top_k))
-    p("max_tokens  : %d" % a.max_tokens)
+        p("thinking    : UNKNOWN for this %s (handled either way)"
+          % ("provider" if remote else "file"))
+    if remote:
+        p("max_tokens  : %d   top_k: %d" % (a.max_tokens, a.top_k))
+        p("              ctx and threads do not apply to a remote provider")
+    else:
+        p("ctx         : %d   threads: %d   top_k: %d"
+          % (a.ctx, a.threads, a.top_k))
+        p("max_tokens  : %d" % a.max_tokens)
     p("tools       : %d registered, 0 of them can execute a trade" % n_tools)
     p("")
 
-    t0 = time.time()
-    llm = Llama(model_path=a.model, n_ctx=a.ctx, n_threads=a.threads,
-                verbose=False)
-    load_s = round(time.time() - t0, 2)
-    p("load time   : %.1f s  [MEASURED]" % load_s)
-
-    runner = ModelRunner(llm, max_tokens=a.max_tokens)
+    if not remote:
+        t0 = time.time()
+        llm = Llama(model_path=a.model, n_ctx=a.ctx, n_threads=a.threads,
+                    verbose=False)
+        load_s = round(time.time() - t0, 2)
+        p("load time   : %.1f s  [MEASURED]" % load_s)
+        runner = ModelRunner(llm, max_tokens=a.max_tokens)
     from tools.registry import tool_schemas
     schemas_by_name = {}
     for s in tool_schemas():
@@ -761,6 +989,21 @@ def main(argv=None):
     p("-" * 78)
     lat = measure_latency(runner)
     report_latency_block(lat)
+    if remote:
+        # The latency numbers above are real, but they measure the PROVIDER's
+        # hardware plus the user's internet link -- not this machine. Grading
+        # them against thresholds that were approved for a local 4B model on an
+        # i5-12400 would be comparing two different questions and calling the
+        # answer a pass. Said here, next to the numbers, rather than only in a
+        # footnote nobody reads.
+        p("")
+        p("NOTE: these are REMOTE latencies. They measure the provider's")
+        p("      hardware and your network, not this CPU. The approved speed")
+        p("      thresholds describe the LOCAL model, so a remote pass is not")
+        p("      evidence that the local model improved.")
+        p("      Peak RSS below measures this process only: for a remote run")
+        p("      it is the Python harness, NOT any model, and it is labelled")
+        p("      so in the output file.")
 
     cases = load_jsonl(rel(a.evals))
     gold_rows = load_jsonl(rel(a.gold))
@@ -796,6 +1039,12 @@ def main(argv=None):
         report["summaries"]["rag"] = L.summarize_rag(report["arms"]["rag"])
 
     peak, peak_label = peak_rss_gib(proc)
+    if remote and peak_label != "UNKNOWN":
+        # A remote run loads no weights, so this figure is the harness's own
+        # footprint -- typically a few hundred MiB. Against a 6.0 GiB ceiling it
+        # would PASS effortlessly and that pass would be meaningless. Relabelled
+        # so the verdict cannot be read as evidence about any model.
+        peak_label = peak_label + "_HARNESS_ONLY_NO_MODEL_LOADED"
 
     # ---- threshold verdicts ---------------------------------------------
     ev = report["summaries"].get("tools") or report["summaries"].get("plain") or {}
@@ -808,9 +1057,24 @@ def main(argv=None):
 
     measured = {
         "model_file_size_gib_max": model_size_gib,
-        "peak_rss_8k_gib_max": peak,
-        "generation_tokens_per_sec_min": lat["decode_tokens_per_sec"],
-        "time_to_first_token_2k_sec_max": lat["ttft_seconds"],
+        # THE FOUR HARDWARE THRESHOLDS DO NOT APPLY TO A REMOTE PROVIDER.
+        #
+        # All four were approved as statements about a 4B GGUF on the user's
+        # i5-12400. On a remote run, size has no local file, peak RSS is the
+        # harness alone, and decode/TTFT measure a datacentre plus an internet
+        # link. Feeding those numbers in would produce three effortless PASSes
+        # on the two hardware limits and the size limit -- and a PASS that
+        # answers a different question is worse than a PENDING, because it
+        # reports progress that did not happen. MEASURED locally: these same
+        # four are where the local model actually FAILS (3.62-4.38 tok/s against
+        # a minimum of 8, 48.6-49.9 s TTFT against a maximum of 3.0), so letting
+        # an API launder them into PASSes would erase the project's most
+        # important finding.
+        "peak_rss_8k_gib_max": None if remote else peak,
+        "generation_tokens_per_sec_min":
+            None if remote else lat["decode_tokens_per_sec"],
+        "time_to_first_token_2k_sec_max":
+            None if remote else lat["ttft_seconds"],
         "deterministic_calc_correctness_pct_min":
             ev.get("deterministic_calc_correctness_pct"),
         "unsupported_claim_rate_pct_max": rg.get("unsupported_claim_rate_pct"),
@@ -896,18 +1160,61 @@ def main(argv=None):
     out_path = rel(a.out)
     L.ensure_parent_dir(out_path)
     payload = {
-        "label": "MEASURED",
+        # THE LABEL DISTINGUISHES WHAT WAS ACTUALLY MEASURED.
+        #
+        # "MEASURED" has meant one specific thing throughout this project: the
+        # local model, on the user's own CPU, with a sha256 tying the numbers to
+        # specific weights. A remote run measures answer quality but measures
+        # NOTHING about this machine, and it has no weight hash at all. Writing
+        # "MEASURED" on it would let a future reader -- or a future merge, or a
+        # future me -- treat an API run as satisfying the local hardware
+        # thresholds. The label is the only thing standing between those two
+        # very different files, so it says which one this is.
+        "label": "MEASURED_REMOTE_API" if remote else "MEASURED",
+        "measures_local_hardware": not remote,
         "phase": 4,
-        "route": "A (user's own machine)",
+        "route": ("A (user's own machine, remote provider)" if remote
+                  else "A (user's own machine)"),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "host": {"system": platform.system(),
                  "release": platform.release(),
                  "processor": platform.processor() or None,
                  "python": platform.python_version(),
                  "console_utf8": CONSOLE_UTF8},
-        "model": {"file": os.path.basename(a.model),
+        # WHICH engine produced these numbers. This block is FIRST among the
+        # model facts because it changes how every number below must be read:
+        # a remote run's latency measures somebody else's datacentre and its
+        # peak RSS measures nothing at all. A file that recorded speed without
+        # recording where it came from would invite exactly the false
+        # comparison this project exists to avoid.
+        "provider": {
+            "name": a.provider,
+            "wire": prov_spec["wire"],
+            "remote": remote,
+            "label": prov_spec["label"],
+            "model_id": a.model_id if remote else None,
+            "endpoint": getattr(runner, "endpoint", None) if remote else None,
+            # From the GATE's decision, not from the registry field. MEASURED
+            # 2026-08-27: reading `free_tier is not True` recorded
+            # billable_run=True for a run against http://127.0.0.1:8399/v1,
+            # where nothing could possibly be billed. The same wrong inference
+            # had already been fixed in the console header; leaving it in the
+            # payload would have shipped the false claim into the archived file,
+            # which outlives the console output.
+            "billable_run": bool(getattr(runner, "gate", {}).get("billable")) if remote else False,
+            "local_endpoint": bool(getattr(runner, "gate", {}).get("local_endpoint")) if remote else None,
+            "allow_paid_given": bool(a.allow_paid),
+            "http_attempts": getattr(runner, "http_attempts", None) if remote else None,
+            "remote_tokens_in": getattr(runner, "tokens_in", None) if remote else None,
+            "remote_tokens_out": getattr(runner, "tokens_out", None) if remote else None,
+            # NOT a quota. No provider's limits are recorded as fact anywhere in
+            # this project, because published figures contradict each other.
+            "quota_recorded": None,
+        },
+        "model": {"file": os.path.basename(a.model) if a.model else None,
                   "size_gib": model_size_gib,
-                  "ctx": a.ctx, "threads": a.threads,
+                  "ctx": a.ctx if not remote else None,
+                  "threads": a.threads if not remote else None,
                   "load_seconds": load_s,
                   "max_tokens": a.max_tokens,
                   # The tool-call cap is written into the payload so a capped
@@ -946,7 +1253,14 @@ def main(argv=None):
         json.dump(payload, f, indent=2, ensure_ascii=False)
     p("")
     p("Wrote %s" % out_path)
-    p("Send that file back. It is the project's first on-target measurement.")
+    if remote:
+        # Two runs have now been measured locally, so "first" was already stale;
+        # for a remote run it would also be wrong in kind, not just in count.
+        p("Send that file back. NOTE: label is MEASURED_REMOTE_API -- it")
+        p("measures the provider's answers, NOT this machine's speed or RAM.")
+        p("The four hardware thresholds are PENDING in it by design.")
+    else:
+        p("Send that file back. It measures the LOCAL model on this machine.")
     return 0
 
 
