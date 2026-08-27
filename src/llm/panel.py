@@ -461,8 +461,16 @@ def guardrail_rows(style: Style) -> List[str]:
         "  %s active mode       %s" % (a, style.c("ok", "ANALYSIS_ONLY")),
         "  %s spend guard       %s" % (
             a, style.c("ok", "ON -- paid/unknown-cost need --allow-paid")),
+        # CORRECTED 2026-08-27. This line read "8 FAIL / 3 PASS / 3 PENDING
+        # (MEASURED, 2 runs)", which was wrong twice over. The counts sum to 14
+        # against 12 approved thresholds, and the aggregate is not MEASURED at
+        # all: threshold_verdicts in the merged evidence file is deliberately
+        # null, because the merge tool refuses to recompute a cross-arm verdict
+        # and warns "do not inherit a subset's verdict". So the figure is
+        # COMPUTED by worst-case aggregation over per-arm numbers that are
+        # themselves MEASURED, and it now says so.
         "  %s phase 4 verdict   %s" % (
-            a, style.c("warn", "8 FAIL / 3 PASS / 3 PENDING (MEASURED, 2 runs)")),
+            a, style.c("warn", "8 FAIL / 3 PASS / 1 PENDING of 12 (COMPUTED)")),
         "  %s measurements      %s" % (
             a, style.c("dim", "phase_4/measurements_recorded is None -- gate held")),
     ]

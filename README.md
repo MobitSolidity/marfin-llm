@@ -70,9 +70,10 @@ paper/live trading controls.
 | Field | Value |
 |---|---|
 | Current phase | **4 — RAG and Tool-Enabled Evaluation** |
-| Status | **TOOLING COMPLETE — awaiting the user's measurement.** Not complete, not partially measured. |
+| Status | **MEASURED TWICE on the target machine, and the local model FAILS the approved bar.** 8 FAIL / 3 PASS / 1 PENDING of 12 thresholds (the tally is COMPUTED by worst-case aggregation; the per-arm figures are MEASURED). The phase is NOT advanced. |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | The user runs `scripts/run_phase4.py` on the i5-12400 and returns `evals/results/phase4_run.json` |
+| Next | Two things, both the user's to decide: grade the Persian output by hand (the one PENDING threshold, 21 cases per arm — a machine cannot score it and I will not guess), and choose whether to run via an API provider now that connectivity exists. |
+| API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |
 | TradingView connector level | 0 (display only; extraction refused) |
@@ -517,6 +518,79 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
   recall-first. MEASURED — mean subset 2,552 tokens (15.6% of 16K) versus 8,920
   for all 84 schemas; recall 24/24 across the eval and held-out sets.
+
+## API Providers and the Project Panel
+
+Added 2026-08-27 because running a 4B model on six CPU cores measurably does not
+meet the approved bar: **3.62–4.38 tok/s against a floor of 8**, and **48.6–49.9 s
+to first token against a ceiling of 3.0 s**. No prompt change fixes that.
+
+**The local model was not replaced.** `--provider` defaults to `local`
+everywhere, nothing was removed, and the panel lists the local model *above* the
+providers with its real MEASURED numbers — including the failures.
+
+### The twelve
+
+| Provider | Env var | Cost class |
+|---|---|---|
+| `local` | — | free, default |
+| `groq` | `GROQ_API_KEY` | documented free tier |
+| `google` | `GEMINI_API_KEY` | documented free tier |
+| `cerebras` | `CEREBRAS_API_KEY` | documented free tier |
+| `openai` | `OPENAI_API_KEY` | paid |
+| `anthropic` | `ANTHROPIC_API_KEY` | paid |
+| `xai` | `XAI_API_KEY` | paid |
+| `openrouter` | `OPENROUTER_API_KEY` | UNKNOWN |
+| `mistral` | `MISTRAL_API_KEY` | UNKNOWN |
+| `deepseek` | `DEEPSEEK_API_KEY` | UNKNOWN |
+| `together` | `TOGETHER_API_KEY` | UNKNOWN |
+| `custom` | `CUSTOM_API_KEY` | UNKNOWN (needs `--base-url`) |
+
+`free_tier` is **tri-state**: `True`, `False`, or `None` for UNKNOWN. The spend
+gate treats UNKNOWN as **billable** — an unknown cost is not a free cost.
+
+**No quota is recorded anywhere in this project.** A search on 2026-08-27
+returned figures that contradict each other for the same provider on the same
+day, so the registry records the disagreement and points at the provider's own
+limits page instead of manufacturing a number.
+
+### Panel
+
+```
+python scripts/panel.py                 # auto-detects the console
+python scripts/panel.py --ascii --no-colour
+python scripts/panel.py --check groq    # one provider, in detail
+python scripts/panel.py --json          # machine-readable
+```
+
+Three tiers, selected by **trial-encoding** box-drawing characters rather than
+by pattern-matching the code page name. Honours `NO_COLOR` and `FORCE_COLOR`.
+It reads only — no socket, no quota, no file written — and is deliberately
+**not** a launcher: a panel one keystroke from a 3.6-hour CPU burn is a trap.
+
+### Guardrails on remote use
+
+- `spend_gate()` refuses paid/UNKNOWN providers unless `--allow-paid` is passed,
+  **before** anything is spent. Loopback base URLs are exempt so it never cries
+  wolf on the user's own llama server.
+- `--model-id` is **mandatory** for remote providers. A guessed model name burns
+  a free-tier request to discover it was wrong.
+- For any remote provider, four hardware thresholds are forced to `PENDING`, the
+  label becomes `MEASURED_REMOTE_API`, and `measures_local_hardware` is `False`.
+  **An API run can never be laundered into evidence about the i5-12400.**
+- Keys come from environment variables only — never a file, never a CLI argument
+  that lands in shell history. All error text passes through `redact()`, verified
+  against 11 realistically-shaped keys including prefix-less ones.
+
+### Verification
+
+- `tests/test_llm_providers.py` — 237 assertions.
+- `tests/mutate_llm_providers.py` — 31 mutants: **29 killed, 2 proved
+  equivalent, 0 survived, 0 skipped**. The first run killed only 21 and let ten
+  survive *against a suite printing "195 passed, 0 failed"* — including a mutant
+  that relabelled the user's MEASURED hardware failure as `PASS`, and one that
+  shortened a border by one column, the exact defect that had already shipped.
+- Full regression: **17 suites, 3,006 assertions, 0 failed, 0 skipped.**
 
 ## Usage
 

@@ -2003,3 +2003,133 @@ Nothing about the model. No run has been executed. The 3.46 h figure is COMPUTED
 from a fitted cost model (`seconds = 0.018928*prompt + 0.232341*completion`,
 reproducing the observed 6,115 s to within 0.8 %), not MEASURED, and may differ
 by roughly +/-15 %. `measurements_recorded` remains `None`.
+
+## D-0064 — API access is added beside the local model, never in place of it; and a suite that printed "195 passed" was hiding ten survivors
+
+**Date:** 2026-08-27
+**Request:** 39 — «همه ارايه دهندگان را قرار بده … مدل محلی حتما باید باقی بماند و فقط api به آن اضافه گردد … از cmd art زیبا و مدرن استفاده کن»
+**Status:** implemented and verified. No phase advanced.
+
+### The decision
+
+Three things the user asked for, and what each turned into.
+
+**All providers, free and paid.** Twelve are registered: `local`, `openai`,
+`anthropic`, `google`, `groq`, `openrouter`, `mistral`, `deepseek`, `together`,
+`cerebras`, `xai`, and `custom` for anything self-hosted or not yet listed. The
+user spends nothing today, but someone with a paid key can use the same code, so
+paid providers are present and gated rather than absent.
+
+The `free_tier` field is **tri-state** — `True`, `False`, or `None` for UNKNOWN —
+and the spend gate treats `None` as **billable**. An unknown cost is not a free
+cost. `KNOWN_FREE_TIER` lists only the four with documentation I could actually
+read: `cerebras`, `google`, `groq`, `local`.
+
+**No quota is recorded anywhere.** A web search on 2026-08-27 returned figures
+that contradict each other for the same provider on the same day. Writing any of
+them down would have manufactured a fact, so the registry records the
+disagreement instead and points at the provider's own limits page. A later test
+of mine tried to enforce this with a keyword ban on "requests per day" and
+flagged the very string that documents the contradiction; that test was wrong and
+was replaced with a policy test. **A keyword cannot distinguish asserting a quota
+from documenting that the quota is unknowable.**
+
+**The local model stays, and stays first.** `--provider` defaults to `local` in
+every entry point; nothing was removed. The panel shows the local model **above**
+the provider list, with its real MEASURED numbers — including the failures. And
+for any remote provider, four hardware thresholds are forced to PENDING, the
+label becomes `MEASURED_REMOTE_API` and `measures_local_hardware` is `False`, so
+**an API run can never be laundered into evidence about the i5-12400.**
+
+**The CMD art panel** (`src/llm/panel.py`, entry point `scripts/panel.py`) has
+three tiers, chosen by **trial-encoding** box-drawing characters rather than by
+pattern-matching the code page name, because "cp65001" and "utf-8" behave alike
+while "cp437" does not. It honours `NO_COLOR` and `FORCE_COLOR`. It reads only:
+no socket, no quota, no file written. It is deliberately **not** a launcher — a
+panel one keystroke away from a 3.6-hour CPU burn would be a trap.
+
+### What the mutation battery found, and why the suite was not enough
+
+31 mutants were seeded. The first run **killed 21 and let 10 survive — against a
+suite that printed "195 passed, 0 failed."** Every one of the ten was a gap in
+the tests or in a fixture; none required changing the modules. Two deserve
+recording.
+
+A mutant relabelled the decode row `3.62-4.38 tok/s PASS`. That is the single
+most dishonest edit anyone could make to this project: it tells the user their
+hardware met a floor of 8 tok/s that it MEASURABLY does not. It survived because
+the assertion searched the whole panel for `"FAIL"` and for `"3.62"`
+*separately*, and both were still somewhere on screen. Metric rows are now
+asserted **line by line**, each with its own verdict and its own threshold.
+
+A mutant shortened the box border by one column — **the exact defect that had
+already shipped once** in this project. It survived because the layout assertion
+only asked whether a line was *too long*. A border one column *short* was
+invisible: **the test was blind in precisely the direction the real bug went.** A
+width histogram now requires every frame line to be equal, and five injected
+off-by-one faults (top, bottom, separator, content row, and the long direction)
+were all confirmed caught **before** the assertion was trusted. Four of the five
+produce zero overflow, so the old test would have missed every one.
+
+Two mutants are genuinely unkillable and are now documented as `EQUIVALENT` with
+proofs, guarded by a `RECHECK` that fails the battery if either is ever killed
+(itself verified by injecting a false equivalence claim and watching it exit 1):
+removing `^` from the loopback pattern is a no-op under `re.match()` — proved
+over 7 URLs including the crafted `evil.com/http://localhost` attack the mutation
+description imagined, 0 differences — and the initial `unicode_ok` value is a
+dead store that every control path reassigns, proved by AST inspection.
+
+Final: **29 killed, 2 proved-equivalent, 0 survived, 0 skipped.**
+
+### Defects found in my own work before it ever ran
+
+Four in `scripts/panel.py`, found by reading the registry instead of trusting my
+memory of it: a `limits_url` field that does not exist (it is `docs`), a
+`needs_base_url` flag read from the spec where it is absent — which would have
+hidden the `--base-url` hint from `custom`, the one provider that requires it — a
+`"%d" % None` crash on `--check local`, the likeliest first command anyone types,
+and the `cost` field simply not printed. A fifth was found by measurement:
+`MODEL_HINTS` values are prose, so the example command rendered as
+`--model-id e.g. gpt-4o-mini (UNVERIFIED hint; check the models list)` — a
+copy-paste trap that breaks the shell and would have cost a free-tier request to
+discover.
+
+And one in my own test suite: it ended with a bare `summary()`. `summary()`
+**returns** its exit status rather than raising, so the suite would have exited 0
+even with failures, and `run_all.sh` decides pass/fail on the exit code — the
+suite would have been decorative. Fixed to `sys.exit(summary())` and **proved by
+fault injection**: clean run exits 0, seeded failure exits 1.
+
+### The merged Phase 4 verdict, corrected
+
+Recorded from `phase4_merged.json.txt` (`MEASURED_PER_ARM_MERGED`, complete):
+**8 FAIL / 3 PASS / 1 PENDING** across the 12 approved thresholds.
+
+An earlier working summary of mine carried "8 FAIL / 3 PASS / 3 PENDING". **That
+sums to 14 against 12 thresholds and was wrong**, so it was re-derived from the
+evidence file rather than copied forward. This is exactly why the count is
+labelled.
+
+Two labelling points matter more than the count. First, `threshold_verdicts` in
+the merged file is `None` **by design** — the merge tool refuses to recompute
+aggregate verdicts because that needs metrics only available while the model is
+loaded, and it warns in the file itself: *"do not inherit a subset's verdict."*
+So the 8/3/1 is **COMPUTED** by worst-case aggregation (any arm FAIL ⇒ FAIL) over
+per-arm numbers that are MEASURED — it is not a MEASURED aggregate, and it is
+recorded as COMPUTED. Second, the one PENDING is
+`persian_fluency_regression_pct_max`, which needs a human reading Persian output.
+It stays PENDING. It will not be estimated.
+
+The failures are not marginal: 3.62–4.38 tok/s against a floor of 8, and
+48.6–49.9 s to first token against a ceiling of 3.0. Notably
+`deterministic_calc_correctness_pct` was **100.0 % when a tool was actually
+called** and 25 % overall, which locates the failure in the model's decision to
+use a tool rather than in the tools themselves.
+
+### What this does NOT establish
+
+Adding twelve providers proves nothing about the model, and it does not repair a
+single failing threshold. `measurements_recorded` remains `null`;
+`live_trading_enabled` remains `false`; `active_mode` remains `ANALYSIS_ONLY`;
+the 12 approved thresholds are byte-identical. No API key was ever used from this
+sandbox, and no run may start without the user's explicit approval.

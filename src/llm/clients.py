@@ -9,8 +9,16 @@ invocations over 3.65 h, produced:
 
     decode           3.62 - 4.38 tok/s   (approved minimum 8)      FAIL
     time to first tk 48.6 - 49.9 s       (approved maximum 3.0)    FAIL
-    thresholds       8 FAIL / 3 PASS / 3 PENDING
+    thresholds       8 FAIL / 3 PASS / 1 PENDING of 12  (COMPUTED, see below)
     no visible answer at all in 9 of 52 cases
+
+The threshold tally is COMPUTED, not MEASURED. The merged evidence file leaves
+its aggregate `threshold_verdicts` null on purpose -- recomputing them needs
+metrics only available while the model is loaded -- and it warns in the file
+itself: "do not inherit a subset's verdict". The tally above is therefore
+worst-case aggregation (any arm FAIL => FAIL) over per-arm figures that ARE
+MEASURED. An earlier version of this comment said "3 PENDING", which sums to 14
+against 12 thresholds and was simply wrong.
 
 Two of those failures are hardware-bound: no prompt change makes a 4B model
 decode twice as fast on six CPU cores. The user asked for API connectivity for

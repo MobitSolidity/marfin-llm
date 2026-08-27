@@ -29,7 +29,8 @@ tests/test_webhooks.py \
 tests/test_alpha_vantage.py \
 tests/test_broker_tools.py \
 tests/test_screenshot.py \
-tests/test_phase4_harness.py"
+tests/test_phase4_harness.py \
+tests/test_llm_providers.py"
 
 for t in $SUITES; do
   echo
@@ -414,6 +415,40 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: the Phase 4 harness is not restored, or its oracle is not green"
     fail=1; }
   [ $p4m_status -ne 0 ] && fail=1
+
+  echo
+  echo "--- llm provider layer (providers.py, clients.py, panel.py) ---------"
+  # 31 mutants across the three modules that added API access to the local
+  # model. First run: 21 killed, 10 SURVIVED -- against a suite that printed
+  # "195 passed, 0 failed". Every one of the ten was a gap in the TESTS or in a
+  # FIXTURE; none required changing the modules.
+  #
+  # Two survivors are worth remembering. One rewrote the decode row as
+  # "3.62-4.38 tok/s PASS" -- turning the user's MEASURED hardware failure into
+  # a pass on the panel they read most often. It lived because the assertion
+  # searched the whole panel for "FAIL" and for "3.62" separately, and both were
+  # still somewhere on screen. Metric rows are now asserted line by line.
+  # The other shortened the box border by one column: the exact defect that had
+  # already shipped once. It lived because the layout test only asked whether a
+  # line was TOO LONG, so a border one column SHORT was invisible -- the test
+  # was blind in precisely the direction the real bug went. A width histogram
+  # now requires every frame line to be equal, and 5 injected off-by-one faults
+  # (top, bottom, separator, content row, and the long direction) were all
+  # caught before the assertion was trusted.
+  #
+  # NOTE this battery prints "oracles", plural: it has three (the assertion
+  # suite, panel.py --check exit codes, and an --ascii --no-colour render).
+  # Grepping the singular here would never match and would fail every run.
+  llmm=$(python3 tests/mutate_llm_providers.py 2>&1)
+  llmm_status=$?
+  echo "$llmm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$llmm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$llmm" | grep -E "^ +RECHECK:" && fail=1
+  echo "$llmm" | grep -E "^ +INTEGRITY:" && fail=1
+  echo "$llmm" | grep -q "source restored and oracles green: True" || {
+    echo "  ERROR: the llm provider source is not restored, or an oracle is red"
+    fail=1; }
+  [ $llmm_status -ne 0 ] && fail=1
 fi
 
 echo
