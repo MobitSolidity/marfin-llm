@@ -169,6 +169,54 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
         "cost": "paid per token; see the pricing page",
         "docs": "https://docs.x.ai/docs/models",
     },
+    # AgentRouter is an AGGREGATOR, like OpenRouter: one key, many upstream
+    # models. It is registered TWICE on purpose, because its own documentation
+    # (co.agentrouter.org/portal, read 2026-08-27) states two DIFFERENT base
+    # URLs and forbids mixing them:
+    #
+    #   OpenAI-compatible   https://co.agentrouter.org/v1     (/v1 REQUIRED)
+    #   Anthropic-compatible https://co.agentrouter.org       (/v1 FORBIDDEN)
+    #
+    # VERBATIM from the FAQ: "Anthropic compatible (Claude family):
+    # https://co.agentrouter.org, no /v1. OpenAI compatible (GPT etc.):
+    # https://co.agentrouter.org/v1, /v1 required. Do not mix them." Its own
+    # troubleshooting note says the wrong one 404s. One entry per dialect makes
+    # the mistake unreachable instead of documenting it and hoping.
+    #
+    # free_tier is None, NOT True. Third-party write-ups advertise "$200 free
+    # credits"; those are AFFILIATE pages with referral links, not the
+    # provider's own documentation, and sign-up credit is not a free tier. The
+    # official portal publishes no quota at all. UNKNOWN is the honest value,
+    # and the spend gate therefore treats it as billable.
+    "agentrouter": {
+        "label": "AgentRouter (aggregator, OpenAI dialect)",
+        "wire": "openai",
+        "env_key": "AGENTROUTER_API_KEY",
+        "base_url": "https://co.agentrouter.org/v1",
+        "free_tier": None,
+        "cost": "UNKNOWN. An aggregator: the cost depends entirely on the "
+                "upstream model id you choose, and it publishes no quota. "
+                "Sign-up credit advertised by third-party affiliate pages is "
+                "NOT a free tier. Treated as billable.",
+        "note": "This entry is the OpenAI dialect and its base URL ENDS IN "
+                "/v1 -- required. For Claude models through the same key use "
+                "the `agentrouter-anthropic` entry, whose URL has NO /v1. "
+                "Mixing the two 404s, per the provider's own FAQ.",
+        "docs": "https://co.agentrouter.org/portal",
+    },
+    "agentrouter-anthropic": {
+        "label": "AgentRouter (aggregator, Anthropic dialect)",
+        "wire": "anthropic",
+        "env_key": "AGENTROUTER_API_KEY",
+        "base_url": "https://co.agentrouter.org",
+        "free_tier": None,
+        "cost": "UNKNOWN, as for the OpenAI dialect. Same key, same balance.",
+        "note": "Claude-family models. The base URL has NO /v1 -- the "
+                "provider's FAQ states the Anthropic dialect 404s if /v1 is "
+                "appended. Shares AGENTROUTER_API_KEY with the OpenAI entry: "
+                "one key, unified quota metering, per the portal.",
+        "docs": "https://co.agentrouter.org/portal",
+    },
     "custom": {
         "label": "Any OpenAI-compatible endpoint (LM Studio, Ollama, vLLM, ...)",
         "wire": "openai",

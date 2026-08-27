@@ -245,6 +245,20 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true",
                     help="print provider readiness as JSON (no key material; "
                          "lengths only) instead of the panel")
+    # DEFAULT BEHAVIOUR CHANGED 2026-08-27 (request 40). `python panel.py` used
+    # to draw the panel and exit, which the user correctly called out: a panel
+    # you cannot type into is a banner. Bare invocation now opens the
+    # interactive console. --once restores the old one-shot draw, because the
+    # old behaviour is what every script and every doc example relies on, and
+    # silently turning those into a process that blocks on stdin would be a
+    # worse break than the gap being fixed.
+    ap.add_argument("--once", action="store_true",
+                    help="draw the panel once and exit, instead of opening "
+                         "the interactive console (the pre-2026-08-27 "
+                         "behaviour; use this in scripts)")
+    ap.add_argument("--interactive", "-i", action="store_true",
+                    help="open the interactive console explicitly (this is "
+                         "already the default when no other flag is given)")
     args = ap.parse_args(argv)
 
     try:
@@ -256,6 +270,43 @@ def main(argv=None) -> int:
     try:
         if args.check:
             return _detail(args.check.strip(), args.allow_paid)
+
+        # The interactive console. Chosen when the user asked for it, or when
+        # they asked for nothing at all -- but NOT when stdin is a pipe or a
+        # closed handle: a menu loop there reads EOF on its first prompt, and
+        # printing a banner into a pipeline that wanted the panel is noise. In
+        # that case fall through to the one-shot draw, which is what a
+        # non-interactive caller meant.
+        wants_console = args.interactive or not (
+            args.once or args.json or args.check)
+        if wants_console and not args.once:
+            interactive_stdin = False
+            try:
+                interactive_stdin = bool(sys.stdin) and sys.stdin.isatty()
+            except Exception:
+                interactive_stdin = False
+            if args.interactive or interactive_stdin:
+                from llm import console as K
+                width = args.width
+                if width is None:
+                    try:
+                        cols = os.get_terminal_size().columns
+                    except Exception:
+                        cols = P.PANEL_WIDTH
+                    width = min(P.PANEL_WIDTH, max(40, cols))
+                if width < 20:
+                    sys.stderr.write(
+                        "REFUSED: --width %d is too narrow to render anything "
+                        "readable (minimum 20).\n" % width)
+                    return 1
+                caps = P.detect_caps(sys.stdout)
+                state = K.State(
+                    engine="local",
+                    width=width,
+                    ascii_only=bool(args.ascii) or not caps["unicode"],
+                    no_colour=bool(args.no_colour) or not caps["colour"],
+                    allow_paid=bool(args.allow_paid))
+                return K.loop(state)
 
         if args.json:
             # credential_status() reports presence and length only; there is no

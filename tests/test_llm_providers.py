@@ -83,6 +83,11 @@ FAKE_KEYS = {
     # which the labelled-credential sweep is the only protection. A mutation
     # proved that: with every fake carrying a prefix, deleting the sweep
     # entirely survived the whole suite.
+    # Assembled from pieces, like the three below, and deliberately given a
+    # readable "sk-ar-" prefix rather than an opaque run: the prefix-less shape
+    # is what GitHub's scanner flags, and one prefix-less fake is already
+    # enough to keep the labelled-credential sweep load-bearing.
+    "AGENTROUTER_API_KEY": "sk-ar-" + "0123456789abcdef" + "0123456789abcdef",
     "MISTRAL_API_KEY": "0123456789" + "abcdefghij" + "ABCDEFGHIJ" + "12",
     "TOGETHER_API_KEY": ("abcdef0123456789" * 2) + "abcdef01",
     "CUSTOM_API_KEY": "opaque0123456789" + "OPAQUE0123456789",
@@ -170,7 +175,11 @@ R_400 = (400, {"error": {"message": "bad request"}})
 section("registry invariants")
 # ===========================================================================
 
-check("provider count", len(PROVIDERS), 12, method="(C) census")
+# 14 since 2026-08-27: AgentRouter is registered TWICE, once per wire dialect,
+# because its own FAQ gives two base URLs and forbids mixing them (/v1 required
+# for the OpenAI dialect, forbidden for the Anthropic one). Two entries make the
+# mistake unreachable; one entry plus a warning would rely on the user reading.
+check("provider count", len(PROVIDERS), 14, method="(C) census")
 check_true("local is present and first",
            provider_names()[0] == "local", "(C) default must be local")
 check_true("rest of the list is alphabetical",
@@ -281,12 +290,21 @@ install_fake_keys()
 check_true("local returns no key",
            get_api_key("local") is None, "(C) no credential path for local")
 check("every provider reported by credential_status",
-      len(credential_status()), 12, method="(C) one row each")
+      len(credential_status()), 14, method="(C) one row each")
 
 rows = {r["provider"]: r for r in credential_status()}
-check_true("all 11 remote keys detected",
-           sum(1 for r in rows.values() if r["configured"]) == 12,
-           "(C) 11 remote + local")
+# The count is providers, not distinct keys: the two AgentRouter entries SHARE
+# AGENTROUTER_API_KEY (the portal states one key meters both dialects), so 14
+# rows are configured from 12 distinct environment variables plus local, which
+# needs none. Asserting on distinct keys here would have hidden that.
+check_true("all 13 remote providers detected as configured",
+           sum(1 for r in rows.values() if r["configured"]) == 14,
+           "(C) 13 remote + local")
+check_true("the two AgentRouter entries share one env var",
+           rows["agentrouter"]["env_key"]
+           == rows["agentrouter-anthropic"]["env_key"]
+           == "AGENTROUTER_API_KEY",
+           "(C) one key, unified metering, per the provider's own portal")
 check_true("credential_status carries no key value",
            not any(FAKE_KEYS[r["env_key"]] in json.dumps(r)
                    for r in rows.values() if r.get("env_key")),
@@ -450,10 +468,17 @@ section("wire dialects (one chat() over three protocols)")
 # ===========================================================================
 
 d = C.wire_dialects()
-check("openai dialect serves 9 providers", len(d["openai"]), 9,
-      method="(C) one implementation, nine services")
-check_true("anthropic speaks its own dialect", d["anthropic"] == ["anthropic"],
-           "(C)")
+check("openai dialect serves 10 providers", len(d["openai"]), 10,
+      method="(C) one implementation, ten services")
+# The anthropic dialect now serves TWO entries, not one: Anthropic itself and
+# AgentRouter's Claude-family endpoint. The old assertion pinned the exact list
+# ['anthropic'], which is why adding the aggregator broke it -- correctly. It is
+# re-pinned as an exact sorted list rather than a count, because "2 providers"
+# would still pass if the wrong two were in it.
+check_true("the anthropic dialect serves exactly Anthropic and AgentRouter's"
+           " Claude endpoint (%s)" % d["anthropic"],
+           sorted(d["anthropic"]) == ["agentrouter-anthropic", "anthropic"],
+           "(C) an exact list; a count would accept the wrong two")
 check_true("google speaks its own dialect", d["google"] == ["google"], "(C)")
 check_true("every provider has a dialect",
            sum(len(v) for v in d.values()) == len(PROVIDERS),
@@ -916,8 +941,11 @@ check_true("no 12-char key fragment in any tier (%s)" % (_frags or "none"),
            not _frags, "(C) a prefix is enough to confirm a guess")
 
 _t = P.render(P.Style(False, False))
-check("all 11 remote keys are still REPORTED as set",
-      _t.count("key set ("), 11,
+# 13 remote providers, each with its own panel row. The two AgentRouter entries
+# share AGENTROUTER_API_KEY, so this is 13 rows from 12 distinct variables --
+# the panel reports per PROVIDER, which is what the user is choosing between.
+check("all 13 remote providers are still REPORTED as key-set",
+      _t.count("key set ("), 13,
       method="(C) redaction must not blind the panel")
 check_true("local is reported ready with no key",
            "ready, no key needed" in _t, "(C) the default provider")

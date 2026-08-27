@@ -19,13 +19,80 @@ cd "$(dirname "$0")/.."
 
 TMP=/tmp/mutate_orig
 mkdir -p "$TMP"
+MUTATED=""
 for m in returns_risk valuation technicals fixed_income derivatives; do
   cp "src/calc/$m.py" "$TMP/$m.py"
 done
 
+# R23 KILL-SAFETY. Added 2026-08-27.
+#
+# This script PATCHES SOURCE IN PLACE (`sed -i` in run_mut) and restores it a
+# few lines later. Everything between those two points is a window in which the
+# working tree holds MUTATED source. Before this change there was NO trap and
+# NO time limit, so any interruption in that window -- Ctrl-C, an outer tool
+# killing the process at its own limit, or a mutant that simply never
+# terminates -- left a patched calculation module on disk.
+#
+# That is not hypothetical. MEASURED this session: an equivalent gap in
+# tests/mutate_llm_providers.py left src/llm/console.py mutated after an outer
+# 120s cut, and the same class of incident previously hit src/tools/selector.py.
+# The corruption is SILENT: the next run tests mutated source and reports green.
+#
+# The trap fires on ordinary exit and on the three interruption signals, and
+# restores every module from the pristine copies taken above. It is
+# unconditional and idempotent -- restoring an unmutated file is a no-op, which
+# is far cheaper than reasoning about whether a restore is needed.
+#
+# WHAT THE TRAP DOES *NOT* DO -- MEASURED, NOT ASSUMED.
+# A trap is NOT sufficient on its own, and it would be dangerous to believe it
+# were. bash DEFERS a trap while a foreground child is running. Tested on this
+# machine with a replica of this script that mutates a file and then sleeps:
+#
+#   kill -TERM <script pid>   -> file left at MAGIC_VALUE = 999  (NOT restored)
+#   kill -TERM -<process grp>  -> file left at MAGIC_VALUE = 999  (NOT restored)
+#
+# In both cases the signal reached the shell but the child kept running, so the
+# handler stayed PENDING and the mutated file survived on disk.
+#
+# What actually works is removing the unbounded child, which is what
+# MUT_TIMEOUT below does. Same replica, oracle wrapped in `timeout`:
+#
+#   timeout -s INT --kill-after=5 3 sleep 600
+#     -> child rc=124, script continues to normal exit, EXIT trap runs,
+#        file restored to MAGIC_VALUE = 1  (md5 bb428a11 == original)
+#
+# So the two halves are NOT redundant and neither is decoration:
+#   * MUT_TIMEOUT guarantees the script REACHES its exit rather than hanging.
+#   * the EXIT trap guarantees that reaching the exit RESTORES the source,
+#     including on the `set -e`-style early exits and on Ctrl-C typed between
+#     two mutants rather than during one.
+# The residual hole is an outer SIGKILL, which no in-process mechanism can
+# survive; that is why the run should be launched in the background rather than
+# under a tool with its own hard cut.
+restore_all() {
+  for m in returns_risk valuation technicals fixed_income derivatives; do
+    [ -f "$TMP/$m.py" ] && cp "$TMP/$m.py" "src/calc/$m.py"
+  done
+}
+on_interrupt() {
+  echo
+  echo "  INTERRUPTED: restoring all calculation sources from $TMP"
+  restore_all
+  echo "  source restored. Verify with: git status && git diff --stat"
+  exit 130
+}
+trap on_interrupt INT TERM HUP
+trap restore_all EXIT
+
+# Budget for ONE mutant's oracle run. Generous, because the point is not to be
+# tight -- it is that no value is INFINITE. A mutant that stops the suite from
+# terminating is the case that orphaned mutated source before.
+MUT_TIMEOUT=300
+
 TOTAL=0
 KILLED=0
 SURVIVED=0
+TIMEDOUT=0
 SKIPPED=0
 
 clear_cache() {
@@ -40,8 +107,23 @@ run_mut() {
   sed -i "s|$pat|$rep|" "$src"
   if ! diff -q "$TMP/$mod.py" "$src" >/dev/null; then
     clear_cache
-    out=$(python3 "tests/$testfile" 2>&1 | grep "^RESULT")
-    if echo "$out" | grep -q "0 failed"; then
+    # `-s INT`, not the default SIGTERM. MEASURED: SIGTERM kills Python where
+    # it stands and `finally` does NOT run, while SIGINT raises
+    # KeyboardInterrupt and unwinds normally. Here it also means the oracle
+    # child cannot be left holding a half-written temp file.
+    raw=$(timeout -s INT --kill-after=20 "$MUT_TIMEOUT" \
+          python3 "tests/$testfile" 2>&1)
+    rc=$?
+    out=$(echo "$raw" | grep "^RESULT")
+    if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+      # A TIMEOUT COUNTS AS A KILL, not as an error. "The suite no longer
+      # finishes" IS the suite noticing the defect. Treating it as a harness
+      # failure instead would let a non-terminating mutant abort the whole run
+      # and be reported as nothing at all.
+      echo "  killed    $desc  (oracle exceeded ${MUT_TIMEOUT}s)"
+      KILLED=$((KILLED + 1))
+      TIMEDOUT=$((TIMEDOUT + 1))
+    elif echo "$out" | grep -q "0 failed"; then
       echo "  SURVIVED  $desc  <-- GAP"
       SURVIVED=$((SURVIVED + 1))
     else
@@ -143,6 +225,12 @@ echo "  seeded:   $TOTAL"
 echo "  killed:   $KILLED"
 echo "  survived: $SURVIVED"
 echo "  skipped:  $SKIPPED"
+# Printed only when non-zero would be the wrong choice here for the same reason
+# the SKIPPED line is unconditional: a counter whose absence is ambiguous
+# teaches the reader nothing. A timeout was counted as a KILL above, so without
+# this line a non-terminating mutant would be indistinguishable from a mutant
+# the suite actually detected -- and those are very different facts.
+echo "  of which timed out: $TIMEDOUT (counted as kills; see MUT_TIMEOUT)"
 if [ "$SURVIVED" != "0" ] || [ "$SKIPPED" != "0" ] || [ "$INTACT" != "1" ]; then
   exit 1
 fi

@@ -51,8 +51,10 @@ LLM = os.path.join(ROOT, "src", "llm")
 PROVIDERS_PY = os.path.join(LLM, "providers.py")
 CLIENTS_PY = os.path.join(LLM, "clients.py")
 PANEL_PY = os.path.join(LLM, "panel.py")
+CONSOLE_PY = os.path.join(LLM, "console.py")
 
 TESTS = os.path.join(HERE, "test_llm_providers.py")
+CONSOLE_TESTS = os.path.join(HERE, "test_console.py")
 PANEL_CLI = os.path.join(ROOT, "scripts", "panel.py")
 
 # ---------------------------------------------------------------------------
@@ -210,6 +212,71 @@ MUTATIONS = [
     (PANEL_PY, "local model failures reported as passes",
      'style.c("bad", pad("3.62-4.38 tok/s (min 8) FAIL", 34))',
      'style.c("ok", pad("3.62-4.38 tok/s PASS", 34))'),
+
+    # ---- console.py: the interactive menu (added 2026-08-27) ------------
+    # The console's failure modes are DIFFERENT from the provider layer's, and
+    # that is the whole reason it gets its own mutants. A wrong number is not
+    # the risk here. The risks are: a command that silently does nothing, a
+    # refusal that changes state anyway, a loop that will not exit, and -- the
+    # one that matters most -- a menu that starts a run. Each mutant below is
+    # one of those four, and each was reachable by an ordinary mistake.
+
+    # A refusal that half-applies. The user asks for an engine that does not
+    # exist and the console selects it anyway; menu 8 then prints a run command
+    # for a provider with no endpoint and no key.
+    (CONSOLE_PY, "an unknown engine name is accepted and selected",
+     'if name not in PROVIDERS:', 'if False:'),
+
+    # Selection that does not select. The single most likely "it looks fine"
+    # defect: the view renders, the warning prints, and the engine silently
+    # stays local -- so menu 8 confidently prints the WRONG command.
+    (CONSOLE_PY, "choosing an engine does not actually change it",
+     'new.engine = name', 'new.engine = state.engine'),
+
+    # The two-base-url trap goes unwarned. AgentRouter's own FAQ says mixing
+    # them 404s; the warning at the moment of choosing is the whole mitigation.
+    (CONSOLE_PY, "the AgentRouter two-base-url warning is suppressed",
+     'if name.startswith("agentrouter"):', 'if False:'),
+
+    # Defence in depth removed. Nothing on these paths handles a key value
+    # TODAY, so a surviving mutant here is not automatically a leak -- it is
+    # notice that the guard is untested and will not be there on the day
+    # someone adds a path that does.
+    (CONSOLE_PY, "dispatch output no longer passes through redact",
+     'return redact("\\n".join(lines)), state, quit_flag',
+     'return "\\n".join(lines), state, quit_flag'),
+
+    # The loop stops terminating on EOF. This is the mutant the SIGALRM harness
+    # in test_console.py exists for: without the alarm it would HANG the run
+    # rather than fail it, and a hung run in this sandbox has needed a reset.
+    (CONSOLE_PY, "EOF no longer ends the session (spins forever)",
+     'if raw == "":', 'if False:'),
+
+    # One bad view kills the whole console instead of being reported.
+    # `SystemExit` and not an invented name: a name that does not exist would
+    # raise NameError when the handler is reached, and the oracles would "kill"
+    # a mutant that never actually tested containment. SystemExit is a real
+    # class that BaseException-derives and that no view raises, so the handler
+    # becomes unreachable while the module stays importable and valid.
+    (CONSOLE_PY, "an exception in one view is no longer contained",
+     'except Exception as exc:           # never let one bad view kill the loop',
+     'except SystemExit as exc:          # mutant: containment removed'),
+
+    # An unrecognised command is silently ignored, which looks exactly like a
+    # command that ran and did nothing -- the precise defect the user reported.
+    (CONSOLE_PY, "an unknown command is silently ignored",
+     'if key is None:', 'if False and key is None:'),
+
+    # The cost blocker disappears from the readiness view (menu 4), so a
+    # billable provider with a key set reads as "usable right now". The spend
+    # gate in clients.py still refuses the actual call, but the console would be
+    # telling the user something untrue about a provider whose quota is UNKNOWN.
+    # Description corrected 2026-08-27: this line is in check_text(), not in the
+    # run view -- the first wording named the wrong function, and a mutant
+    # described wrongly sends the next reader to the wrong place.
+    (CONSOLE_PY, "the cost blocker is dropped from the readiness view",
+     'if free is not True and not state.allow_paid:',
+     'if False and not state.allow_paid:'),
 ]
 
 
@@ -219,6 +286,45 @@ def _read(path):
 
 def _write(path, text):
     io.open(path, "w", encoding="utf-8").write(text)
+
+
+# Seconds any single oracle may take. MEASURED on unmutated source: the
+# provider suite ~0.5 s, the console suite ~0.8 s, each panel invocation
+# ~0.3 s. 60 s is roughly 70x the slowest, so it cannot fire on a merely slow
+# machine -- only on a mutant that does not terminate.
+ORACLE_TIMEOUT = 60
+
+# Set when any oracle is killed by the timeout, so the summary can say so.
+_TIMED_OUT = []
+
+
+def _oracle_ok(argv, env, timeout=ORACLE_TIMEOUT):
+    """
+    Run one oracle. True if it exited 0 within `timeout`.
+
+    WHY THE TIMEOUT IS NOT OPTIONAL. Added 2026-08-27 after this battery HUNG.
+    MEASURED: with the console mutant `if raw == "":` -> `if False:` applied,
+    the console's read loop never sees EOF, so the console suite ran forever;
+    subprocess.run() had no timeout, so the battery waited forever with a
+    mutated console.py on disk. The outer tool killed the whole process tree at
+    120 s, `finally` did not run (R23/D-0054: it does not run on SIGKILL), and
+    src/llm/console.py was left MUTATED -- exactly the failure this project has
+    already been burned by once in src/tools/selector.py.
+
+    A timeout here counts as a KILL, not as an error. That is the correct
+    reading: a mutant that makes an oracle hang has changed observable
+    behaviour, and "the test suite no longer finishes" is the suite noticing.
+    Treating it as a battery failure instead would let a non-terminating mutant
+    abort the run and be reported as nothing at all.
+    """
+    try:
+        p = subprocess.run(argv, cwd=ROOT, env=env,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _TIMED_OUT.append(os.path.basename(argv[1] if len(argv) > 1 else argv[0]))
+        return False
+    return p.returncode == 0
 
 
 def run_oracles():
@@ -239,29 +345,33 @@ def run_oracles():
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     # Oracle 1: the assertion suite.
-    p = subprocess.run([sys.executable, TESTS], cwd=ROOT, env=env,
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    if p.returncode != 0:
+    if not _oracle_ok([sys.executable, TESTS], env):
         return False
+    # Oracle 1b: the console suite. Added 2026-08-27 with console.py. It is a
+    # SEPARATE oracle rather than an extension of the first because it is the
+    # only one that exercises the menu state machine -- reachability of every
+    # advertised command, refusals that must not half-apply, and a loop that
+    # must terminate. Without it, every console mutant below would survive
+    # trivially and the survivors would say nothing about the console.
+    if os.path.exists(CONSOLE_TESTS):
+        if not _oracle_ok([sys.executable, CONSOLE_TESTS], env):
+            return False
     # Oracle 2: the entry point must still work end to end for the default
     # provider and must still refuse a paid one.
-    p = subprocess.run([sys.executable, PANEL_CLI, "--check", "local"],
-                       cwd=ROOT, env=env,
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    if p.returncode != 0:
+    if not _oracle_ok([sys.executable, PANEL_CLI, "--check", "local"], env):
         return False
     env2 = dict(env)
     env2.pop("OPENAI_API_KEY", None)
-    p = subprocess.run([sys.executable, PANEL_CLI, "--check", "openai"],
-                       cwd=ROOT, env=env2,
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    if p.returncode == 0:
-        return False          # a paid provider with no key must NOT be READY
-    # Oracle 3: the panel must render in the tier a legacy console gets.
-    p = subprocess.run([sys.executable, PANEL_CLI, "--ascii", "--no-colour"],
-                       cwd=ROOT, env=env,
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    return p.returncode == 0
+    # NOTE the inversion: here a returncode of 0 is the FAILURE, because a paid
+    # provider with no key must not report READY. A timeout is still a kill.
+    if _oracle_ok([sys.executable, PANEL_CLI, "--check", "openai"], env2):
+        return False
+    # Oracle 3: the panel must render in the tier a legacy console gets. Piped
+    # stdout is not a tty, so this still takes the one-shot draw path and does
+    # NOT open the interactive console -- which is exactly the backward
+    # compatibility that --once was added to preserve.
+    return _oracle_ok([sys.executable, PANEL_CLI, "--ascii", "--no-colour"],
+                      env)
 
 
 def main():
@@ -340,6 +450,14 @@ def main():
         print("  SKIPPED:  %s" % s)
     for s in unexpected_kills:
         print("  RECHECK:  %s was listed as equivalent but was KILLED" % s)
+    # A timeout is counted as a kill, but it must never be SILENT: "killed by
+    # hanging" and "killed by an assertion" are different facts, and only the
+    # first one tells you a mutant can make the tooling itself stop finishing.
+    if _TIMED_OUT:
+        seen = sorted(set(_TIMED_OUT))
+        print("  TIMEOUT:  %d oracle run(s) hit the %ds limit and were counted"
+              " as kills (%s)" % (len(_TIMED_OUT), ORACLE_TIMEOUT,
+                                  ", ".join(seen)))
     if dirty:
         print("  INTEGRITY: files left modified: %s" % ", ".join(dirty))
     print("  source restored and oracles green: %s"

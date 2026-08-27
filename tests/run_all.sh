@@ -10,6 +10,92 @@ find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null
 fail=0
 total_pass=0
 total_skip=0
+
+# ---------------------------------------------------------------------------
+# R23 KILL-SAFETY. Added 2026-08-27.
+#
+# WHY THIS EXISTS. Every python3 call in this driver used to run with NO time
+# limit. MEASURED consequence, from a real incident this session: a mutation
+# battery seeded a console mutant that stopped the read loop from ever seeing
+# EOF (`if raw == "":` -> `if False:`). The child never returned, the OUTER
+# tool killed the whole process tree at its own limit, the battery's `finally`
+# block therefore never ran (a `finally` does not run on SIGKILL), and
+# src/llm/console.py was left MUTATED ON DISK.
+#
+# That is the dangerous case: the batteries PATCH SOURCE FILES in place and
+# rely on cleanup to put them back. A driver that can be killed from outside
+# is a driver that can leave the working tree corrupted, and the corruption is
+# silent -- the next run tests mutated source and calls it green.
+#
+# The batteries' own subprocess calls are now guarded internally
+# (ORACLE_TIMEOUT in tests/mutate_llm_providers.py). This guards the OTHER
+# half: the shell driver that launches them.
+#
+# WHY `-s INT` AND NOT THE DEFAULT SIGTERM. An earlier version of this comment
+# claimed SIGTERM unwinds Python into its `finally` blocks. That was WRONG, and
+# it was corrected only because it was tested instead of believed. MEASURED:
+#
+#   timeout    2 python3 -c 'try: sleep(30)
+#                            finally: print("FINALLY RAN")'   -> prints NOTHING
+#   timeout -s INT 2 python3 -c '...same...'                  -> prints FINALLY RAN
+#
+# Default SIGTERM has NO Python-level handler, so the interpreter dies where it
+# stands and `finally` never executes. SIGINT raises KeyboardInterrupt, which
+# unwinds normally and RUNS `finally`. VERIFIED it still works through command
+# substitution, which is how every call site here invokes it.
+#
+# This distinction is the whole point of the guard, not a detail: VERIFIED that
+# all 11 mutation batteries restore patched source in a `finally` block
+# (grep -c finally tests/mutate_*.py -> every file >= 1). A guard that killed
+# them with SIGTERM would have TERMINATED THEM MID-MUTATION AND LEFT THE SOURCE
+# PATCHED -- reproducing by design the exact incident it was written to prevent,
+# while appearing in the log as a clean, handled timeout. That is worse than no
+# guard, because it would be trusted.
+#
+# `--kill-after=20` is the backstop for a child that ignores SIGINT: it gets 20
+# more seconds, then SIGKILL. Reaching SIGKILL means cleanup did NOT run, which
+# is why that case is reported loudly below rather than folded into the
+# ordinary failure count.
+#
+# BUDGETS. Suites and probes are fast (MEASURED: the console suite is well
+# under a second). Batteries are slow by nature -- they re-run whole oracle
+# suites once per mutant -- so they get a much larger budget. The point is not
+# to be tight; it is that no value is INFINITE.
+SUITE_TIMEOUT=300
+BATTERY_TIMEOUT=1800
+
+# run_guarded <seconds> <command...>
+# Echoes the child's combined output, and returns the child's own exit status
+# so every existing `$?` check keeps working unchanged. On timeout it appends
+# a TIMEOUT marker line and returns 124.
+#
+# WHY A FILE AND NOT A SHELL VARIABLE. The first version recorded timeouts in a
+# `timed_out` variable. MEASURED: it stayed EMPTY even on a confirmed timeout,
+# because every call site invokes this function inside `$(...)`, which runs in a
+# SUBSHELL -- assignments there cannot reach the parent. The end-of-run summary
+# would therefore have reported "no timeouts" immediately after timing out: a
+# silent under-report, which is the failure mode this whole section exists to
+# stop. A file crosses the subshell boundary; a variable does not.
+TIMEOUT_LOG="$(mktemp -t marfin_timeouts.XXXXXX)"
+trap 'rm -f "$TIMEOUT_LOG"' EXIT
+
+run_guarded() {
+  local budget="$1"; shift
+  local output status
+  output=$(timeout -s INT --kill-after=20 "$budget" "$@" 2>&1)
+  status=$?
+  echo "$output"
+  if [ $status -eq 124 ] || [ $status -eq 137 ]; then
+    echo "  TIMEOUT: '$*' exceeded ${budget}s and was terminated"
+    if [ $status -eq 137 ]; then
+      echo "  WARNING: it ignored SIGINT and was SIGKILLed, so its cleanup did"
+      echo "           NOT run. The working tree may hold PATCHED SOURCE."
+      echo "           Check immediately with: git status && git diff --stat"
+    fi
+    echo "$* (${budget}s)" >> "$TIMEOUT_LOG"
+  fi
+  return $status
+}
 echo "=============================================================="
 echo "DETERMINISTIC CALCULATION VERIFICATION SUITE"
 echo "=============================================================="
@@ -30,14 +116,15 @@ tests/test_alpha_vantage.py \
 tests/test_broker_tools.py \
 tests/test_screenshot.py \
 tests/test_phase4_harness.py \
-tests/test_llm_providers.py"
+tests/test_llm_providers.py \
+tests/test_console.py"
 
 for t in $SUITES; do
   echo
   echo ">>> $t"
   # Run ONCE and keep the output. Running twice doubled the cost and could
   # mask a nondeterministic failure by reporting a different run than it tested.
-  out=$(python3 "$t" 2>&1)
+  out=$(run_guarded "$SUITE_TIMEOUT" python3 "$t")
   status=$?
   echo "$out" | grep -E "^  FAIL|^  SKIP|^  INFO"
   echo "$out" | grep "^RESULT"
@@ -78,7 +165,7 @@ fi
 # than by hand. It is offline (no network) and takes milliseconds.
 echo
 echo ">>> TradingView display-only wall (adversarial probe)"
-tvout=$(python3 tests/probe_tradingview.py 2>&1)
+tvout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_tradingview.py)
 tv_status=$?
 echo "$tvout" | grep -E "^ +(\*\* ALLOWED|!! CRASHED)"
 echo "$tvout" | grep -E "^attempts="
@@ -94,7 +181,7 @@ fi
 # stops the next one from surviving a whole session.
 echo
 echo ">>> market data quote guards (adversarial probe)"
-mqout=$(python3 tests/probe_quotes.py 2>&1)
+mqout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_quotes.py)
 mq_status=$?
 echo "$mqout" | grep -E "^ +(\*\* ALLOWED|!! CRASHED)"
 echo "$mqout" | grep -E "^attempts="
@@ -112,7 +199,7 @@ fi
 # defects must be RECORDED at the right severity AND actually enforced.
 echo
 echo ">>> CSV ingestion validation (adversarial probe)"
-csvout=$(python3 tests/probe_csv_import.py 2>&1)
+csvout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_csv_import.py)
 csv_status=$?
 csvout_bad=$(echo "$csvout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* NO FINDING|\*\* WRONG SEVERITY|\*\* NOT ENFORCED|\*\* FALSE REASON")
 [ -n "$csvout_bad" ] && echo "$csvout_bad"
@@ -132,7 +219,7 @@ fi
 # found by a test failing; all three were found by attacking the passes.
 echo
 echo ">>> webhook receiver validation (adversarial probe)"
-whout=$(python3 tests/probe_webhooks.py 2>&1)
+whout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_webhooks.py)
 wh_status=$?
 whout_bad=$(echo "$whout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* WRONG EXC|\*\* WRONG GUARD|\*\* DEFECT")
 [ -n "$whout_bad" ] && echo "$whout_bad"
@@ -153,7 +240,7 @@ fi
 # entirely from saved payloads and spends none of the 25-per-day allowance.
 echo
 echo ">>> Alpha Vantage connector guards (adversarial probe)"
-avout=$(python3 tests/probe_alpha_vantage.py 2>&1)
+avout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_alpha_vantage.py)
 av_status=$?
 avout_bad=$(echo "$avout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* BROKEN")
 [ -n "$avout_bad" ] && echo "$avout_bad"
@@ -171,7 +258,7 @@ fi
 # Offline, no credential, milliseconds.
 echo
 echo ">>> broker tool surface (adversarial probe)"
-btout=$(python3 tests/probe_broker_tools.py 2>&1)
+btout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_broker_tools.py)
 bt_status=$?
 btout_bad=$(echo "$btout" | grep -E "\*\* ALLOWED|!! CRASHED|\*\* BROKEN")
 [ -n "$btout_bad" ] && echo "$btout_bad"
@@ -190,7 +277,7 @@ fi
 # that widened every approval granted after it. Offline, no display, no capture.
 echo
 echo ">>> Level 3 visual surface (adversarial probe)"
-ssout=$(python3 tests/probe_screenshot.py 2>&1)
+ssout=$(run_guarded "$SUITE_TIMEOUT" python3 tests/probe_screenshot.py)
 ss_status=$?
 ssout_bad=$(echo "$ssout" | grep -E "^  ALLOWED|^  CRASHED|^  BROKEN")
 [ -n "$ssout_bad" ] && echo "$ssout_bad"
@@ -217,7 +304,7 @@ if [ "$1" = "--mutate" ]; then
 
   echo
   echo ">>> selector mutation battery"
-  sel=$(python3 tests/mutate_selector.py 2>&1)
+  sel=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_selector.py)
   sel_status=$?
   echo "$sel" | grep -E "^ +(seeded|killed|survived|skipped):"
   echo "$sel" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -225,7 +312,7 @@ if [ "$1" = "--mutate" ]; then
 
   echo
   echo ">>> RAG mutation battery"
-  rag=$(python3 tests/mutate_rag.py 2>&1)
+  rag=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_rag.py)
   rag_status=$?
   echo "$rag" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$rag" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -239,7 +326,7 @@ if [ "$1" = "--mutate" ]; then
   # mutations that make the layer accept garbage, the other catches mutations
   # that make it refuse everything. Running only one lets half the classes
   # through -- MEASURED, not assumed.
-  mkt=$(python3 tests/mutate_market.py 2>&1)
+  mkt=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_market.py)
   mkt_status=$?
   echo "$mkt" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$mkt" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -253,7 +340,7 @@ if [ "$1" = "--mutate" ]; then
   # be submitted with real money. It found 17 survivors on a suite that passed
   # 93/93, including a docstring claiming live trading was unreachable when a
   # two-line config file reached it.
-  exe=$(python3 tests/mutate_execution.py 2>&1)
+  exe=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_execution.py)
   exe_status=$?
   echo "$exe" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$exe" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -269,7 +356,7 @@ if [ "$1" = "--mutate" ]; then
   # failure at all. A suite that cannot fail manufactures confidence, and only a
   # mutation battery can detect one. The remaining 3 were real test gaps,
   # including a null-close guard shadowed by an earlier guard.
-  csvm=$(python3 tests/mutate_csv_import.py 2>&1)
+  csvm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_csv_import.py)
   csvm_status=$?
   echo "$csvm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$csvm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -293,7 +380,7 @@ if [ "$1" = "--mutate" ]; then
   # UnicodeDecodeError counted as a refusal because it subclasses ValueError).
   # Exactly one mutant is documented as equivalent, with the eight measurements
   # that failed to reach it; RECHECK below fires if it ever starts dying.
-  whm=$(python3 tests/mutate_webhooks.py 2>&1)
+  whm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_webhooks.py)
   whm_status=$?
   echo "$whm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$whm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -321,7 +408,7 @@ if [ "$1" = "--mutate" ]; then
   # is enabled and its tier does permit end-of-day. The SKIP was the worst of
   # the nine: its find-string occurred TWICE in the module, so it had silently
   # stopped testing anything while still printing a line.
-  avm=$(python3 tests/mutate_alpha_vantage.py 2>&1)
+  avm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_alpha_vantage.py)
   avm_status=$?
   echo "$avm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$avm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -345,7 +432,7 @@ if [ "$1" = "--mutate" ]; then
   # status -- it was NOT filed as equivalent, because that equivalence rests on
   # record() having no external caller today, so its independent existence is
   # asserted structurally instead.
-  btm=$(python3 tests/mutate_broker_tools.py 2>&1)
+  btm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_broker_tools.py)
   btm_status=$?
   echo "$btm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$btm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -372,7 +459,7 @@ if [ "$1" = "--mutate" ]; then
   # would have quietly counted as a survivor forever. It is recorded in the file
   # rather than silently corrected, because "the tests are too weak" is only one
   # of the answers a survivor can have.
-  ssm=$(python3 tests/mutate_screenshot.py 2>&1)
+  ssm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_screenshot.py)
   ssm_status=$?
   echo "$ssm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$ssm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -406,7 +493,7 @@ if [ "$1" = "--mutate" ]; then
   # NOTE the grep below says "oracle", singular. This battery has one oracle;
   # the others have two. Grepping the plural here would never match and the
   # source-integrity check would fail every run.
-  p4m=$(python3 tests/mutate_phase4.py 2>&1)
+  p4m=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_phase4.py)
   p4m_status=$?
   echo "$p4m" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$p4m" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -439,7 +526,7 @@ if [ "$1" = "--mutate" ]; then
   # NOTE this battery prints "oracles", plural: it has three (the assertion
   # suite, panel.py --check exit codes, and an --ascii --no-colour render).
   # Grepping the singular here would never match and would fail every run.
-  llmm=$(python3 tests/mutate_llm_providers.py 2>&1)
+  llmm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_llm_providers.py)
   llmm_status=$?
   echo "$llmm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
   echo "$llmm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
@@ -452,6 +539,22 @@ if [ "$1" = "--mutate" ]; then
 fi
 
 echo
+# A TIMEOUT MUST NEVER BE ABLE TO REPORT "ALL GREEN". A child killed at its
+# budget produced no RESULT line, so its assertions were never counted and its
+# grep-based checks matched nothing -- which looks IDENTICAL to a clean pass
+# from the driver's point of view. Read unconditionally and printed even when
+# the count is zero, for the same reason as the SKIPPED line: a line that
+# appears only when non-zero teaches the reader that its absence means nothing.
+n_timeout=0
+[ -s "$TIMEOUT_LOG" ] && n_timeout=$(wc -l < "$TIMEOUT_LOG")
+echo "  TIMED OUT: $n_timeout run(s) exceeded their time budget"
+if [ "$n_timeout" -ne 0 ]; then
+  sed 's/^/           - /' "$TIMEOUT_LOG"
+  echo "  A timed-out run proves NOTHING: it was cut off before reporting, so"
+  echo "  its assertions were never counted. Treated as a FAILURE, not a pass."
+  fail=1
+fi
+
 echo "=============================================================="
 [ $fail -eq 0 ] && echo "ALL GREEN" || echo "FAILURES PRESENT"
 echo "=============================================================="

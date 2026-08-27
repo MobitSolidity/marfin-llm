@@ -93,6 +93,14 @@ MODEL_HINTS: Dict[str, str] = {
     "google": "e.g. gemini-2.0-flash (UNVERIFIED hint)",
     "groq": "e.g. llama-3.3-70b-versatile (UNVERIFIED hint)",
     "openrouter": "the id decides whether you pay; free ones end in ':free'",
+    # AgentRouter is an aggregator, so the id names an UPSTREAM model, not one
+    # of its own. Its portal listed gpt-5.5 / glm-5.1 / kimi-k2.6 for the
+    # OpenAI dialect and claude-opus-4-8 for the Anthropic one on 2026-08-27,
+    # but the same page states the available set depends on the resource pool
+    # bound to your key -- so no id is asserted here as a fact. Ask the
+    # endpoint itself: GET /v1/models.
+    "agentrouter": "an UPSTREAM id, pool-dependent; ask GET /v1/models",
+    "agentrouter-anthropic": "a Claude-family id; your pool decides which",
     "mistral": "e.g. mistral-small-latest (UNVERIFIED hint)",
     "deepseek": "e.g. deepseek-chat (UNVERIFIED hint)",
     "together": "a fully qualified id such as org/model-name",
