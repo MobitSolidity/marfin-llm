@@ -2133,3 +2133,174 @@ single failing threshold. `measurements_recorded` remains `null`;
 `live_trading_enabled` remains `false`; `active_mode` remains `ANALYSIS_ONLY`;
 the 12 approved thresholds are byte-identical. No API key was ever used from this
 sandbox, and no run may start without the user's explicit approval.
+
+## D-0065 — The panel becomes an interactive console, and the console is forbidden from launching a run
+
+A panel that prints once and exits is a banner, not a panel. The user reported
+this directly: `python panel.py` "only runs and then closes and does not take a
+command." So `src/llm/console.py` adds a 12-entry menu loop covering the choice
+the user asked for by name — local model versus API providers — plus providers,
+readiness checks, keys, guardrails, display and JSON output.
+
+The console has one hard boundary: **it never launches a run and never opens a
+socket.** It prints the exact command and stops. This is not caution for its own
+sake. A menu that could start a 3.6-hour run by mis-keying a digit would break
+the standing rule that no run starts without explicit approval, and it would do
+so in the one place where a slip is most likely. The restriction is enforced by
+an AST check in the suite, not by a comment.
+
+Proven, not asserted: `tests/test_console.py`, 108 assertions, 0 failed,
+registered in `run_all.sh` (18 suites) with the runner's grep patterns verified
+against real output. Two real defects were found by that suite and fixed:
+`resolve_base_url("custom")` raising out of `dispatch()` at two unguarded call
+sites, and a cost blocker that no assertion covered.
+
+## D-0066 — AgentRouter is registered twice, and its "$200 free credits" claim is rejected as marketing
+
+AgentRouter's own portal FAQ states, VERBATIM: "Anthropic compatible (Claude
+family): https://co.agentrouter.org, no /v1. OpenAI compatible (GPT etc.):
+https://co.agentrouter.org/v1, /v1 required. Do not mix them." Registering one
+entry would leave the user one wrong base URL away from a silent failure, so it
+is registered TWICE, once per dialect, which makes the mistake unreachable.
+
+`free_tier` is `None` (UNKNOWN), not `True`. The widely circulated "$200 free
+credits" claim traces to a gist carrying referral links (`?aff=DWBb`) and a
+DIFFERENT host than the portal documents. A referral-funded claim about someone
+else's pricing is not evidence, so the spend gate treats AgentRouter as billable
+and refuses it without `--allow-paid`. Under the user's "free tier only, spend
+nothing" constraint, guessing "free" here is the expensive kind of wrong.
+
+## D-0067 — graphify's ideas are borrowed; graphify itself is not installed
+
+Request 40 asked that the graphify repository inform our structure analysis. It
+was cloned and read. Then MEASURED: `graphify.extract.extract()` raises
+`ImportError: tree-sitter is not installed`, and its dependency set is numpy,
+rapidfuzz and ~27 tree-sitter grammars. Meanwhile marfin-llm is 89 .py files
+and nothing else that is source; stdlib `ast` parses all 36 src/ files with zero
+failures.
+
+graphify's value is breadth: one tool that reads 27 languages. marfin-llm needs
+exactly one of those 27. Installing ~30 packages plus a native toolchain to gain
+26 unused languages is the wrong trade on a machine that must stay reproducible.
+So `tools/graph_project.py` borrows what actually transfers — the
+detect/extract/build/cluster/analyze/report pipeline, the node schema, and above
+all the EXTRACTED/INFERRED/AMBIGUOUS confidence labels, which parallel this
+project's own VERIFIED/MEASURED/COMPUTED/ESTIMATED/UNKNOWN discipline.
+
+Half of all call edges come back AMBIGUOUS. That is an honest result, not a
+defect: a name defined in more than one module cannot be statically resolved,
+and a graph that hid which edges were guesses would be worse than no graph.
+
+## D-0068 — The tool's own first run was audited before its numbers were believed, and it was wrong
+
+`tools/graph_project.py` ran clean on its first attempt, 0 parse errors, and
+reported `tests._harness` as having **no internal edges** — i.e. possibly dead
+code. That is false: 16 suites import it. The output was audited rather than
+published.
+
+Cause: `from _harness import check` names the module `_harness`, while the tool
+ids that same file as `tests._harness`. `build()` keeps an edge only when
+`target in ours`, so 17 edges were silently DISCARDED and the most-depended-on
+module in the test tree looked like a dead file. Fixed by `_resolve_sibling()`,
+which covers both `ast.Import` (`import phase4_lib as L` is a real form here)
+and `ast.ImportFrom`, labels every edge it resolves INFERRED because it rests on
+a `sys.path` assumption rather than on the AST, and refuses to resolve when two
+modules share a basename.
+
+Verified after: 530 import edges unchanged (nothing invented), `_harness` fan-in
+0→16, `phase4_lib` 1→2, 0 self-edges, `llm.providers` 6→6 unregressed, still 0
+cycles. The 727→728 node delta is accounted for exactly by the new function and
+its 2 call sites, since the tool analyses `tools/` including itself.
+
+A separate correction: an earlier "21 suites import the harness" figure came
+from `grep -l`, which counts MENTIONS. The true count is 16; the other 5 files
+name `_harness` only in comments. This project has already been burned once by
+confusing "calls it" with "mentions it".
+
+## D-0069 — The harness that 16 suites depend on was untested; it was probed, and it is sound
+
+The graph put `tests/_harness.py` at the top of the fan-in table, and MEASURED
+that it has no test of its own and no mutation battery, while 11 other modules
+have batteries. If it could pass falsely, all 3,128 assertions would report
+green wrongly.
+
+Probed directly. No false-pass mode exists: `check(nan, nan)` FAILS (the classic
+trap), `check_raises` on a non-raising function FAILS, `check_true(0)` FAILS. The
+assertion base is trustworthy.
+
+Two traits recorded rather than "fixed", because both are correct as they stand:
+`check(True, 1)` passes, since the comparison is numeric and type-blind — which
+is the standing reason `test_console.py` carries its own `check_is` comparing
+`type(got) is type(want)`; and `check(inf, inf)` fails, erring toward reporting
+a defect rather than hiding one.
+
+## D-0070 — SIGTERM does not run Python's `finally`, so the kill guard uses SIGINT
+
+The R23 fix added time limits to the 19 unbounded `python3` calls in
+`run_all.sh` and `mutation_test.sh`. The first version's comment claimed
+SIGTERM unwinds Python into its `finally` blocks. Tested instead of believed:
+
+    timeout        2 python3 '... finally: print("FINALLY RAN")'  -> prints NOTHING
+    timeout -s INT 2 python3 '...same...'                         -> prints FINALLY RAN
+
+The claim was WRONG. Default SIGTERM has no Python-level handler, so the
+interpreter dies where it stands. VERIFIED that all 11 mutation batteries
+restore patched source inside a `finally` block, which means a SIGTERM-based
+guard would have terminated them MID-MUTATION and left source PATCHED ON DISK —
+reproducing by design the exact incident it was written to prevent, while
+appearing in the log as a clean, handled timeout. A guard that is trusted and
+does the opposite of its description is worse than no guard. Uses `-s INT`.
+
+## D-0071 — A trap alone does not protect the mutation window; bash defers it
+
+`mutation_test.sh` patches source with `sed -i` and restores it a few lines
+later. A cleanup trap was added — and then tested on a replica that mutates a
+file and hangs:
+
+    kill -TERM <script pid>     -> file left MUTATED (not restored)
+    kill -TERM -<process group> -> file left MUTATED (not restored)
+
+bash DEFERS a trap while a foreground child is running, so the signal reached
+the shell, the child kept running, and the handler stayed pending. What works is
+removing the unbounded child: with the oracle wrapped in `timeout`, the child
+returned 124, the script reached its normal exit, the EXIT trap ran, and the
+file was restored (md5 identical to the original).
+
+So the two halves are complementary and neither is decoration: the timeout
+guarantees the script REACHES its exit; the trap guarantees that reaching the
+exit RESTORES the source, including on Ctrl-C typed between two mutants. The
+residual hole is an outer SIGKILL, which no in-process mechanism survives — the
+reason such runs are launched in the background rather than under a tool with
+its own hard cut.
+
+Also fixed: the timeout tally lived in a shell variable that was silently EMPTY
+after a confirmed timeout, because every call site runs inside `$(...)`, in a
+subshell. It now uses a file, and a timeout forces FAILURES PRESENT — a run cut
+off before reporting proves nothing, yet looked identical to a clean pass.
+
+## D-0072 — The R10 grading tool records human verdicts and scores nothing itself
+
+`tools/grade_persian.py` presents each case's question, rubric and actual output
+and records a HUMAN verdict. It does not score Persian fluency, and that is the
+design rather than a limitation: a heuristic score would be indistinguishable
+from a measurement in any later summary, and R10 would drift from UNKNOWN to a
+fabricated PASS. `PROJECT_STATE.json` and the merged evidence both already say
+this needs a human reader.
+
+Mechanical facts (`latin_ratio`, `value_ok`, `abstained`, `banned_hits`) are
+shown as clearly-labelled context so the reader need not recompute them, and are
+never mixed into the verdict.
+
+A defect was found by auditing the tool's own first output: it reported 22 empty
+outputs where a direct count of the file gives 15. MEASURED cause — 52 cases but
+only 31 distinct ids, because the `tools` and `plain` arms deliberately ask the
+SAME 21 questions. Keying grades by `id` alone collapsed 52 cases to 31 and let
+one arm's verdict silently become another's. That is the worst possible defect
+for this file, since comparing arms on identical questions is the entire reason
+the evidence is shaped this way — a cross-contaminated grade would not look
+wrong, it would look like a finding. Now keyed `arm::id`; 15 + 37 = 52
+reconciles with the independent count.
+
+15 cases produced no output and are marked `no_output`, counted separately and
+never as passes: a fluency verdict on an empty string would be fabricated. The
+tool reports counts only and does not set the R10 threshold verdict.

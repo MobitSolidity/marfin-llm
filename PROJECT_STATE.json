@@ -151,7 +151,15 @@
     "D-0059 Three grading defects that silently corrupted the metrics: per-case must_abstain override, Persian reply in mixed cases, fabrication summed across all arms",
     "D-0060 Two mutation survivors had NO observable difference because the code path was UNREACHABLE; remedy was extraction into the pure total_fabrications()",
     "D-0061 A denominator that shrinks in SILENCE is not a measurement; abstention_ungraded_n + grading_warnings + an unconditional report block",
-    "D-0062 A SKIPPED assertion hid two mutation survivors; the real tokenizer restored them and run_all.sh now counts skips"
+    "D-0062 A SKIPPED assertion hid two mutation survivors; the real tokenizer restored them and run_all.sh now counts skips",
+    "D-0065 The panel becomes an interactive console, and the console is forbidden from launching a run or opening a socket",
+    "D-0066 AgentRouter is registered twice (one entry per wire dialect) and its '$200 free credits' claim is rejected as affiliate marketing; free_tier stays UNKNOWN",
+    "D-0067 graphify's pipeline shape, node schema and EXTRACTED/INFERRED/AMBIGUOUS labels are borrowed; graphify itself is not installed (tree-sitter absent, single-language tree)",
+    "D-0068 The graph tool's own first run was audited before its numbers were believed: it wrongly reported tests._harness as edgeless; 17 discarded edges recovered as INFERRED",
+    "D-0069 tests/_harness.py has the highest fan-in in the tree and no battery; probed directly and found to have NO false-pass mode (nan==nan FAILS, check_raises FAILS)",
+    "D-0070 SIGTERM does NOT run Python's finally; the kill guard uses SIGINT, because all 11 batteries restore source in a finally block",
+    "D-0071 A trap alone does not protect the mutation window (bash defers traps while a foreground child runs); bounding the child is what works",
+    "D-0072 The R10 grading tool records HUMAN verdicts and scores nothing itself; grades keyed arm::id after 52 cases were found to hold only 31 distinct ids"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -303,7 +311,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0064",
+  "decisions_logged": "D-0001..D-0072",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
     "R15 stale bytecode can invalidate verification - MITIGATED",

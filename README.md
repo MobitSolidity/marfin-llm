@@ -529,11 +529,13 @@ to first token against a ceiling of 3.0 s**. No prompt change fixes that.
 everywhere, nothing was removed, and the panel lists the local model *above* the
 providers with its real MEASURED numbers — including the failures.
 
-### The twelve
+### The fourteen
 
 | Provider | Env var | Cost class |
 |---|---|---|
 | `local` | — | free, default |
+| `agentrouter` | `AGENTROUTER_API_KEY` | UNKNOWN → billable (OpenAI dialect) |
+| `agentrouter-anthropic` | `AGENTROUTER_API_KEY` | UNKNOWN → billable (Anthropic dialect) |
 | `groq` | `GROQ_API_KEY` | documented free tier |
 | `google` | `GEMINI_API_KEY` | documented free tier |
 | `cerebras` | `CEREBRAS_API_KEY` | documented free tier |
@@ -548,6 +550,17 @@ providers with its real MEASURED numbers — including the failures.
 
 `free_tier` is **tri-state**: `True`, `False`, or `None` for UNKNOWN. The spend
 gate treats UNKNOWN as **billable** — an unknown cost is not a free cost.
+
+**AgentRouter is registered twice on purpose.** Its own portal FAQ states,
+VERBATIM: *"Anthropic compatible (Claude family): https://co.agentrouter.org, no
+/v1. OpenAI compatible (GPT etc.): https://co.agentrouter.org/v1, /v1 required.
+Do not mix them."* One entry would leave you one wrong base URL away from a
+silent failure; two entries make the mistake unreachable. Both share one key.
+
+The circulating **"$200 free credits"** claim is **not** recorded as a free tier.
+It traces to a gist carrying referral links (`?aff=...`) and a *different host*
+than the portal documents, so `free_tier` is `None` and the spend gate refuses
+both entries without `--allow-paid`.
 
 **No quota is recorded anywhere in this project.** A search on 2026-08-27
 returned figures that contradict each other for the same provider on the same
@@ -591,6 +604,78 @@ It reads only — no socket, no quota, no file written — and is deliberately
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
 - Full regression: **17 suites, 3,006 assertions, 0 failed, 0 skipped.**
+
+## Project Analysis Tools
+
+### `tools/graph_project.py` — structure and dependency graph
+
+```
+python3 tools/graph_project.py                      # report to stdout
+python3 tools/graph_project.py --json graph.json    # raw graph, MEASURED_STATIC_AST
+```
+
+Built for Request 40, which asked that
+[graphify](https://github.com/Graphify-Labs/graphify) inform our understanding of
+this project. graphify was cloned and read, then **measured**:
+`graphify.extract.extract()` raises `ImportError: tree-sitter is not installed`,
+and its dependency set is numpy, rapidfuzz and ~27 tree-sitter grammars.
+marfin-llm is 89 `.py` files and nothing else that is source, and stdlib `ast`
+parses all of `src/` with **zero** failures.
+
+graphify's value is breadth — one tool that reads 27 languages. This project
+needs exactly one of them. So the tool borrows graphify's **ideas** (the
+detect → extract → build → cluster → analyze → report pipeline, its node schema,
+and its `EXTRACTED` / `INFERRED` / `AMBIGUOUS` edge-confidence labels, which
+parallel this project's own VERIFIED/MEASURED/COMPUTED/ESTIMATED/UNKNOWN
+discipline) and implements them against `ast`.
+
+Current output (see `docs/analysis/structure-analysis-2026-08-27.md`):
+
+| Quantity | Value |
+|---|---|
+| modules / nodes / edges | 91 / 728 / 7,724 |
+| parse errors | **0** |
+| import cycles | **none** |
+| edge confidence | 24.6 % EXTRACTED, 25.3 % INFERRED, **50.0 % AMBIGUOUS** |
+
+The 50 % AMBIGUOUS figure is honest, not a defect: a name defined in more than
+one module cannot be resolved statically, and a graph that hid which edges were
+guesses would be worse than no graph.
+
+**The tool found a real problem on its first run — in itself.** It reported
+`tests._harness` as having no internal edges, which is false (16 suites import
+it). 17 import edges were being discarded because `from _harness import x` names
+the module `_harness` while the tool ids the file as `tests._harness`. Fixed, and
+every recovered edge is labelled `INFERRED` because it rests on a `sys.path`
+assumption rather than on the AST.
+
+That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
+tree, which had no test and no mutation battery. **No false-pass mode exists**:
+`check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
+3,128-assertion base is trustworthy.
+
+### `tools/grade_persian.py` — R10 human grading
+
+```
+python3 tools/grade_persian.py --input phase4_merged.json --output grades.json
+python3 tools/grade_persian.py --input phase4_merged.json --output grades.json --report
+```
+
+R10 (Persian generation quality) is the one Phase 4 threshold no automated check
+can decide. **This tool grades nothing.** It shows each case's question, rubric
+and actual output, records a *human* verdict, and reports counts. A heuristic
+fluency score would be indistinguishable from a measurement in any later summary,
+and R10 would drift from UNKNOWN to a fabricated PASS.
+
+- Input is opened **read-only**; grades go to a separate file.
+- Saved after **every** verdict, and resumable.
+- Grades are keyed `arm::id`, because the `tools` and `plain` arms ask the **same
+  21 questions** — 52 cases hold only 31 distinct ids, so keying by `id` alone
+  let one arm's verdict silently overwrite another's.
+- The 15 cases with empty output are marked `no_output`, counted separately and
+  **never as passes**.
+- It does **not** set the R10 verdict, and never touches
+  `phase_4/measurements_recorded`.
 
 ## Usage
 
