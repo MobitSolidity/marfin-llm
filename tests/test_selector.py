@@ -27,8 +27,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from _harness import check, check_true, section, summary  # noqa: E402
 from tools.selector import (  # noqa: E402
     CONTEXT_TARGET, FAMILIES, MEASURED_ALL_TOKENS, MEASURED_FAMILY_TOKENS,
-    TOOL_FAMILY, UNCLASSIFIED, schemas_for, score_families, select_families,
-    select_tools,
+    NAME_KEYWORDS, TOOL_FAMILY, UNCLASSIFIED, schemas_for, score_families,
+    select_families, select_tools,
 )
 from tools.registry import tool_names  # noqa: E402
 
@@ -296,5 +296,172 @@ s = select_tools("rsi")
 for field in ("families", "tools", "scores", "estimated_tokens",
               "confidence", "fallback_used", "label"):
     check_true("result discloses %s" % field, field in s, method="(D)")
+
+
+section("R18 -- every registered tool is reachable by its own name")
+
+# THE RISK THIS CLOSES, MEASURED 2026-08-30: R18 read "router keyword lists
+# need maintenance as tools are added". Asking for each of the 84 registered
+# tools by its own name, SIX did not come back: black_76, cash_flow_schedule,
+# ev_sales, forward_pe, pb_ratio and ps_ratio. The hand-written list stored
+# "p/b", "p/s" and "ev/" with a slash, so "pb ratio" matched nothing, and
+# "forward pe" scored derivatives on the word "forward" alone.
+#
+# Patching those six names would have fixed the symptom and left the risk
+# intact. The fix DERIVES a keyword from every registered tool name, and this
+# test is what makes that derivation load-bearing: a tool added later without
+# a matching hand-written keyword still has to pass here.
+#
+# WHY "asked by its own name" is the right probe: it is the weakest possible
+# request. If naming a tool outright does not surface it, no paraphrase will,
+# and under SS.0B a missing tool can become a fabricated number.
+unreachable = []
+for _t in sorted(tool_names()):
+    _got = {x["function"]["name"] for x in schemas_for(_t.replace("_", " "))}
+    if _t not in _got:
+        unreachable.append(_t)
+check_true("every registered tool is reachable by its own name",
+           unreachable == [],
+           method="(D) MEASURED; unreachable=%s" % unreachable)
+
+# (D) The six that were actually broken, named individually so a regression
+# reports WHICH one came back rather than only a count.
+for _name, _query in (("black_76", "black 76"),
+                      ("cash_flow_schedule", "cash flow schedule"),
+                      ("ev_sales", "ev sales"),
+                      ("forward_pe", "forward pe"),
+                      ("pb_ratio", "pb ratio"),
+                      ("ps_ratio", "ps ratio")):
+    _got = {x["function"]["name"] for x in schemas_for(_query)}
+    check_true("%s reachable via %r" % (_name, _query), _name in _got,
+               method="(D) regression, was broken before 2026-08-30")
+
+# (D) The derivation must cover every family, or a family could quietly lose
+# its safety net while the aggregate test still passes.
+for _f in FAMILIES:
+    check_true("derived name keywords exist for %s" % _f,
+               len(NAME_KEYWORDS.get(_f, ())) > 0, method="(D)")
+
+# (D) Derived keywords must be DERIVED, not hand-copied: every one has to
+# trace back to a real registered tool in that same family. This is what stops
+# the block from decaying into a second hand-maintained list.
+_registry = set(tool_names())
+_untraceable = []
+for _f, _words in NAME_KEYWORDS.items():
+    for _w in _words:
+        _joined = _w.replace(" ", "_")
+        if _joined in _registry:
+            continue
+        if any(TOOL_FAMILY.get(_t) == _f and _w in _t.split("_")
+               for _t in _registry):
+            continue
+        _untraceable.append((_f, _w))
+check_true("every derived keyword traces to a registered tool",
+           _untraceable == [],
+           method="(D) untraceable=%s" % _untraceable[:5])
+
+# (D) Short FRAGMENTS must not become signals, while short WHOLE NAMES must.
+#
+# This assertion was written wrongly the first time and the correction is kept
+# rather than hidden: it rejected every keyword under 4 characters, and failed
+# on 11 of them -- dcf, roa, roe, adx, atr, ema, obv, rsi, sma, wma, rho. Every
+# one of those is the COMPLETE name of a registered tool, and asking for "rsi"
+# must obviously return the rsi tool. The test was wrong, not the module.
+#
+# The real rule has two halves. A whole tool name is always a signal, however
+# short, because naming it is an explicit request. A FRAGMENT of a multi-word
+# name is only a signal at 4+ characters, because "ev", "pe", "pb" and "to"
+# are ambiguous across families -- "ev" alone would pull enterprise-value
+# tooling into any query mentioning a car.
+_registry_flat = {t.replace("_", " ") for t in tool_names()}
+for _f, _words in NAME_KEYWORDS.items():
+    _bad = [w for w in _words
+            if len(w) < 4 and w not in _registry_flat]
+    check_true("no sub-4-char fragment keyword in %s" % _f,
+               _bad == [], method="(D) got %s" % _bad)
+
+# (D) And the floor really is applied to fragments: no fragment shorter than 4
+# characters may appear unless it is also a whole tool name. Asserted by
+# reconstructing the derivation independently of the module.
+_leaked = []
+for _t, _f in TOOL_FAMILY.items():
+    for _part in _t.split("_"):
+        if len(_part) >= 4 or _part in _registry_flat:
+            continue
+        if _part in NAME_KEYWORDS.get(_f, ()):
+            _leaked.append((_t, _part))
+check_true("short fragments of multi-word names are excluded",
+           _leaked == [], method="(D) leaked=%s" % _leaked[:5])
+
+# (D) RECALL-FIRST IS PRESERVED. Adding signals must never REMOVE a family
+# from a selection, or the fix would trade one silent failure for another.
+# These pairs are the pre-fix selections, MEASURED against the old module.
+for _q, _expected in (
+        ("What is the P/E ratio of Apple?", {"valuation", "returns_risk"}),
+        ("RSI is overbought, should I sell?", {"technicals", "returns_risk"}),
+        ("compute the bond duration", {"fixed_income", "returns_risk"}),
+        ("Calculate the implied volatility", {"derivatives", "returns_risk"}),
+        ("drawdown of my portfolio", {"returns_risk"}),
+        ("\u0627\u0631\u0632\u0634 \u0630\u0627\u062a\u06cc \u0633\u0647\u0627\u0645",
+         {"valuation", "returns_risk"}),
+):
+    _now = set(select_families(_q))
+    check_true("recall preserved for %r" % _q[:34],
+               _expected <= _now,
+               method="(D) pre-fix=%s now=%s" % (sorted(_expected), sorted(_now)))
+
+# (D) The FRAGMENT signal must be load-bearing on its own.
+#
+# WHY THIS EXISTS, MEASURED 2026-08-30: the seven mutants seeded against this
+# fix left FOUR alive, and the reachability assertion above could not see any
+# of them. The cause is real overlap -- all 57 multi-word tools have at least
+# one 4+ character fragment, so the whole-name signal and the fragment signal
+# each reach every tool independently, and deleting either one changes nothing
+# that "reachable by its own name" can detect.
+#
+# Two of those survivors are genuinely EQUIVALENT, PROVEN rather than assumed.
+# Both were re-run against 569 exhaustive probes -- all 84 tool names, every
+# underscore fragment of every name, and 400 name pairs -- and each produced
+# 0 family-set differences from the unmutated module:
+#   - misrouting derived keywords to returns_risk changes nothing, because
+#     returns_risk is a CORE family present in every selection anyway.
+#   - dropping the whole-name signal is covered by the fragments: MEASURED,
+#     all 57 multi-word tools have at least one 4+ character fragment, so
+#     either signal alone reaches every tool.
+# An equivalent mutant cannot be killed by any assertion, because there is no
+# behaviour to observe. Final battery: 7 seeded, 5 killed, 2 equivalent,
+# 0 genuine survivors.
+#
+# One survivor is NOT equivalent. Raising the fragment floor to 99 kills every
+# fragment, and MEASURED across the same 14 queries it changes 3 selections --
+# "cash flow schedule" silently loses the `valuation` family. That is a RECALL
+# LOSS, the exact class of failure this module exists to prevent, and nothing
+# above noticed it. These assertions close that hole.
+for _q, _need in (("cash flow schedule", "valuation"),
+                  ("cash flow schedule for a bond", "valuation"),
+                  ("bond price", "derivatives")):
+    _f = select_families(_q)
+    check_true("fragment signal keeps %s for %r" % (_need, _q[:26]),
+               _need in _f,
+               method="(D) MEASURED; lost when the fragment floor is raised")
+
+# (D) And assert the floor's VALUE directly, so a silent retune is caught even
+# where the behavioural probes happen to overlap.
+check("fragment floor is 4", _sel._NAME_PART_MIN, 4,
+      method="(D) 4 excludes ev/pe/pb/to and admits real words")
+
+# (D) The widening must stay inside the context budget it exists to protect.
+_worst = sum(MEASURED_FAMILY_TOKENS[f] for f in FAMILIES)
+check_true("all five families still fit the context target",
+           _worst < CONTEXT_TARGET,
+           method="(D) MEASURED %d of %d" % (_worst, CONTEXT_TARGET))
+
+# (D) A meaningless query must still not explode into everything. This is the
+# precision floor: recall-first permits waste, not surrender.
+for _q in ("hello", "what is the weather",
+           "\u0633\u0644\u0627\u0645"):
+    _f = select_families(_q)
+    check_true("%r stays at the core set" % _q, _f == ["returns_risk"],
+               method="(D) got %s" % _f)
 
 sys.exit(summary())

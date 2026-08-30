@@ -200,12 +200,64 @@ def _matches(word: str, hay: str) -> bool:
     return w in hay
 
 
+# ---------------------------------------------------------------------------
+# DERIVED SIGNALS: every tool's own name routes to its own family.
+#
+# WHY, MEASURED 2026-08-30 while closing R18 ("router keyword lists need
+# maintenance as tools are added"): asking for each of the 84 registered tools
+# by its own name, 6 did NOT come back in the selection --
+#
+#   black_76, cash_flow_schedule, ev_sales, forward_pe, pb_ratio, ps_ratio
+#
+# The causes are all spelling drift between the hand-written list and the
+# registry, not missing concepts:
+#   - the list stores "p/b", "p/s" and "ev/" with a slash, so "pb ratio",
+#     "ps ratio" and "ev sales" matched nothing and fell through to CORE;
+#   - "forward pe" scored `derivatives` on the word "forward" and never
+#     reached valuation at all.
+#
+# Hand-patching those six would fix today's list and leave the RISK exactly
+# where it was, because the next tool added can drift the same way in silence.
+# So the fix is structural and mirrors _build_family_map: the signal is DERIVED
+# from the registry, which means a newly registered tool carries its own
+# routing keyword the moment it is registered.
+#
+# Tokens are also split on "_" so a multi-word name contributes its parts, but
+# ONLY parts of 4+ characters. MEASURED reason for the floor: shorter fragments
+# like "ev", "pe", "pb", "ps" and "to" are ambiguous across families -- "ev"
+# alone would pull enterprise-value tooling into any query mentioning a car.
+# The full underscore-free name is always included regardless of length, since
+# that is an explicit request for that tool.
+#
+# This ADDS signals and removes none, so the recall-first rule is preserved:
+# no query that previously reached a family can stop reaching it.
+# ---------------------------------------------------------------------------
+
+_NAME_PART_MIN = 4
+
+
+def _build_name_keywords() -> Dict[str, Set[str]]:
+    derived: Dict[str, Set[str]] = {f: set() for f in FAMILIES}
+    for tool, fam in TOOL_FAMILY.items():
+        if fam not in derived:
+            continue
+        derived[fam].add(tool.replace("_", " "))
+        for part in tool.split("_"):
+            if len(part) >= _NAME_PART_MIN:
+                derived[fam].add(part)
+    return derived
+
+
+NAME_KEYWORDS: Dict[str, Set[str]] = _build_name_keywords()
+
 # Keywords are normalised ONCE at import, through the same function used on the
 # query. Storing a ZWNJ keyword and comparing it against a de-ZWNJ'd query is a
 # silent no-match; normalising both sides is what makes the two spellings
 # equivalent in practice.
 _NORM_KEYWORDS: Dict[str, tuple] = {
-    fam: tuple(sorted({_normalize(w) for w in words if w}))
+    fam: tuple(sorted({_normalize(w) for w in words if w}
+                      | {_normalize(w) for w in NAME_KEYWORDS.get(fam, ())
+                         if w}))
     for fam, words in _KEYWORDS.items()
 }
 

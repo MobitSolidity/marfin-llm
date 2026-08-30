@@ -161,7 +161,8 @@
     "D-0071 A trap alone does not protect the mutation window (bash defers traps while a foreground child runs); bounding the child is what works",
     "D-0072 The R10 grading tool records HUMAN verdicts and scores nothing itself; grades keyed arm::id after 52 cases were found to hold only 31 distinct ids",
     "D-0073 A truncated reply can still contain a real answer (6 of 11 hold pre-think text, 197-1138 chars); discarding it stays correct because two of the six leak the system prompt after refusing, and the lost tool call is a measurement loss on schema validity, not a model failure",
-    "D-0074 The 4 zero-token replies are prefill-only (observed/predicted 1.26-1.38 against 1.00-1.07 controls, using the project's own fitted cost model), so the model emitted a stop token first; COMPUTED mechanism, not confirmed, filed as R24"
+    "D-0074 The 4 zero-token replies are prefill-only (observed/predicted 1.26-1.38 against 1.00-1.07 controls, using the project's own fitted cost model), so the model emitted a stop token first; COMPUTED mechanism, not confirmed, filed as R24",
+    "D-0075 R18 closed structurally: every registered tool name is derived into a routing keyword, fixing 6 measured-unreachable tools; my own mutation battery was found defective (grep -q '0 failed' matches '10 failed') and corrected"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -313,13 +314,13 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0074",
+  "decisions_logged": "D-0001..D-0075",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
     "R15 stale bytecode can invalidate verification - MITIGATED",
     "R16 tool schemas cost 54.4% of 16K ctx - MITIGATED by selector (mean 15.6%)",
     "R17 tool-selection accuracy across 84 tools - PARTIALLY MITIGATED: router recall 24/24 measured offline; MODEL-side selection still unmeasured",
-    "R18 router keyword lists need maintenance as tools are added (Medium, OPEN)",
+    "R18 router keyword lists need maintenance as tools are added (CLOSED 2026-08-30, D-0075): probing turned this from a worry into a MEASURED defect -- 6 of 84 tools were unreachable by their own name (black_76, cash_flow_schedule, ev_sales, forward_pe, pb_ratio, ps_ratio). Closed STRUCTURALLY: keywords are now DERIVED from the registry, so a newly registered tool carries its own routing keyword. 84 of 84 reachable; recall-first preserved (0 families lost across 16 queries); mutation tested 7 seeded / 5 killed / 2 proven equivalent / 0 survivors",
     "R20 no source registered for permitted research/news; SS.5.2 categories unserved (Medium, OPEN)",
     "R21 RAG layer never run against a live model; gate's effect on generation untested (Medium, OPEN)",
     "R13 tests may not discriminate - MITIGATED, 692 mutations across 10 batteries, 0 survivors",
@@ -404,7 +405,8 @@
   "risks_closed": [
     "R12 RAM bandwidth unknown - closed by Q6 answer",
     "R14 SS.5.3 coverage incomplete - closed by Phase 2a",
-    "R19 source terms declared but unenforced - closed by D-0034 (check_access wired into ingestion)"
+    "R19 source terms declared but unenforced - closed by D-0034 (check_access wired into ingestion)",
+    "R18 router keyword maintenance - closed by D-0075 (keywords derived from the registry, not hand-listed; 6 measured unreachable tools fixed and locked by 33 new assertions)"
   ],
   "phase_2a": {
     "name": "Completing Section 5.3 deterministic calculations (R14)",
@@ -1014,6 +1016,50 @@
         "note": "Doubling the budget is NOT a free remedy. Chunked per-arm execution (D-0063) keeps any single session bounded."
       },
       "not_recomputed": "The affected percentages were NOT recalculated by hand. Re-scoring must be done by the graders themselves against real text, never by eye.",
+      "runs_launched": 0
+    },
+    "r18_closure_2026_08_30": {
+      "label": "MEASURED",
+      "decision": "D-0075",
+      "defect": "6 of 84 registered tools were not returned when asked for by their own name: black_76, cash_flow_schedule, ev_sales, forward_pe, pb_ratio, ps_ratio",
+      "root_cause": "spelling drift between the hand-written keyword list and the registry -- 'p/b', 'p/s' and 'ev/' stored with a slash; 'forward pe' scored derivatives on the word 'forward'",
+      "fix": "_build_name_keywords() derives a keyword from every registered tool name, mirroring _build_family_map. Fragments count at 4+ chars; a whole tool name always counts.",
+      "reachability": {
+        "before": 78,
+        "after": 84,
+        "total": 84,
+        "label": "MEASURED"
+      },
+      "recall_check": {
+        "queries": 16,
+        "families_lost": 0,
+        "unchanged": 15,
+        "widened": 1,
+        "widened_case": "bond price gains fixed_income via 'call' and 'price' -- correct, callable bonds live there",
+        "label": "MEASURED"
+      },
+      "token_budget": {
+        "worst_case_all_families": 9228,
+        "context_target": 16384,
+        "label": "MEASURED"
+      },
+      "mutation": {
+        "seeded": 7,
+        "killed": 5,
+        "equivalent": 2,
+        "survived": 0,
+        "equivalence_proof": "569 exhaustive probes (84 names, every underscore fragment, 400 pairs) gave 0 family-set differences for both",
+        "battery_defect_found": "my own survivor check used grep -q '0 failed', which matches '10 failed' as a substring, so a mutant failing 10 assertions was logged as SURVIVED; fixed to grep -qE '(^|[^0-9])0 failed'",
+        "label": "MEASURED"
+      },
+      "suite": {
+        "assertions_before": 69,
+        "assertions_after": 102,
+        "full_regression": 3161,
+        "suites": 18,
+        "failed": 0,
+        "label": "MEASURED"
+      },
       "runs_launched": 0
     }
   }

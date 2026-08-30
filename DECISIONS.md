@@ -2373,3 +2373,61 @@ risk R24 rather than as a settled cause.
 
 Three of the four are Persian or abstention cases, which is suggestive but is 4
 data points; no claim is made that the trigger is language or category.
+
+## D-0075 — R18 is closed structurally: every tool name is its own routing keyword
+
+R18 read "router keyword lists need maintenance as tools are added". It was
+filed as a maintenance worry; probing turned it into a MEASURED defect. Asking
+for each of the 84 registered tools by its own name, SIX did not come back:
+
+    black_76, cash_flow_schedule, ev_sales, forward_pe, pb_ratio, ps_ratio
+
+Causes, all spelling drift between the hand-written list and the registry:
+  - the list stores "p/b", "p/s" and "ev/" WITH a slash, so "pb ratio",
+    "ps ratio" and "ev sales" matched nothing and fell through to CORE;
+  - "forward pe" scored `derivatives` on the word "forward" and never reached
+    valuation at all.
+
+Under SS.0B a missing tool is not a cosmetic loss: the model has no way to
+compute the answer and may fabricate one instead.
+
+FIX, structural rather than six patches. `_build_name_keywords()` DERIVES a
+keyword from every registered tool name, mirroring what `_build_family_map`
+already does for family membership. A tool registered next year carries its own
+routing keyword the moment it is registered, so the class of defect cannot
+return. Fragments of multi-word names count only at 4+ characters -- "ev", "pe",
+"pb" and "to" are ambiguous across families -- while a whole tool name is always
+a signal however short, because naming it is an explicit request.
+
+VERIFIED after the fix: 84 of 84 tools reachable by their own name, was 78.
+
+RECALL-FIRST PRESERVED, MEASURED across 16 representative queries: 0 families
+lost, 15 selections unchanged, 1 widened. The widening is `bond price` gaining
+`fixed_income` from the fragments "call" and "price" -- callable bonds and bond
+pricing genuinely live there, so it is correct, and it costs 1,370 tokens
+against a worst case of 9,228 of the 16,384 window.
+
+MUTATION TESTED, 7 seeded: 5 killed, 2 equivalent, 0 genuine survivors. The
+first battery reported 4 survivors and that report was itself wrong twice:
+
+  1. A REAL weakness. "Reachability by own name" could not see the fragment
+     floor being raised to 99, because all 57 multi-word tools also match on a
+     4+ character fragment. MEASURED, raising the floor silently drops
+     `valuation` from "cash flow schedule" -- a recall loss, the exact failure
+     this module exists to prevent. Three behavioural assertions plus a direct
+     assertion on the floor value now close it.
+  2. A DEFECT IN MY OWN BATTERY. The survivor check was `grep -q "0 failed"`,
+     which matches "1**0 failed**" as a substring, so a mutant that failed TEN
+     assertions was recorded as having survived. VERIFIED both ways: the old
+     pattern matches "10 failed", the new `grep -qE "(^|[^0-9])0 failed"` does
+     not. Same substring-versus-token trap already recorded in this project.
+
+The 2 remaining mutants are EQUIVALENT, proven not assumed: re-run against 569
+exhaustive probes -- all 84 names, every underscore fragment, and 400 name
+pairs -- both produced 0 family-set differences. Misrouting derived keywords to
+returns_risk is invisible because returns_risk is a CORE family present in every
+selection; dropping the whole-name signal is covered by the fragments. An
+equivalent mutant cannot be killed, because there is no behaviour to observe.
+
+Suite: 69 -> 102 assertions. Full regression 3,161 across 18 suites, 0 failed,
+and the +33 delta is accounted for exactly by this suite.
