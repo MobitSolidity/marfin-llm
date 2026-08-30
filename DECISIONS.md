@@ -2431,3 +2431,70 @@ equivalent mutant cannot be killed, because there is no behaviour to observe.
 
 Suite: 69 -> 102 assertions. Full regression 3,161 across 18 suites, 0 failed,
 and the +33 delta is accounted for exactly by this suite.
+
+## D-0076 — The R18 fix silently MASKED a pre-existing mutation kill, and the curated vocabulary is not replaceable by the registry
+
+**Date:** 2026-08-30
+**Status:** ACCEPTED
+**Supersedes:** nothing. Corrects an unstated assumption inside D-0075.
+
+D-0075 closed R18 by deriving router keywords from the tool registry, and
+reported a clean scratch battery (7 seeded, 5 killed, 2 proven equivalent).
+That battery only mutated the NEW code. When the R18 mutants were ported into
+the PERMANENT battery (`tests/mutate_selector.py`, previously 15 mutants, all
+killed), the combined run reported **20 seeded, 19 killed, 1 SURVIVED**.
+
+The survivor was not one of the new mutants. It was the pre-existing
+**"technicals vocabulary gutted"**, which deletes the literal curated list
+`"rsi", "macd", "moving average", "sma", "ema", "wma", "bollinger",`.
+That mutant was KILLED before the R18 fix and SURVIVED after it.
+
+**Root cause, MEASURED.** Six of those seven words are the names of registered
+tools (`rsi`, `macd`, `sma`, `ema`, `wma`, and `bollinger` as a 4+ char
+fragment of `bollinger_bands`). The new derivation recovers all six from the
+registry, so deleting the curated list no longer changes their behaviour and
+the old kill was masked. But **`moving average` is NOT a tool name** — the
+tools are called `sma`/`ema`/`wma` — so it is recovered by nothing:
+
+| query | unmutated | curated list deleted |
+|---|---|---|
+| `moving average` | returns_risk, technicals | **returns_risk only** |
+| `50 day moving average` | returns_risk, technicals | **returns_risk only** |
+| `show me the moving average of AAPL` | returns_risk, technicals | **returns_risk only** |
+| `moving average crossover` | returns_risk, technicals | unchanged (`crossover`) |
+| `میانگین متحرک` | returns_risk, technicals | unchanged (Persian entry) |
+
+This is a **recall loss on the plain-English phrase a non-specialist would
+actually type**, which is precisely the failure the selector exists to prevent.
+It was therefore a REAL surviving mutant, not an equivalent one, and the
+distinction was established by probing behaviour rather than by inspection.
+
+**The general finding, which matters more than the fix.** A derivation from the
+registry covers **what tools are CALLED**; it never covers **what users call
+them**. The curated vocabulary is still load-bearing and must not be treated as
+redundant now that names are derived. D-0075 did not say otherwise, but its
+framing invited that reading, so it is stated explicitly here.
+
+**A second finding about method.** Mutating only the code you just wrote is not
+enough. A local fix can raise the pass rate of an UNRELATED mutant by widening
+a signal path, and the only thing that reveals it is re-running the whole
+pre-existing battery. Had the R18 mutants stayed in `/tmp`, this project would
+have carried a masked kill while the log still read "all killed".
+
+**Also fixed here:** the five killable R18 mutants were moved OUT of the `/tmp`
+scratch script and INTO `tests/mutate_selector.py`, because a guard that exists
+only in `/tmp` is erased by a sandbox reset. The two equivalent mutants are
+NOT seeded — a permanently unkillable mutant would be a standing false alarm,
+and seeding it as a SKIP would overstate coverage (D-0036) — they are recorded
+in a comment with the 569-probe evidence instead.
+
+**Fix.** Three behavioural assertions on the plain-English phrase
+(`moving average`, `50 day moving average`,
+`show me the moving average of AAPL` must each reach `technicals`).
+
+**Result.** Permanent battery: **20 seeded, 20 killed, 0 survived, 0 skipped,
+source restored intact.** Suite 102 -> 105. Full regression **3,164 across 18
+suites, 0 failed**, the +3 delta accounted for exactly by these assertions.
+Gates untouched: `measurements_recorded` is None, `live_trading_enabled` False,
+`active_mode` ANALYSIS_ONLY, `acceptance_thresholds` (13) byte-identical.
+**0 model runs launched.**

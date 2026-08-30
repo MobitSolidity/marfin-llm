@@ -66,7 +66,50 @@ MUTATIONS = [
     ("schemas_for diverges from select_tools",
      'return [s for s in tool_schemas() if s["function"]["name"] in keep]',
      'return [s for s in tool_schemas()][:5]'),
+
+    # ---- R18: keywords derived from the registry (D-0075) -------------------
+    # These five are the KILLABLE mutants of the derivation added when R18 was
+    # closed. They live here, not in a /tmp scratch script, because a guard that
+    # only exists in /tmp is erased by a sandbox reset -- and then the fix would
+    # be protected by nothing while the log still said "5 killed".
+    ("R18 fragment floor raised 4 -> 99 (no fragment ever counts)",
+     "_NAME_PART_MIN = 4", "_NAME_PART_MIN = 99"),
+    ("R18 fragment floor lowered 4 -> 1 (ev, pe, pb leak in)",
+     "_NAME_PART_MIN = 4", "_NAME_PART_MIN = 1"),
+    ("R18 fragment loop disabled",
+     "            if len(part) >= _NAME_PART_MIN:",
+     "            if False:"),
+    ("R18 derivation returns nothing",
+     "    return derived",
+     "    return {f: set() for f in FAMILIES}"),
+    ("R18 derived names never merged into _NORM_KEYWORDS",
+     "| {_normalize(w) for w in NAME_KEYWORDS.get(fam, ())",
+     "| {_normalize(w) for w in ()"),
 ]
+
+# TWO further mutants were seeded against the R18 derivation and SURVIVED. They
+# are NOT listed above, because seeding a mutant that cannot be killed would
+# force this battery to report a survivor forever, and the honest reading of
+# that survivor is "no behaviour to observe", not "assertions too weak".
+#
+#   (a) drop the whole-name signal  -- derived[fam].add(tool.replace("_", " "))
+#   (b) misroute every derived whole name to returns_risk
+#
+# Both are EQUIVALENT MUTANTS, PROVEN rather than assumed. All 57 multi-word
+# tool names contain at least one underscore fragment of 4+ chars, so the
+# fragment signal alone already reaches every family the whole-name signal
+# reaches: the two paths are redundant by construction. Each mutant was re-run
+# against 569 exhaustive probes -- all 84 tool names, every underscore fragment
+# of every name, and 400 name pairs -- and each produced 0 family-set
+# differences from the unmutated module.
+#
+# An equivalent mutant is unkillable by definition. Recording it as a permanent
+# SURVIVED line would be a standing false alarm; recording it as a SKIP would
+# overstate coverage (D-0036: a skip protects nothing). It is recorded here
+# instead, with the evidence, which is the only reading that stays true.
+#
+# Battery result when the two were included: 7 seeded, 5 killed, 2 equivalent,
+# 0 genuine survivors.
 
 
 def run_tests():

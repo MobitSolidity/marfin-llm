@@ -162,7 +162,8 @@
     "D-0072 The R10 grading tool records HUMAN verdicts and scores nothing itself; grades keyed arm::id after 52 cases were found to hold only 31 distinct ids",
     "D-0073 A truncated reply can still contain a real answer (6 of 11 hold pre-think text, 197-1138 chars); discarding it stays correct because two of the six leak the system prompt after refusing, and the lost tool call is a measurement loss on schema validity, not a model failure",
     "D-0074 The 4 zero-token replies are prefill-only (observed/predicted 1.26-1.38 against 1.00-1.07 controls, using the project's own fitted cost model), so the model emitted a stop token first; COMPUTED mechanism, not confirmed, filed as R24",
-    "D-0075 R18 closed structurally: every registered tool name is derived into a routing keyword, fixing 6 measured-unreachable tools; my own mutation battery was found defective (grep -q '0 failed' matches '10 failed') and corrected"
+    "D-0075 R18 closed structurally: every registered tool name is derived into a routing keyword, fixing 6 measured-unreachable tools; my own mutation battery was found defective (grep -q '0 failed' matches '10 failed') and corrected",
+    "D-0076 (2026-08-30): the R18 fix MASKED a pre-existing mutation kill. Porting the R18 mutants into the permanent battery tests/mutate_selector.py turned a clean 15/15 into 20 seeded / 19 killed / 1 SURVIVED. The survivor was the pre-existing 'technicals vocabulary gutted', killed before the fix and surviving after it: 6 of its 7 words are registered tool names now recovered by the derivation, but 'moving average' is NOT a tool name (the tools are sma/ema/wma), so deleting the curated list silently dropped technicals for 'moving average', '50 day moving average' and 'show me the moving average of AAPL' -- a REAL recall loss, proven by probing behaviour, not an equivalent mutant. GENERAL FINDING: a registry derivation covers what tools are CALLED, never what users call them, so the curated vocabulary stays load-bearing. METHOD FINDING: mutating only the code just written is insufficient -- a local fix can mask an unrelated mutant, and only re-running the whole pre-existing battery reveals it. Fixed with 3 behavioural assertions; battery now 20 seeded / 20 killed / 0 survived / 0 skipped; suite 102->105; regression 3,164 across 18 suites, 0 failed. 0 model runs launched."
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -314,7 +315,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0075",
+  "decisions_logged": "D-0001..D-0076",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -1060,6 +1061,31 @@
         "failed": 0,
         "label": "MEASURED"
       },
+      "runs_launched": 0
+    },
+    "r18_masked_kill_2026_08_30": {
+      "label": "MEASURED",
+      "finding": "the R18 keyword derivation masked a pre-existing mutation kill",
+      "battery_before_port": "tests/mutate_selector.py 15 seeded, 15 killed, 0 survived",
+      "battery_after_port": "20 seeded, 19 killed, 1 SURVIVED (regression revealed)",
+      "survivor": "'technicals vocabulary gutted' -- killed before the R18 fix, surviving after",
+      "why_masked": "6 of the 7 curated words are registered tool names now recovered from the registry",
+      "real_loss": "'moving average' is not a tool name (tools are sma/ema/wma) so nothing recovers it",
+      "measured_behaviour": {
+        "moving average": "returns_risk+technicals -> returns_risk ONLY when curated list deleted",
+        "50 day moving average": "returns_risk+technicals -> returns_risk ONLY",
+        "show me the moving average of AAPL": "returns_risk+technicals -> returns_risk ONLY",
+        "moving average crossover": "unchanged (matched by 'crossover')",
+        "persian_mean_reversion_phrase": "unchanged (separate Persian entry)"
+      },
+      "general_finding": "a registry derivation covers what tools are CALLED, never what users call them; the curated vocabulary remains load-bearing",
+      "method_finding": "mutating only newly written code is insufficient; a local fix can mask an unrelated mutant, revealed only by re-running the whole pre-existing battery",
+      "guard_relocated": "the 5 killable R18 mutants moved from /tmp/mut_sel.sh into tests/mutate_selector.py; a guard living only in /tmp is erased by a sandbox reset",
+      "equivalents_not_seeded": "the 2 proven-equivalent mutants are documented in a comment with the 569-probe evidence rather than seeded, because a permanently unkillable mutant is a standing false alarm and a SKIP would overstate coverage (D-0036)",
+      "fix": "3 behavioural assertions that plain-English 'moving average' phrasing reaches technicals",
+      "battery_final": "20 seeded, 20 killed, 0 survived, 0 skipped, source restored intact",
+      "suite": "test_selector.py 102 -> 105 assertions",
+      "regression": "18 suites, 3,164 assertions, 0 failed; +3 delta reconciled exactly",
       "runs_launched": 0
     }
   }

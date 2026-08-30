@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0050). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0076). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -33,7 +33,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 476 assertions across 6 suites, plus a 56-defect mutation battery. |
+| `tests/` | 3,164 assertions across 18 suites, plus 966 seeded defects across 12 mutation batteries. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
 ## What This Prompt Defines
@@ -196,7 +196,7 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Tool-schema context cost | **MEASURED** — 8,920 tokens = 54.4% of 16K |
 | Decode speed | **ESTIMATED** ~14.7 tok/s — not yet measured |
 | Persian generation quality | **UNKNOWN** — risk R10 |
-| Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 |
+| Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 (R18 keyword reachability is CLOSED: 84/84, D-0075) |
 | Dense vector retrieval | **DOES NOT EXIST** — lexical + structured only (D-0030) |
 | RAG behaviour with a live model | **UNKNOWN** — risk R21 |
 | Market data layer (quotes, CSV, webhooks, AV) | **VERIFIED** — 294 mutations, 0 survivors |
@@ -247,12 +247,74 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**2,772 assertions pass across 16 suites, and 0 are SKIPPED. That is not the
-claim.** A passing suite proves nothing on its own. The claim is **920 seeded
-defects across 11 batteries, 915 killed, 5 documented equivalents, 0 survivors,
-0 skips** — every guard was deliberately broken and the
-suite caught it — plus **153 adversarial attempts, 153 refused, 0 allowed,
-0 crashed.**
+**3,164 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+claim.** A passing suite proves nothing on its own. The claim is that every
+guard was deliberately broken and the suite caught it — plus **153 adversarial
+attempts, 153 refused, 0 allowed, 0 crashed.**
+
+**Seeded-defect inventory, MEASURED by inspection 2026-08-30: 966 mutants
+across 12 batteries** (11 `tests/mutate_*.py` + the bash `mutation_test.sh`,
+which seeds 56 across the five calc modules).
+
+⚠️ **One number here is UNRECONCILED and is not being presented as verified.**
+This section previously read "920 seeded across 11 batteries, 915 killed, 5
+documented equivalents". Counting the batteries today gives **966 across 12**.
+The +46 gap predates the R18 work (which added only 5) and means the aggregate
+figure was not updated as batteries grew. The last aggregate kill verdict on
+record is therefore **stale**, and no kill total is claimed here until a full
+`./tests/run_all.sh --mutate` is re-run and re-counted. What *is* MEASURED
+today is the selector battery, re-run in full: **20 seeded, 20 killed, 0
+survived, 0 skipped, source restored intact.**
+
+### Six of 84 tools were unreachable by their own name (D-0075, D-0076)
+
+R18 was carried for weeks as a vague worry — *"keyword lists need maintenance
+as tools are added"*. Probing it turned it into a **MEASURED defect**: asking
+the router for each of the 84 registered tools **by its own name** showed
+**6 were unreachable** — `black_76`, `cash_flow_schedule`, `ev_sales`,
+`forward_pe`, `pb_ratio`, `ps_ratio`. Two causes: keywords stored with slashes
+(`"p/b"`, `"p/s"`, `"ev/"`) never matched underscore tool names, and
+`forward pe` scored *derivatives* on the word "forward", outranking valuation.
+
+Fixed **structurally, not by patching six keywords**: keywords are now derived
+from the tool registry itself (whole name, plus every underscore fragment of
+4+ chars), so the defect class cannot return when a tool is added.
+**Reachability 78/84 → 84/84**, recall preserved (0 families lost across 16
+queries), worst-case context 9,228 of 16,384 tokens.
+
+**Then the fix broke a test that had been passing, and only the full battery
+caught it.** The R18 mutants were first written as a `/tmp` scratch script and
+scored 5 killed / 2 equivalent. Moving them into the permanent battery and
+re-running **all** of it reported **19 killed, 1 SURVIVED** — and the survivor
+was a *pre-existing* mutant, "technicals vocabulary gutted", which had been
+killed **before** the fix. Six of its seven curated words are registered tool
+names now recovered by the derivation, so the old kill was **masked**. But
+`moving average` is **not** a tool name (the tools are `sma`/`ema`/`wma`), so
+deleting the curated list silently dropped *technicals* for exactly the phrase
+a non-specialist types:
+
+| query | unmutated | curated list deleted |
+|---|---|---|
+| `moving average` | returns_risk, technicals | **returns_risk only** |
+| `50 day moving average` | returns_risk, technicals | **returns_risk only** |
+| `show me the moving average of AAPL` | returns_risk, technicals | **returns_risk only** |
+
+Two findings worth more than the fix:
+
+1. **A registry derivation covers what tools are CALLED, never what users call
+   them.** The curated vocabulary is still load-bearing and must not be treated
+   as redundant.
+2. **Mutating only the code you just wrote is not enough.** A local fix can
+   mask an unrelated mutant by widening a signal path. Had those mutants stayed
+   in `/tmp`, the project would have carried a masked kill while the log still
+   read "all killed" — and a sandbox reset would have erased the guard
+   entirely.
+
+Battery after strengthening: **20 seeded, 20 killed, 0 survived, 0 skipped.**
+The two proven-equivalent mutants are deliberately **not** seeded — an
+unkillable mutant would be a permanent false alarm, and seeding it as a SKIP
+would overstate coverage — they are recorded in a comment with the 569-probe
+evidence (all 84 names, every fragment, 400 pairs, 0 family-set differences).
 
 The batteries have repeatedly found tests that could not fail:
 
@@ -351,8 +413,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 2,772 assertions across 16 suites + 7 probes (~6 s)
-./tests/run_all.sh --mutate     # + 920 seeded defects across 11 batteries (~205 s)
+./tests/run_all.sh              # 3,164 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh --mutate     # + 966 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -603,7 +665,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **17 suites, 3,006 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,164 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -652,7 +714,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,128-assertion base is trustworthy.
+3,164-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

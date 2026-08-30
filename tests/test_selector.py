@@ -450,6 +450,30 @@ for _q, _need in (("cash flow schedule", "valuation"),
 check("fragment floor is 4", _sel._NAME_PART_MIN, 4,
       method="(D) 4 excludes ev/pe/pb/to and admits real words")
 
+# (D) THE HAND-WRITTEN VOCABULARY IS STILL LOAD-BEARING, AND THE R18 FIX HID
+# THAT. MEASURED, and found by re-running the PERMANENT battery after the fix:
+# the mutant "technicals vocabulary gutted" (which deletes the literal list
+# "rsi", "macd", "moving average", "sma", "ema", "wma", "bollinger") used to be
+# KILLED and afterwards SURVIVED. It was not equivalent. Six of those seven
+# words are the names of registered tools, so the derivation now recovers them
+# and the old kill was masked -- but "moving average" is NOT a tool name
+# (the tools are sma/ema/wma), so deleting the list silently drops technicals
+# for the plain-English phrase a non-specialist would actually type:
+#     "moving average"                    -> ['returns_risk'] only
+#     "50 day moving average"             -> ['returns_risk'] only
+#     "show me the moving average of AAPL"-> ['returns_risk'] only
+# That is a recall loss of exactly the kind the selector exists to prevent, so
+# it is asserted behaviourally here rather than left to the mutant. Note the
+# derivation is NOT a replacement for the curated vocabulary: it covers what
+# tools are CALLED, never what users call them.
+for _q in ("moving average",
+           "50 day moving average",
+           "show me the moving average of AAPL"):
+    _f = select_families(_q)
+    check_true("plain-English %r reaches technicals" % _q,
+               "technicals" in _f,
+               method="(D) MEASURED; lost when the curated list is deleted")
+
 # (D) The widening must stay inside the context budget it exists to protect.
 _worst = sum(MEASURED_FAMILY_TOKENS[f] for f in FAMILIES)
 check_true("all five families still fit the context target",
