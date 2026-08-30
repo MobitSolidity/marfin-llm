@@ -159,7 +159,9 @@
     "D-0069 tests/_harness.py has the highest fan-in in the tree and no battery; probed directly and found to have NO false-pass mode (nan==nan FAILS, check_raises FAILS)",
     "D-0070 SIGTERM does NOT run Python's finally; the kill guard uses SIGINT, because all 11 batteries restore source in a finally block",
     "D-0071 A trap alone does not protect the mutation window (bash defers traps while a foreground child runs); bounding the child is what works",
-    "D-0072 The R10 grading tool records HUMAN verdicts and scores nothing itself; grades keyed arm::id after 52 cases were found to hold only 31 distinct ids"
+    "D-0072 The R10 grading tool records HUMAN verdicts and scores nothing itself; grades keyed arm::id after 52 cases were found to hold only 31 distinct ids",
+    "D-0073 A truncated reply can still contain a real answer (6 of 11 hold pre-think text, 197-1138 chars); discarding it stays correct because two of the six leak the system prompt after refusing, and the lost tool call is a measurement loss on schema validity, not a model failure",
+    "D-0074 The 4 zero-token replies are prefill-only (observed/predicted 1.26-1.38 against 1.00-1.07 controls, using the project's own fitted cost model), so the model emitted a stop token first; COMPUTED mechanism, not confirmed, filed as R24"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -311,7 +313,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0072",
+  "decisions_logged": "D-0001..D-0074",
   "risks_new": [
     "R10 Persian generation untested (OPEN)",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -321,7 +323,8 @@
     "R20 no source registered for permitted research/news; SS.5.2 categories unserved (Medium, OPEN)",
     "R21 RAG layer never run against a live model; gate's effect on generation untested (Medium, OPEN)",
     "R13 tests may not discriminate - MITIGATED, 692 mutations across 10 batteries, 0 survivors",
-    "R22 Alpha Vantage permitted storage timeframe UNKNOWN; market data treated as non-persistable (Medium, OPEN)"
+    "R22 Alpha Vantage permitted storage timeframe UNKNOWN; market data treated as non-persistable (Medium, OPEN)",
+    "R24 Four cases returned completion_tokens=0 with an empty reply and no thinking block (rag/RAG-EN-005, rag/RAG-FA-002, rag/RAG-ABST-002, tools/FA-ABST-001). Timing shows prefill only, so a stop token was most likely emitted first (COMPUTED, D-0074). Root cause UNKNOWN: no finish_reason or token ids were captured. Affects the rag arm hardest -- 3 of its 10 cases (Medium, OPEN)"
   ],
   "awaiting_approval_for": null,
   "phase_2": {
@@ -965,6 +968,53 @@
       },
       "honest_conclusion": "On this hardware the local model FAILS the approved bar for speed, for calculation correctness, for abstention and for grounding. Adding API providers does not change that and was never claimed to: it gives the user a second route, while the local route stays and keeps its real numbers on the panel.",
       "gate_effect": "None. measurements_recorded stays null. A phase is not advanced by a failing run."
+    },
+    "truncation_audit_2026_08_30": {
+      "label": "MEASURED_FROM_EVIDENCE_FILE",
+      "trigger": "Request 42: explain the remaining items. Auditing the 11 truncated cases before asserting that a re-run would fix them.",
+      "budget_already_fixed": "VERIFIED: the merged evidence file records model.max_tokens = 2048, so the D-0057 budget fix WAS active for this run. The earlier working assumption that a re-run at the fixed budget would repair these failures is therefore WRONG and is corrected here.",
+      "waste_at_2048": {
+        "completion_tokens_total": 49098,
+        "tokens_in_lost_answers": 22528,
+        "tokens_wasted_pct": 45.9,
+        "wall_seconds_total": 12894,
+        "wall_seconds_lost": 5883,
+        "wall_seconds_lost_pct": 45.6,
+        "label": "MEASURED",
+        "note": "The 62.5% figure in Q8 belongs to the FIRST run at budget 768. At 2048 the waste fell to 45.9% but did not go away. Cause fixed is not the same as problem fixed."
+      },
+      "pre_think_text": {
+        "cases_with_text": 6,
+        "cases_with_none": 5,
+        "lengths": {
+          "plain/FA-LANG-001": 1138,
+          "plain/EN-RISK-001": 686,
+          "plain/EN-SAFE-002": 551,
+          "plain/EN-NUM-001": 478,
+          "tools/EN-RISK-002": 376,
+          "tools/EN-SAFE-002": 197
+        },
+        "decision": "D-0073 -- strip_thinking keeps answer='' ; graders unchanged",
+        "label": "MEASURED"
+      },
+      "decode_speed_is_hardware": {
+        "decode_tps_min": 0.77,
+        "decode_tps_median": 3.58,
+        "decode_tps_max": 4.32,
+        "n_measurements": 48,
+        "approved_minimum": 8,
+        "label": "MEASURED",
+        "note": "Decode speed is unaffected by thinking waste -- waste changes FELT slowness, not tok/s. No software fix reaches 8 on this CPU."
+      },
+      "re_run_cost": {
+        "at_2048_measured_hours": 3.58,
+        "at_4096_computed_hours": 16.5,
+        "basis": "4096 / 3.58 tok/s = 1144 s per case x 52 cases",
+        "label": "COMPUTED",
+        "note": "Doubling the budget is NOT a free remedy. Chunked per-arm execution (D-0063) keeps any single session bounded."
+      },
+      "not_recomputed": "The affected percentages were NOT recalculated by hand. Re-scoring must be done by the graders themselves against real text, never by eye.",
+      "runs_launched": 0
     }
   }
 }
