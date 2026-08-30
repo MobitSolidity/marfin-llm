@@ -2498,3 +2498,262 @@ suites, 0 failed**, the +3 delta accounted for exactly by these assertions.
 Gates untouched: `measurements_recorded` is None, `live_trading_enabled` False,
 `active_mode` ANALYSIS_ONLY, `acceptance_thresholds` (13) byte-identical.
 **0 model runs launched.**
+
+## D-0077 — R20 closed: the permitted-research and permitted-news tiers are populated, and PERMISSION not credibility is the selection rule
+
+**Context.** `SYSTEM_PROMPT.md` SS.5.2 (line 431) lists 13 required source
+categories, two of which are "Permitted research" and "Permitted financial
+news". MEASURED before this change: `src/rag/sources.py` held 6 sources at
+`Counter({'VERIFIED_PRIMARY': 3, 'OFFICIAL_DATA': 1, 'EXCHANGE': 1,
+'UNVERIFIED': 1})` — **`PERMITTED_RESEARCH` 0 and `PERMITTED_NEWS` 0.** Both
+required tiers were empty while the module read as complete. That silence was
+R20.
+
+**The finding that shaped the whole review, and it is not the obvious one.**
+Credibility is **not a usable selection criterion** for a RAG corpus.
+PERMISSION is. A source must satisfy **both** (i) authority — primary/official,
+not a summary of someone else — **and** (ii) permission — its terms permit
+MACHINE ingestion by a local non-commercial tool. Failing (ii) scores **zero
+for ingestion regardless of reputation**. This is why the most authoritative
+financial outlets on earth appear NOWHERE in the registry: Bloomberg's terms
+forbid content being "used to construct a database of any kind", and FT's
+forbid use "in any manner for any machine learning and/or artificial
+intelligence purposes". The user's Request 44 asked for the *most credible*
+sources; the honest answer had to separate "most credible" from "legally
+ingestible", because for news those two sets barely intersect.
+
+**Three further findings, each of which would have produced a wrong registry
+if missed.**
+
+1. **A licence can split down the middle by content type.** IMF *publications*
+   ban LLM use outright — "does not permit use of its Content or Sites for the
+   training of large language models (LLMs) without explicit permission" — while
+   IMF *statistical data* is explicitly carved back out: "**Notwithstanding** the
+   general prohibition ... published statistical data ... You may download,
+   extract, copy, create derivative works, publish, distribute, and use Data".
+   ECB splits the same way: data is free to use, but ECB Working Papers are
+   "permitted only with the explicit prior written authorisation". A reviewer
+   assuming "central bank => open" would have registered the papers illegally.
+   Both entries are therefore registered DATA-ONLY, with the exclusion stated
+   in the `licence` field so a later maintainer cannot widen it by accident.
+2. **HTTP 404 can arrive with 112 KB of body.** Three BIS probes returned 404
+   carrying ~111,700-byte HTML error pages. **A large response body is not
+   evidence of success** — the same failure class as the Alpha Vantage `.html`
+   URL that actually served a PDF. Rule adopted and now encoded in every new
+   `verified_status`: a source is "verified" only when the status code **and**
+   the parsed payload both agree.
+3. **A favourable licence does not make an endpoint reachable.** GDELT has the
+   most permissive licence in the entire review — "unlimited and unrestricted
+   use for any academic, commercial, or governmental use of any kind without
+   fee" — and returned HTTP 000 three times ("Connection timed out after 15002
+   milliseconds") while a SEC control in the **same command** returned 200 in
+   0.087 s, and an independent egress also timed out. Recorded as
+   **ToS-VERIFIED / ENDPOINT-UNVERIFIED** and registered DISABLED. Its
+   `descope_reason` opens with "NOT a licence refusal" precisely so the entry
+   cannot be misread as a prohibition, and its status says GDELT's health is
+   "UNKNOWN FROM HERE" rather than the unsupported claim "GDELT is down".
+
+**Decision.** Register 6 sources ENABLED, all payload-verified on 2026-08-30:
+`fed_board_working_papers` (public domain; 15 items, newest 24 Aug 2026),
+`ofr_working_papers` (no copyright claimed; 10 items — the feed URL was FOUND
+by scraping the index after the natural guess 404'd), `arxiv_qfin`
+(totalResults 2260), `ecb_data_portal` (EUR/USD 1.1643), `imf_sdmx_data`
+(445,712 bytes), `world_bank_indicators` (US GDP 30,769,700,000,000).
+Register 2 DISABLED with recorded reasons: `gdelt_doc` (unreachable) and
+`bis_working_papers` (3x 404 **and** a "not more than 400 words ... not
+exceeding 10%" extract cap that conflicts with full-text chunking).
+
+**NY Fed is deliberately NOT registered, and the omission is the decision.**
+Its terms are the most generous of any research source reviewed — it permits
+"Access the Content, manually or **through an automated process or device**"
+and "Download, store, and use Content in any format or media" — but its
+endpoint was never probed. Registering it on the strength of the licence alone
+would repeat exactly the mistake the GDELT entry exists to document.
+
+**arXiv is the only source whose ToS names local storage as permitted**
+("Retrieve, store, and use the content of arXiv e-prints for your own personal
+use, or for research purposes"), and only because this project is local,
+single-user and non-public. "Store and serve arXiv e-prints ... from your
+servers" remains prohibited, so **if this project is ever published the basis
+collapses** and the entry must be re-reviewed. Its `rate_limit_qps` is
+**0.333, not a round 1** — "no more than one request every three seconds" is a
+licence condition, not politeness, and a round number would be a breach.
+
+**Result.** 6 -> 15 sources; 9 enabled, 6 descoped;
+`PERMITTED_RESEARCH` 4 and `PERMITTED_NEWS` 1. Full review with verbatim
+licence text in `docs/legal/research-and-news-sources.md` (539 lines).
+
+## D-0078 — R22 answered: the Alpha Vantage terms contain NO storage clause at all
+
+**Question (R22).** How long may Alpha Vantage data be stored? Four places in
+`docs/legal/market-data-providers.md` (lines 228, 317, 367, 415) recorded this
+as UNKNOWN.
+
+**Method and result (MEASURED).** The terms are served as a **PDF**, not HTML
+(127,102 bytes, sha256_16 `2282b2a77e9fa981`) — the `.html` URL serves a PDF,
+which is itself the reason an earlier reading could have gone wrong. Extracted
+to text (4 pages, 9,882 chars) and searched for eight terms: `stor`,
+`retention`, `cache`, `redistribut`, `archive`, `persist`, `delete`,
+`historical` — **zero occurrences of any of them**. The 2 hits for `retain`
+are both about IP ownership, not data retention.
+
+**Answer.** There is no permitted storage timeframe **because there is no
+storage clause**. The existing non-persistable treatment stays, but its basis
+changes from "we do not know how long we may store it" to "**no storage right
+is granted at all**" — a stronger and more defensible position, and one that
+does not depend on an unverified assumption. Recorded with the correction that
+it is **four** places, not five: I first wrote "lines 109, 228, 317, 367, 415",
+checked line 109, and found it is a TradingView-vs-Twelve-Data comparison row,
+not an UNKNOWN record. Corrected rather than left as a plausible-looking count.
+
+## D-0079 — a live compliance violation: the mandatory FRED attribution notice was never emitted
+
+**The defect (MEASURED, 2026-08-30, before any of this session's edits).**
+
+```
+$ grep -rn "not endorsed or certified" --include=*.py --include=*.md --include=*.json .
+(no output)
+```
+
+The string appeared **nowhere in the project**, while `fred` was a **registered
+and ENABLED source**. FRED's API terms require a verbatim notice: "This product
+uses the FRED(R) API but is not endorsed or certified by the Federal Reserve
+Bank of St. Louis."
+
+**Why it went unnoticed for weeks, which is the real finding.** The `fred`
+registry entry was not blank. It recorded a genuine, correctly-researched
+licence caveat — that some series are copyrighted by their original provider
+and may not be redistributed. **Recording PART of a licence made the entry look
+reviewed**, and a flat, unconditional attribution obligation went missing
+behind the part that was right. A half-recorded licence is more dangerous than
+an empty one, because it defeats the reviewer's own spot-check.
+
+**A second, methodological finding.** The `grep` above stopped being
+reproducible the moment I documented the gap, because
+`docs/legal/research-and-news-sources.md` now quotes the notice twice — a
+legal-review document quoting an obligation makes the naive evidence command
+match while nothing has actually been fixed. **Quoting an obligation is not
+discharging it.** The check that stays meaningful is scoped to where compliance
+has to live:
+
+```
+$ grep -rln "not endorsed or certified" --include=*.py --include=*.json .
+(no output — 0 files)
+```
+
+**Fix.** `REQUIRED_NOTICES` (a `MappingProxyType`, so it cannot be edited in
+place) plus `required_notices(keys=None)` in `src/rag/sources.py`. The notice
+text is stored VERBATIM and must not be paraphrased — "FRED(R)" is a registered
+trademark and the sentence is prescribed wording. `keys` limits output to the
+sources actually used, so a session that never touched FRED makes no FRED
+claim; notices are deduplicated so two FRED-backed series do not print it
+twice; and unknown keys are ignored rather than raising, because this is a
+display path and an attribution helper that crashes a report is worse than one
+that returns what it knows (refusal belongs in `check_access`, which runs
+first).
+
+**Filed as a NEW RISK, not under R20 or R22.** It is neither: it was found
+*while* researching them and belongs to neither. Registering it under an
+existing risk would have hidden a live obligation inside a closed one.
+
+## D-0080 — R45: "AI web search" cannot replace news/social APIs; the refusal is registered in code
+
+**The question (Request 45).** Could the web-search capability of AI services
+be used instead of APIs for reading news and social media? The user granted
+discretion to decide and proceed. **Answer: no** — and the reason is not a
+technical limitation but that the proposal inverts the constraint it is trying
+to escape.
+
+**It was a reasonable question.** It is the obvious engineering move and appears
+to solve a real problem: no news source in the D-0077 review survived both the
+authority and permission tests, yet an AI with web search visibly *can* read
+Bloomberg and answer questions about it. The reason it fails is worth encoding
+because a future maintainer will re-propose it.
+
+**Ground 1 — a search tool changes the TRANSPORT, not the LICENCE.** The
+prohibitions are written against the *use*, not the *route*: Bloomberg's "may
+not be used to construct a database of any kind" and FT's "any manner for any
+machine learning and/or artificial intelligence purposes" are violated just as
+squarely by text obtained through a search index. The strongest confirmation
+comes from a search vendor arguing against its own commercial interest — Brave's
+own FAQ: "The Brave Search API **does not grant any rights to third-party
+content** such as webpages. Customers who access URLs displayed in the Brave
+Search API must ensure their access to those webpages complies with the
+copyright terms of the page publishers." Tavily §10.2 says the same. The
+licence problem is not routed around; it is **inherited**.
+
+**Ground 2 — the search providers themselves forbid the RAG step, in writing.**
+This is what settles it, because it holds even where publisher rights would not.
+- **Google grounding**: "You will not ... cache, frame, syndicate, resell,
+  analyze, train on, or otherwise learn from Grounded Results", and it is "a
+  violation of these terms ... using Links to build an index, or using Links to
+  identify destination pages for crawling or scraping" — a near-verbatim
+  description of the proposed design, given as the named example of a breach.
+  Programmatic use is also a **PAID** service ("via Gemini API as a (Paid
+  Service)"), which fails the standing spend-nothing constraint; the free path
+  is the interactive web UI, not an API a program can call.
+- **Brave Search API** §3(b)(i): shall not "store, cache, or create a database
+  of Search Results, in whole or in part, other than **transient** storage". A
+  persistent retrieval corpus is precisely a database of search results.
+- **Tavily** §6.4: shall not use output "in connection with ... **financial
+  investment decisions**" — this project's entire subject matter — and §6.5
+  **trains on submitted queries**, with §6.7 warning that providers "may not be
+  required to maintain the confidentiality of any Customer Input".
+
+**Ground 3 — it is not even an alternative to an API.** The deliverable is a
+local llama.cpp model (`Qwen3.5-4B-Q5_K_M.gguf`, `C:\models`) with **no
+built-in web search**. There is no dormant capability to switch on. Any search
+ability must be obtained as a hosted HTTP API with a key and terms — i.e. the
+proposal **adds** an API dependency with a **stricter** licence and a worse
+privacy posture than the free official endpoints (SEC, ECB, IMF, World Bank) it
+was meant to replace. "Use web search instead of APIs" is a category error: a
+web-search capability **is** an API.
+
+**One distinction preserved rather than collapsed.** Consuming a search index's
+**own snippets and metadata** (its product, under its terms) is a different act
+from **fetching article bodies** (the publisher's content, under the
+publisher's terms). That distinction is exactly why GDELT reviewed well on
+licence — it licenses its own metadata, not publishers' article text. It does
+not rescue the proposal, because Ground 2 blocks storing even the snippets.
+
+**What IS permitted, and it is not nothing.** The registry governs only what
+enters the machine — the same boundary the TradingView entry draws ("A human
+may still read a TradingView chart ... that is outside this registry"). The user
+may read Bloomberg, FT, X/Twitter or any AI chatbot with search, and may paste
+an excerpt in as ordinary conversational input under their own judgement; such
+text carries UNVERIFIED provenance and the answer gate treats it as such.
+**Consequence for the design: for news and social sentiment this project's
+honest architecture is human-in-the-loop, not automated ingestion.** For facts
+and numbers the automated path is already registered and legal.
+
+**Encoded, not just documented.** `ai_web_search` is registered DISABLED at
+trust level `UNVERIFIED` — the TradingView convention, because both are
+**licence** refusals rather than quality judgements and a high trust level
+beside `enabled=False` would read to a later maintainer as an oversight worth
+correcting. Registering the refusal rather than omitting it means
+`ingest_document(source_key="ai_web_search")` names the actual reason instead
+of raising a confusing "unknown source". Full review with verbatim clauses in
+`docs/legal/ai-web-search-review.md`, including the four conditions that would
+reopen it — and the note that **money alone is not one of them**, since paying
+Google does not lift the caching and index-building prohibitions.
+
+**A test defect found by the mutation battery, worth recording.** My first
+version of the "every new source records a licence basis" assertion tested
+`len(_s.licence) > 40`. The mutant that replaced arXiv's licence with "Assumed
+fine because it is a preprint server:" **SURVIVED** — it is 44 characters. A
+length check cannot distinguish a licence from an assumption written at length,
+which is the exact failure mode this project exists to avoid ("silence is not
+permission"). Replaced with an assertion that the licence names an affirmative
+grant AND contains no assumption words. The first rewrite then failed on the
+World Bank entry because my keyword list had "permit"/"PERMIT" but not
+"Permitted" — the same class of bug as `grep -q "0 failed"` matching "10
+failed": a check that looks thorough while silently testing the wrong string.
+Now matched case-insensitively.
+
+**Result.** `tests/test_rag.py` 224 -> 268 assertions. `tests/mutate_rag.py`
+99 -> 116 mutants: **116 seeded, 113 killed, 3 equivalent, 0 survived, 0
+skipped, source restored intact**. Full regression **3,208 across 18 suites, 0
+failed**. Gates untouched: `measurements_recorded` is None,
+`live_trading_enabled` False, `active_mode` ANALYSIS_ONLY, `phase_4.status`
+unchanged, `acceptance_thresholds` (13) json-identical to the pre-session
+backup. **0 model runs launched.**

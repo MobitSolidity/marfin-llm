@@ -193,7 +193,12 @@ _register(Source(
     requires_api_key=True,
     licence="Free API key required. Most series are public domain, but SOME "
             "series are copyrighted by their original provider and may not be "
-            "redistributed -- check per-series terms before caching.",
+            "redistributed -- check per-series terms before caching. "
+            "MANDATORY ATTRIBUTION, added 2026-08-30: the FRED API terms "
+            "require the verbatim notice in REQUIRED_NOTICES['fred'] to be "
+            "displayed. Recording the per-series caveat above while omitting "
+            "this flat, unconditional obligation is how the gap arose: "
+            "capturing PART of a licence is not complying with it.",
     verified_on="2026-08-10",
     verified_status="MEASURED: HTTP 400 'Variable api_key is not set' without "
                     "a key; key not yet supplied, so UNVERIFIED end to end",
@@ -266,6 +271,352 @@ _register(Source(
                    "governs only what enters the machine.",
     doc_url="https://www.tradingview.com/policies/",
 ))
+
+
+# ---------------------------------------------------------------------------
+# PERMITTED_RESEARCH and PERMITTED_NEWS (R20)
+# ---------------------------------------------------------------------------
+# SS.5.2 requires "Permitted research" and "Permitted financial news". Before
+# this block both tiers were EMPTY -- that gap was R20.
+#
+# THE SELECTION RULE, and it is not the obvious one:
+# credibility is NOT a usable criterion. A source must satisfy BOTH
+#   (i)  AUTHORITY   -- primary/official, not a summary of someone else, AND
+#   (ii) PERMISSION  -- its terms permit MACHINE ingestion by a local,
+#                       non-commercial research tool.
+# Failing (ii) scores ZERO for ingestion regardless of reputation. That is why
+# the most authoritative financial outlets on earth (Bloomberg, FT, Reuters)
+# appear NOWHERE below: their licences forbid exactly this use. See
+# docs/legal/research-and-news-sources.md for the verbatim clauses.
+#
+# Every entry below was verified on BOTH axes on 2026-08-30: the licence read
+# verbatim from the publisher's own terms page, AND the endpoint probed with the
+# STATUS CODE AND PARSED PAYLOAD BOTH CHECKED. That second condition is not
+# pedantry: three probes this session returned HTTP 404 carrying 60-112 KB of
+# HTML error page. A large response body is not evidence of success.
+
+_register(Source(
+    key="fed_board_working_papers",
+    name="Federal Reserve Board working papers (FEDS/IFDP)",
+    base_url="https://www.federalreserve.gov/feeds/working_papers.xml",
+    trust_level="PERMITTED_RESEARCH",
+    rate_limit_qps=1,
+    licence="PUBLIC DOMAIN. federalreserve.gov/disclaimer.htm: 'information "
+            "on Board's website is in the public domain and may be copied and "
+            "distributed without permission'. Note the Board's own page "
+            "reprints third-party notices (e.g. BEA) verbatim -- material "
+            "sourced FROM a third party through a Board page keeps that "
+            "party's terms.",
+    verified_on="2026-08-30",
+    verified_status="MEASURED: HTTP 200, payload parsed -- title 'FRB: "
+                    "Working Papers', 15 items, newest 24 Aug 2026",
+    doc_url="https://www.federalreserve.gov/disclaimer.htm",
+))
+
+_register(Source(
+    key="ofr_working_papers",
+    name="Office of Financial Research working papers",
+    base_url="https://www.financialresearch.gov/working-papers/feed.rss",
+    trust_level="PERMITTED_RESEARCH",
+    rate_limit_qps=1,
+    licence="NO COPYRIGHT CLAIMED. financialresearch.gov/legal-notices/: 'No "
+            "copyright may be claimed for any work ... created by a federal "
+            "employee in the course of his or her duties'.",
+    verified_on="2026-08-30",
+    verified_status="MEASURED: HTTP 200, payload parsed -- 10 items, newest "
+                    "25 Aug 2026. NOTE the feed URL was FOUND, not guessed: "
+                    "the natural guess /working-papers/feed/ returned 404.",
+    doc_url="https://www.financialresearch.gov/legal-notices/",
+))
+
+# arXiv is the ONLY source in this registry whose terms of use name LOCAL
+# STORAGE as permitted -- and only because this project is local, single-user
+# and non-public. "Store and serve arXiv e-prints ... from your servers"
+# remains prohibited, so IF THIS PROJECT IS EVER PUBLISHED the basis collapses
+# and this entry must be re-reviewed. That condition is the whole licence.
+_register(Source(
+    key="arxiv_qfin",
+    name="arXiv q-fin (Quantitative Finance)",
+    base_url="https://export.arxiv.org/api/query",
+    trust_level="PERMITTED_RESEARCH",
+    # 0.333 qps, NOT a round number: info.arxiv.org/help/api/tou.html says
+    # "no more than one request every three seconds, and limit requests to a
+    # single connection". 1/3 s is the stated ceiling, so 1/3 qps is the rate.
+    rate_limit_qps=0.333,
+    licence="ToS EXPLICITLY PERMITS local use: 'Retrieve, store, and use the "
+            "content of arXiv e-prints for your own personal use, or for "
+            "research purposes'. Metadata is CC0 1.0. PROHIBITED: 'Store and "
+            "serve arXiv e-prints ... from your servers' -- so this entry is "
+            "valid ONLY while the project stays local, single-user and "
+            "non-public. Rate condition is part of the licence, not advice.",
+    verified_on="2026-08-30",
+    verified_status="MEASURED: HTTP 200, payload parsed -- opensearch "
+                    "totalResults 2260 for cat:q-fin.PR",
+    doc_url="https://info.arxiv.org/help/api/tou.html",
+))
+
+# ECB: the licence SPLITS DOWN THE MIDDLE by content type. Data is free to use;
+# Working Papers need written authorisation. A reviewer assuming
+# "central bank => open" would have registered the papers illegally. This entry
+# is the DATA PORTAL ONLY, and the licence field says so explicitly so that a
+# later maintainer cannot widen it by accident.
+_register(Source(
+    key="ecb_data_portal",
+    name="ECB Data Portal API (statistical data ONLY, not papers)",
+    base_url="https://data-api.ecb.europa.eu/service/data",
+    trust_level="OFFICIAL_DATA",
+    rate_limit_qps=1,
+    licence="Free use WITH CITATION: ecb.europa.eu disclaimer -- 'users of "
+            "this website may make free use of the information ... the ECB "
+            "must be cited as the source'. CARVE-OUT, and it is why this "
+            "entry is data-only: reproduction of 'ECB Working Papers and ECB "
+            "Occasional Papers ... is permitted only with the explicit prior "
+            "written authorisation' -- which this project does NOT have. ECB "
+            "research papers are therefore NOT covered by this source.",
+    verified_on="2026-08-30",
+    verified_status="MEASURED: HTTP 200, payload parsed -- EUR/USD 1.1643",
+    doc_url="https://www.ecb.europa.eu/services/disclaimer/html/index.en.html",
+))
+
+# IMF: same split, stated even more sharply -- the general prohibition bans LLM
+# use outright, and a "Notwithstanding" clause carves the statistical data back
+# out. Reading only the first half would have excluded a permitted source;
+# reading only the second half would have licensed a prohibited one.
+_register(Source(
+    key="imf_sdmx_data",
+    name="IMF SDMX statistical data API (data ONLY, not publications)",
+    base_url="https://api.imf.org/external/sdmx/2.1",
+    trust_level="OFFICIAL_DATA",
+    rate_limit_qps=1,
+    licence="DATA CARVE-OUT ONLY. imf.org/en/About/copyright-and-terms (eff. "
+            "2024-10-11) prohibits generally: 'does not permit use of its "
+            "Content or Sites for the training of large language models "
+            "(LLMs) without explicit permission' and 'prohibits the bulk "
+            "download of information by automated technology'. BUT: "
+            "'Notwithstanding the general prohibition ... published "
+            "statistical data ... You may download, extract, copy, create "
+            "derivative works, publish, distribute, and use Data'. This "
+            "entry covers the DATA carve-out ONLY. IMF publications, working "
+            "papers and text remain PROHIBITED for machine use.",
+    verified_on="2026-08-30",
+    verified_status="MEASURED: HTTP 200, payload parsed -- 445,712 bytes of "
+                    "SDMX returned",
+    doc_url="https://www.imf.org/en/About/copyright-and-terms",
+))
+
+_register(Source(
+    key="world_bank_indicators",
+    name="World Bank Indicators API",
+    base_url="https://api.worldbank.org/v2",
+    trust_level="OFFICIAL_DATA",
+    rate_limit_qps=1,
+    licence="Permitted for personal / non-commercial research use with "
+            "attribution, per the World Bank dataset terms of use. This "
+            "project is non-commercial and single-user.",
+    verified_on="2026-08-30",
+    verified_status="MEASURED: HTTP 200, payload parsed -- US GDP "
+                    "30,769,700,000,000",
+    doc_url="https://datacatalog.worldbank.org/public-licenses",
+))
+
+# -------- DISABLED: permitted by licence, but NOT REACHABLE from here --------
+#
+# GDELT has the MOST PERMISSIVE licence in the entire review and is still
+# disabled. That combination is the finding: a favourable licence does not make
+# an endpoint reachable, and the two must be recorded separately. Registering
+# it enabled on the strength of its terms alone would have put a source into
+# the corpus that returns nothing.
+_register(Source(
+    key="gdelt_doc",
+    name="GDELT 2.0 DOC API (news metadata)",
+    base_url="https://api.gdeltproject.org/api/v2/doc/doc",
+    trust_level="PERMITTED_NEWS",
+    enabled=False,
+    rate_limit_qps=1,
+    licence="ToS-VERIFIED AND EXCEPTIONALLY PERMISSIVE: "
+            "gdeltproject.org/about.html#termsofuse -- 'available for "
+            "unlimited and unrestricted use for any academic, commercial, or "
+            "governmental use of any kind without fee'; 'may redistribute, "
+            "rehost, republish, and mirror' with citation. CRITICAL LIMIT OF "
+            "SCOPE: GDELT licenses ITS OWN datasets (events, entities, "
+            "themes, tone, article URLs) -- NOT the publishers' article "
+            "bodies. Following a URL into an article puts you under THAT "
+            "publisher's terms, which for Bloomberg/FT/Reuters is a "
+            "prohibition. Metadata only.",
+    verified_on="2026-08-30",
+    verified_status="ToS-VERIFIED / ENDPOINT-UNVERIFIED. MEASURED: HTTP 000 "
+                    "x3, 'Connection timed out after 15002 milliseconds'. DNS "
+                    "resolves (104.197.47.124). A SEC control request in the "
+                    "SAME command returned 200 in 0.087 s, so the failure is "
+                    "not general egress. Independent egress also timed out. "
+                    "GDELT's own health is UNKNOWN FROM HERE -- not 'down'.",
+    descope_reason="NOT a licence refusal -- the licence is the best in this "
+                   "registry. Disabled because the endpoint is UNREACHABLE "
+                   "from the build environment (HTTP 000 x3 with a passing "
+                   "control). Re-enable ONLY after a probe returns 200 AND a "
+                   "parsed payload. Recording it enabled on the strength of "
+                   "its terms would claim a capability we measured absent.",
+    doc_url="https://www.gdeltproject.org/about.html#termsofuse",
+))
+
+_register(Source(
+    key="bis_working_papers",
+    name="BIS working papers",
+    base_url="https://www.bis.org",
+    trust_level="PERMITTED_RESEARCH",
+    enabled=False,
+    rate_limit_qps=1,
+    licence="PARTIALLY permitted and the limit is QUANTITATIVE, which is why "
+            "this cannot be a normal ingestion source even once reachable. "
+            "bis.org/terms_conditions.htm allows 'download, display, print "
+            "out, photocopy or redistribute any BIS Material for "
+            "non-commercial purposes', but a 'limited extract' means 'any "
+            "extract of not more than 400 words of text or two tables or "
+            "graphs ... and in any case not exceeding 10%'. A chunked RAG "
+            "corpus of full papers would exceed that.",
+    verified_on="2026-08-30",
+    verified_status="ENDPOINT-UNVERIFIED. MEASURED: three candidate feed URLs "
+                    "all returned HTTP 404 -- /doclist/wppubls.rss, "
+                    "/list/wppubls/rss.xml, /list/wppubls/index.htm. Each 404 "
+                    "carried a ~111,700-byte HTML error page: THE BODY SIZE "
+                    "IS NOT EVIDENCE OF SUCCESS.",
+    descope_reason="Two independent blockers. (1) No working feed URL found "
+                   "(3x 404). (2) Even reachable, the 400-word / two-table / "
+                   "10% extract cap conflicts with full-text chunking. "
+                   "Re-enable only with a verified URL AND an extract-limit "
+                   "enforcement mechanism.",
+    doc_url="https://www.bis.org/terms_conditions.htm",
+))
+
+# NY Fed is deliberately NOT REGISTERED, and the omission is a decision.
+# Its terms are the most generous of any research source reviewed --
+# newyorkfed.org/privacy/termsofuse permits 'Access the Content, manually or
+# through an automated process or device' and 'Download, store, and use Content
+# in any format or media'. But its endpoint was NEVER PROBED this session.
+# Registering it on the strength of the licence alone would repeat exactly the
+# mistake the GDELT entry above exists to document. Probe first, then register.
+
+
+# ---------------------------------------------------------------------------
+# "AI web search" as a news/social route: REFUSED, and why (R45)
+# ---------------------------------------------------------------------------
+# The question asked was whether the web-search capability of AI services could
+# replace APIs for reading news and social media. It cannot, and the reason is
+# worth encoding rather than leaving in prose, because the idea is intuitive
+# and a future maintainer will re-propose it.
+#
+# 1. A SEARCH TOOL CHANGES THE TRANSPORT, NOT THE LICENCE. Reaching Bloomberg
+#    text through a search index does not create a right to it. Bloomberg's
+#    terms ('may not be used to construct a database of any kind') and FT's
+#    ('any manner for any machine learning and/or artificial intelligence
+#    purposes') bind the USE, not the route. Brave's own FAQ states this
+#    against its own product: 'The Brave Search API does not grant any rights
+#    to third-party content such as webpages.'
+# 2. THE SEARCH PROVIDERS THEMSELVES FORBID THE RAG STEP, in writing:
+#    - Google Grounding: prohibits 'using Links to build an index'; forbids
+#      'cache ... analyze, train on, or otherwise learn from Grounded Results';
+#      and programmatic use via Gemini API is a PAID service.
+#    - Brave Search API: 'shall not ... store, cache, or create a database of
+#      Search Results, in whole or in part, other than transient storage'.
+#    - Tavily: forbids use 'in connection with ... FINANCIAL INVESTMENT
+#      DECISIONS', which is this project's domain, and trains on submitted
+#      queries.
+# 3. IT IS NOT EVEN AN ALTERNATIVE TO AN API. The deliverable is a local
+#    llama.cpp model with no search tool of its own. Any search capability is
+#    itself an HTTP API with a key and terms -- STRICTER terms than the
+#    official data APIs it was proposed to replace.
+#
+# So no source is registered for it. What IS permitted is a HUMAN reading
+# whatever they like on screen and choosing to paste an excerpt: that is the
+# same boundary the TradingView entry draws ('A human may still read a
+# TradingView chart ... that is outside this registry, which governs only what
+# enters the machine'). Registering the refusal keeps
+# ingest_document(source_key="ai_web_search") a NAMED refusal instead of a
+# confusing "unknown source".
+_register(Source(
+    key="ai_web_search",
+    name="AI web-search / grounding services (machine ingestion prohibited)",
+    base_url="",
+    # UNVERIFIED for the same reason as TradingView: this is a LICENCE refusal,
+    # not a quality judgement, and a high trust level would read as an
+    # oversight worth correcting.
+    trust_level="UNVERIFIED",
+    enabled=False,
+    licence="PROHIBITED by every provider reviewed on 2026-08-30. Google "
+            "Gemini grounding terms: 'You will not ... cache, frame, "
+            "syndicate, resell, analyze, train on, or otherwise learn from "
+            "Grounded Results', and it is 'a violation of these terms ... "
+            "using Links to build an index, or using Links to identify "
+            "destination pages for crawling or scraping'; grounding via the "
+            "API is a PAID service. Brave Search API s3(b)(i): shall not "
+            "'store, cache, or create a database of Search Results'. Tavily "
+            "s6.4: shall not use output 'in connection with ... financial "
+            "investment decisions'.",
+    verified_on="2026-08-30",
+    verified_status="VERIFIED by reading each provider's own terms; see "
+                    "docs/legal/ai-web-search-review.md",
+    descope_reason="A search tool changes the TRANSPORT, not the LICENCE: "
+                   "reaching prohibited text through a search index does not "
+                   "create a right to it, and every search provider "
+                   "separately forbids storing results in a database. Also "
+                   "not an alternative to an API -- a search capability IS an "
+                   "API, with stricter terms and (for Google) a bill. A HUMAN "
+                   "may read and quote anything on screen; that is outside "
+                   "this registry, which governs only what enters the "
+                   "machine.",
+    doc_url="https://ai.google.dev/gemini-api/terms",
+))
+
+
+# ---------------------------------------------------------------------------
+# Mandatory attribution notices
+# ---------------------------------------------------------------------------
+# Some licences do not merely permit use, they REQUIRE a specific sentence to
+# be displayed. That obligation is unconditional and cannot be discharged by
+# recording it in a `licence` field or quoting it in a legal document -- the
+# program has to emit it.
+#
+# HOW THIS GAP WAS FOUND, because the shape of the mistake matters more than
+# the fix: the `fred` entry above already recorded FRED's per-series copyright
+# caveat accurately. Recording PART of a licence made the entry look reviewed,
+# and the flat, unconditional attribution requirement went missing for weeks
+# while `fred` sat ENABLED. MEASURED 2026-08-30:
+#
+#     $ grep -rln "not endorsed or certified" --include=*.py --include=*.json .
+#     (no output -- 0 files)
+#
+# The text below is VERBATIM from fred.stlouisfed.org/docs/api/terms_of_use.html
+# and must not be paraphrased: "FRED(R)" is a registered trademark and the
+# sentence is prescribed wording, not a summary we are free to reword.
+REQUIRED_NOTICES: Mapping[str, str] = MappingProxyType({
+    "fred": "This product uses the FRED\u00ae API but is not endorsed or "
+            "certified by the Federal Reserve Bank of St. Louis.",
+})
+
+
+def required_notices(keys=None) -> List[str]:
+    """
+    The attribution notices that must be displayed, deduplicated, in order.
+
+    `keys` limits the result to the sources actually used (so a session that
+    never touched FRED does not claim to use it). Passing None returns the
+    notices for every ENABLED source that has one -- a disabled source imposes
+    no obligation because nothing was ingested from it.
+
+    Unknown keys are IGNORED rather than raising: this is called on a display
+    path, and an attribution helper that crashes a report is worse than one
+    that returns what it knows. Refusal belongs in check_access(), which runs
+    first.
+    """
+    if keys is None:
+        keys = [k for k, s in SOURCES.items() if s.enabled]
+    out: List[str] = []
+    for k in keys:
+        notice = REQUIRED_NOTICES.get(k)
+        # `not in out`: two FRED-backed series must not print the notice twice.
+        if notice and notice not in out:
+            out.append(notice)
+    return out
 
 
 class AccessError(RuntimeError):

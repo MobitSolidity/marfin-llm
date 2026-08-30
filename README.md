@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0076). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0080). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -33,7 +33,8 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,164 assertions across 18 suites, plus 966 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,208 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
+| `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
 ## What This Prompt Defines
@@ -187,7 +188,7 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Item | Status |
 |---|---|
 | Calculation engine (84 fns, 5 families) | **VERIFIED** — 56/56 mutations killed |
-| Financial RAG pipeline (9 modules) | **VERIFIED** — 224 assertions, 99 mutations, 0 survivors |
+| Financial RAG pipeline (9 modules) | **VERIFIED** — 268 assertions, 116 mutations, 0 survivors |
 | Source access terms | **ENFORCED** — `check_access()` gates every ingestion entry point |
 | EDGAR period-mixing / restatement hazards | **MEASURED** on live data (117 facts, 46 restated) |
 | Persian numeral parsing | **VERIFIED** by execution |
@@ -205,7 +206,10 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Live broker write reachable by any route | **NO** — 62 adversarial attempts, 62 refused |
 | Screen capture / OCR in this runtime | **DOES NOT EXIST** — 12-entry capability probe |
 | Alpha Vantage against the real API | **UNKNOWN** — no live fetch was ever performed |
-| Permitted market-data storage timeframe | **UNKNOWN** — risk R22; data treated as non-persistable |
+| Permitted market-data storage timeframe | **ANSWERED, and the answer is that there is no clause** — the Alpha Vantage terms contain no storage provision at all (D-0078). Silence is not permission, so the non-persistable default stands. R22 CLOSED. |
+| Ingestable research / news sources | **9 enabled of 15 registered** (D-0077). Enabled: 4 `OFFICIAL_DATA`, 3 `PERMITTED_RESEARCH`, 2 `VERIFIED_PRIMARY`. R20 CLOSED. |
+| Reading news via an AI web-search tool instead of an API | **REFUSED** — three independent grounds, each from verbatim vendor terms (D-0080) |
+| FRED mandatory attribution notice | **FIXED** — was researched but never displayed; now `required_notices()` (D-0079). Residual R25: no UI surface calls it yet. |
 
 ### Phase 3A — market data, licences, and the broker wall
 
@@ -247,24 +251,46 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,164 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,208 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
 
-**Seeded-defect inventory, MEASURED by inspection 2026-08-30: 966 mutants
-across 12 batteries** (11 `tests/mutate_*.py` + the bash `mutation_test.sh`,
-which seeds 56 across the five calc modules).
+**Seeded-defect inventory, MEASURED by AST count 2026-08-30 — 983 mutants
+across 12 batteries:**
 
-⚠️ **One number here is UNRECONCILED and is not being presented as verified.**
-This section previously read "920 seeded across 11 batteries, 915 killed, 5
-documented equivalents". Counting the batteries today gives **966 across 12**.
-The +46 gap predates the R18 work (which added only 5) and means the aggregate
-figure was not updated as batteries grew. The last aggregate kill verdict on
-record is therefore **stale**, and no kill total is claimed here until a full
-`./tests/run_all.sh --mutate` is re-run and re-counted. What *is* MEASURED
-today is the selector battery, re-run in full: **20 seeded, 20 killed, 0
-survived, 0 skipped, source restored intact.**
+| Battery | Mutants |
+|---|---|
+| `mutate_phase4.py` | 228 |
+| `mutate_rag.py` | 116 |
+| `mutate_csv_import.py` | 94 |
+| `mutate_screenshot.py` | 89 |
+| `mutate_broker_tools.py` | 86 |
+| `mutate_webhooks.py` | 75 |
+| `mutate_market.py` | 66 |
+| `mutate_alpha_vantage.py` | 59 |
+| `mutate_execution.py` | 53 |
+| `mutate_llm_providers.py` | 41 |
+| `mutate_selector.py` | 20 |
+| `mutation_test.sh` (bash, 5 calc modules) | 56 |
+| **total** | **983** |
+
+⚠️ **The aggregate KILL total is still UNRECONCILED and is not presented as
+verified.** This section once read "920 seeded across 11 batteries, 915 killed,
+5 documented equivalents"; the count is now 983 across 12, and the aggregate
+kill verdict was never updated as batteries grew. **No aggregate kill total is
+claimed here** until a full `./tests/run_all.sh --mutate` is re-run and
+re-counted. Replacing a stale number with a fresher-looking but equally
+unmeasured one would be the same defect in newer paint.
+
+What *is* MEASURED, each battery re-run in full and its source md5-verified
+restored afterwards:
+
+| Battery | Result |
+|---|---|
+| `mutate_selector.py` | 20 seeded, 20 killed, 0 survived, 0 skipped |
+| `mutate_rag.py` | 116 seeded, 113 killed, 3 equivalent, **0 survived**, 0 skipped |
+| `mutate_llm_providers.py` | 41 seeded, 39 killed, 2 equivalent, **0 survived**, 0 skipped |
 
 ### Six of 84 tools were unreachable by their own name (D-0075, D-0076)
 
@@ -315,6 +341,127 @@ The two proven-equivalent mutants are deliberately **not** seeded — an
 unkillable mutant would be a permanent false alarm, and seeding it as a SKIP
 would overstate coverage — they are recorded in a comment with the 569-probe
 evidence (all 84 names, every fragment, 400 pairs, 0 family-set differences).
+
+### Which sources may actually be ingested (R20 CLOSED, D-0077)
+
+The registry grew **6 → 15 sources, 9 enabled**. The selection rule is the part
+worth reading, because it is not the obvious one:
+
+> **Credibility is not a usable criterion for a RAG corpus. Permission is.**
+> A source must satisfy **both** (i) *authority* — primary or official, not a
+> summary of someone else — **and** (ii) *permission* — terms that allow
+> **machine** ingestion. A source failing (ii) scores **zero for ingestion no
+> matter how authoritative it is.**
+
+That rule disqualifies almost every famous name in financial news. Bloomberg
+("may not be used to construct a database of any kind") and the FT ("any manner
+for any machine learning and/or artificial intelligence purposes") are excluded
+by their own words — not for lack of quality, but because quality was never the
+question.
+
+| Enabled | Tier | Basis |
+|---|---|---|
+| `fed_board_working_papers` | `PERMITTED_RESEARCH` | US Government work, public domain |
+| `ofr_working_papers` | `PERMITTED_RESEARCH` | no copyright claimed |
+| `arxiv_qfin` | `PERMITTED_RESEARCH` | permitted; rate-limited to **0.333 qps** |
+| `ecb_data_portal` | `OFFICIAL_DATA` | **data only** — Working Papers need written authorisation |
+| `imf_sdmx_data` | `OFFICIAL_DATA` | **statistical carve-out only** — IMF *publications* ban LLM use |
+| `world_bank_indicators` | `OFFICIAL_DATA` | permitted, non-commercial research |
+
+**A licence can split down the middle by content type**, and two of the six do:
+the IMF bans LTM/LLM use of its publications while explicitly carving out its
+statistical data, and the ECB gives data away while gating its Working Papers.
+Registering "the IMF" as permitted would have been wrong in both directions.
+
+Two sources are registered **disabled with the reason recorded**, and the
+distinction between the reasons matters:
+
+- `gdelt_doc` — **not a licence refusal.** Its terms are the most favourable in
+  the registry; the endpoint returned **HTTP 000 three times** from this
+  sandbox. *A favourable licence does not make an endpoint reachable* (R27).
+- `bis_working_papers` — 3× HTTP 404 **and** a 400-word extract cap.
+
+The New York Fed was **deliberately omitted** rather than left out by oversight,
+and the omission is documented in code as a decision so a future reader cannot
+mistake it for an unreviewed gap.
+
+### The FRED notice was researched, quoted, and never displayed (D-0079)
+
+`sources.py` correctly recorded FRED's per-series caveat — and omitted the flat,
+unconditional obligation to display:
+
+> This product uses the FRED® API but is not endorsed or certified by the
+> Federal Reserve Bank of St. Louis.
+
+**Recording PART of a licence makes an entry look reviewed.** The correctly
+researched per-series caveat is precisely what hid the missing one for weeks:
+nothing about the entry looked unfinished. Quoting an obligation is not
+discharging it. Fixed with `REQUIRED_NOTICES` + `required_notices()`, which
+de-duplicates so two FRED-backed series cannot print the notice twice.
+
+⚠️ **Residual, tracked as R25 rather than quietly closed:** the function exists
+and is mutation-tested, but **no UI or report surface calls it yet.** The
+violation is fixed in the library, not yet in the output.
+
+### Can an AI web-search tool replace news APIs? No (Request 45, D-0080)
+
+The honest answer is a **refusal**, so what the project implements *is* the
+refusal: `ai_web_search` is registered **disabled** at `UNVERIFIED`, with its
+grounds encoded in the source and asserted by three mutants. Full review:
+`docs/legal/ai-web-search-review.md`.
+
+**1. A search tool changes the TRANSPORT, not the LICENCE.** Publisher terms
+bind the *use*, not the *route*. Reaching identical text through a search index
+and storing it still performs the prohibited act. The licence problem is not
+routed around — it is **inherited**. The strongest evidence comes from a vendor
+arguing *against its own commercial interest*, in Brave's own Search API FAQ:
+
+> The Brave Search API does not grant any rights to third-party content such as
+> webpages. Customers who access URLs displayed in the Brave Search API must
+> ensure their access to those webpages complies with the copyright terms of the
+> page publishers.
+
+**2. The search providers separately forbid the RAG step itself** — so the
+conclusion holds even where publisher rights would not apply. Google names
+index-building as a violation *by example*; Brave permits only "transient
+storage" and bans creating a database of results; Tavily excludes **"financial
+investment decisions"** by name and retains customer input for training.
+
+**3. It is not even an alternative to an API.** A web-search capability **is**
+an API — with a key, a ToS, a rate limit, and (for Google grounding) a bill.
+The proposal *adds* a dependency with a **stricter** licence and worse privacy
+than the free official endpoints it was meant to replace. Google's terms state
+plainly: *"Do not submit sensitive, confidential, or personal information to the
+Unpaid Services."*
+
+**What remains permitted, and is the recommended path:** a *human* may read and
+quote anything on screen. The boundary is human-in-the-loop reading, not
+automated ingestion.
+
+**Also VERIFIED, not assumed:** the local model has no latent search capability
+to switch on. `src/llm/providers.py` registers 14 providers and **none** exposes
+web search; `SYSTEM_PROMPT.md` mentions web search **zero** times.
+
+**Four conditions would reopen this**, and *money is deliberately not one of
+them* — a paid plan buys a bigger quota, not a publisher licence.
+
+### Two of my own tests could not fail, and mutation found both
+
+Both defects were in the **tests written this session**, which is the point of
+running the battery against your own new work:
+
+1. `len(licence) > 40` was meant to prove a licence basis was recorded. Mutant
+   102 survived with **"Assumed fine because it is a preprint server:"** — 44
+   characters. **A length check cannot distinguish a licence from an
+   assumption.** Same failure class as `grep -q "0 failed"` matching
+   "10 failed". Fixed the *test*, not the mutant.
+2. The replacement keyword list was **case-sensitive** — it checked `"permit"`
+   and `"PERMIT"` and missed the World Bank entry's `"Permitted"`. Caught by
+   printing the actual licence text instead of loosening the assertion.
+
+The battery was then **re-run from scratch**, because the earlier 112-killed/
+1-survived result had been measured against buggy tests and was worthless as
+evidence.
 
 The batteries have repeatedly found tests that could not fail:
 
@@ -413,8 +560,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,164 assertions across 18 suites + 7 probes (~9 s)
-./tests/run_all.sh --mutate     # + 966 seeded defects across 12 batteries (~205 s)
+./tests/run_all.sh              # 3,208 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh --mutate     # + 983 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -659,13 +806,16 @@ It reads only — no socket, no quota, no file written — and is deliberately
 
 ### Verification
 
-- `tests/test_llm_providers.py` — 237 assertions.
-- `tests/mutate_llm_providers.py` — 31 mutants: **29 killed, 2 proved
-  equivalent, 0 survived, 0 skipped**. The first run killed only 21 and let ten
+- `tests/test_llm_providers.py` — 248 assertions.
+- `tests/mutate_llm_providers.py` — 41 mutants: **39 killed, 2 proved
+  equivalent, 0 survived, 0 skipped** (re-measured 2026-08-30; this line
+  previously read "31 mutants: 29 killed", which had drifted as the battery
+  grew — the same staleness class as the aggregate above, found only because
+  the battery was actually re-run rather than quoted). The first run killed only 21 and let ten
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,164 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,208 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -714,7 +864,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,164-assertion base is trustworthy.
+3,208-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

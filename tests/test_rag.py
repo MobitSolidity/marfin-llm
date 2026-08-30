@@ -39,9 +39,11 @@ from rag.rerank import (W_AUTHORITY, W_RECENCY,                     # noqa: E402
                         _normalize_scores, rerank)
 from rag.retrieval import (FactStore, HybridRetriever,              # noqa: E402
                            PassageIndex, RetrievalResult)
-from rag.sources import (AccessError, SOURCES, Source, _is_contact_ua,  # noqa
+from rag.sources import (AccessError, REQUIRED_NOTICES, SOURCES,     # noqa
+                         Source, _is_contact_ua,
                          check_access, descoped_sources, enabled_sources,
-                         get_source, manifest, register_source)
+                         get_source, manifest, register_source,
+                         required_notices)
 
 # A User-Agent that names a reachable contact, as SEC requires.
 # MEASURED 2026-08-10: contact UA -> HTTP 200, absent UA -> HTTP 403.
@@ -684,10 +686,14 @@ section("source registry: terms are enforced, not merely declared")
 # The module had been written and committed to disk without ever being run;
 # three of the four findings below were live exploits.
 
-check("6 sources registered", len(SOURCES), 6, 0, "(C)")
-check("3 enabled", len(enabled_sources()), 3, 0, "(C)")
-check("3 descoped (2x Q3 scope, 1x TradingView licence)",
-      len(descoped_sources()), 3, 0, "(C)")
+# Counts updated 2026-08-30 when R20 was closed (6 -> 15 sources). They are
+# asserted with tolerance 0 ON PURPOSE: a source appearing or disappearing
+# silently is exactly the change that must break a test, because it means
+# something entered or left the ingestible set without review.
+check("15 sources registered", len(SOURCES), 15, 0, "(C)")
+check("9 enabled", len(enabled_sources()), 9, 0, "(C)")
+check("6 descoped (2x Q3 scope, 4x licence/reachability)",
+      len(descoped_sources()), 6, 0, "(C)")
 check_true("registry key always matches source.key",
            all(k == v.key for k, v in SOURCES.items()), "(C)")
 check_true("every source records a doc_url or a descope_reason",
@@ -774,6 +780,137 @@ check_raises("a disabled source with no recorded reason is refused",
 check_true("authority is read from the trust table",
            SOURCES["sec_edgar_xbrl"].authority == 100
            and SOURCES["fred"].authority == 90, "(B)")
+
+
+# ---------------------------------------------------------------------------
+section("R20: the permitted-research and permitted-news tiers are populated")
+# ---------------------------------------------------------------------------
+# SS.5.2 requires "Permitted research" and "Permitted financial news". Both
+# tiers were EMPTY until 2026-08-30 while the module looked complete -- that
+# silence was the whole of R20. An empty tier is asserted against directly,
+# because "no source has this trust level" is not visible in any other test.
+_research = [s for s in SOURCES.values()
+             if s.trust_level == "PERMITTED_RESEARCH"]
+_news = [s for s in SOURCES.values() if s.trust_level == "PERMITTED_NEWS"]
+check_true("PERMITTED_RESEARCH tier is no longer empty (R20)",
+           len(_research) > 0, "(C) SS.5.2 requires permitted research")
+check_true("PERMITTED_NEWS tier is no longer empty (R20)",
+           len(_news) > 0, "(C) SS.5.2 requires permitted financial news")
+check_true("at least one permitted-research source is actually ENABLED",
+           any(s.enabled for s in _research),
+           "(C) a tier of only-disabled sources satisfies nothing")
+
+# Every newly registered source must carry BOTH halves of its justification.
+# A licence with no probe is a guess about reachability; a probe with no
+# licence is a guess about permission. R20 required both.
+for _k in ("fed_board_working_papers", "ofr_working_papers", "arxiv_qfin",
+           "ecb_data_portal", "imf_sdmx_data", "world_bank_indicators"):
+    _s = SOURCES[_k]
+    # DEFECT found by mutation 102: this first read `len(_s.licence) > 40`,
+    # and the mutant that replaced arXiv's licence with "Assumed fine because
+    # it is a preprint server:" SURVIVED -- it is 44 characters. A length check
+    # cannot tell a licence from an assumption written at length, which is the
+    # exact failure mode this project exists to avoid ("silence is not
+    # permission"). So assert the licence names an affirmative PERMISSION.
+    # Matched case-INSENSITIVELY. The first version listed "PERMIT"/"permit"
+    # and missed the World Bank entry's "Permitted" -- a capital P. A
+    # case-sensitive keyword list is the same class of bug as the earlier
+    # `grep -q "0 failed"` matching "10 failed": the check looked thorough and
+    # silently tested the wrong string.
+    _lic = _s.licence.lower()
+    check_true("%s records a licence basis" % _k,
+               any(w in _lic for w in
+                   ("permit", "public domain", "no copyright", "free use",
+                    "carve-out")),
+               "(C) permission axis: a stated grant, not an assumption")
+    check_true("%s does not rest on an assumption" % _k,
+               not any(w in _s.licence.lower() for w in
+                       ("assumed", "presumably", "should be fine",
+                        "probably")),
+               "(D) an assumption recorded as a licence is the core defect")
+    check_true("%s records a dated verification" % _k,
+               _s.verified_on == "2026-08-30"
+               and "MEASURED" in _s.verified_status, "(C) authority axis")
+    check_true("%s is enabled and fetchable" % _k,
+               check_access(_k).key == _k, "(C)")
+
+# arXiv's rate limit IS a licence condition, not politeness: its ToS says "no
+# more than one request every three seconds". A round 1 qps would be a breach.
+check("arXiv rate limit is the ToS ceiling, not a round number",
+      SOURCES["arxiv_qfin"].rate_limit_qps, 0.333, 0.001, "(B) 1/3 s")
+
+# --- TIER B: permitted by licence, but NOT REACHABLE ------------------------
+# GDELT has the most permissive licence in the registry and is still disabled.
+# That combination is the finding: a favourable licence does not make an
+# endpoint reachable, and conflating the two would put a dead source in the
+# corpus.
+check_raises("GDELT is refused: ToS-verified but endpoint unreachable",
+             lambda: check_access("gdelt_doc"), AccessError)
+check_true("GDELT's refusal is NOT a licence refusal",
+           "NOT a licence refusal" in SOURCES["gdelt_doc"].descope_reason,
+           "(C) the reason must not be misread as prohibition")
+check_true("GDELT records the measured HTTP 000, not a guess",
+           "HTTP 000" in SOURCES["gdelt_doc"].verified_status
+           and "UNKNOWN FROM HERE" in SOURCES["gdelt_doc"].verified_status,
+           "(C) unreachable-from-here is not 'down'")
+check_raises("BIS is refused (404 x3 and a 400-word extract cap)",
+             lambda: check_access("bis_working_papers"), AccessError)
+check_true("BIS records that a 404 body size proves nothing",
+           "NOT EVIDENCE OF SUCCESS"
+           in SOURCES["bis_working_papers"].verified_status,
+           "(C) 404 arrived with ~111,700 bytes of HTML")
+
+# NY Fed has the most generous research licence reviewed and is deliberately
+# NOT registered, because its endpoint was never probed. Registering it on the
+# licence alone is precisely the mistake the GDELT entry documents.
+check_raises("NY Fed is absent, not silently enabled on licence alone",
+             lambda: get_source("nyfed_staff_reports"))
+
+# --- R45: "AI web search" is refused, and the refusal is named --------------
+# The proposal was to replace news/social APIs with AI web search. It fails on
+# three independent grounds; the registry encodes the refusal so that
+# ingest_document(source_key="ai_web_search") names the actual problem rather
+# than raising a confusing "unknown source".
+check_raises("ai_web_search is refused as an ingestion source (R45)",
+             lambda: check_access("ai_web_search", user_agent=CONTACT_UA),
+             AccessError)
+check_true("the refusal states transport is not licence",
+           "TRANSPORT, not the LICENCE"
+           in SOURCES["ai_web_search"].descope_reason,
+           "(C) the load-bearing reason")
+check_true("ai_web_search carries no borrowed authority",
+           SOURCES["ai_web_search"].trust_level == "UNVERIFIED",
+           "(C) a licence refusal, not a quality judgement")
+check_true("a HUMAN reading remains outside the registry's scope",
+           "A HUMAN" in SOURCES["ai_web_search"].descope_reason,
+           "(C) same boundary the TradingView entry draws")
+
+# --- the FRED attribution gap (a live compliance violation, now fixed) ------
+# The `fred` entry recorded its per-series copyright caveat correctly and
+# MISSED a flat, unconditional attribution requirement -- recording PART of a
+# licence made the entry look reviewed. MEASURED before the fix:
+#   grep -rln "not endorsed or certified" --include=*.py --include=*.json .
+#   -> 0 files, while `fred` was an ENABLED source.
+check_true("the FRED notice exists and is verbatim",
+           REQUIRED_NOTICES["fred"] ==
+           "This product uses the FRED\u00ae API but is not endorsed or "
+           "certified by the Federal Reserve Bank of St. Louis.",
+           "(C) prescribed wording; FRED(R) is a trademark")
+check_true("required_notices() actually emits the FRED notice",
+           any("not endorsed or certified" in n for n in required_notices()),
+           "(D) recording an obligation is not discharging it")
+check_true("the notice is not emitted twice for two FRED-backed series",
+           len(required_notices(["fred", "fred"])) == 1,
+           "(C) deduplicated")
+check_true("a session that never touched FRED makes no FRED claim",
+           required_notices(["sec_edgar_xbrl"]) == [],
+           "(C) attribution must not over-claim")
+check_true("required_notices ignores an unknown key instead of crashing",
+           required_notices(["no_such_source"]) == [],
+           "(C) display path; refusal belongs in check_access")
+check_raises("REQUIRED_NOTICES is not editable in place",
+             lambda: operator.setitem(REQUIRED_NOTICES, "fred", "x"),
+             TypeError)
 
 
 # ---------------------------------------------------------------------------

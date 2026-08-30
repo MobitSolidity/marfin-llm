@@ -415,6 +415,74 @@ MUTATIONS = [
     ("sources.py", "the TradingView refusal no longer names the licence",
      '    descope_reason="Machine use is PROHIBITED BY LICENCE, not by our choice. "',
      '    descope_reason="Not currently used. "'),
+
+    # --- R20: the permitted-research / permitted-news tiers ----------------
+    # These mutants attack the tiers that were EMPTY until 2026-08-30. An empty
+    # tier produced NO test failure at all before this work -- which is exactly
+    # why "the tier is populated" now has to be an assertion a mutant can kill.
+    ("sources.py", "arXiv's ToS rate ceiling relaxed to a round 1 qps",
+     '    rate_limit_qps=0.333,',
+     '    rate_limit_qps=1,'),
+    ("sources.py", "a permitted-research source is quietly disabled",
+     '    key="fed_board_working_papers",',
+     '    enabled=False,\n    descope_reason="x",\n    key="fed_board_working_papers",'),
+    ("sources.py", "arXiv's local-storage licence basis is dropped",
+     '    licence="ToS EXPLICITLY PERMITS local use:',
+     '    licence="Assumed fine because it is a preprint server:'),
+    ("sources.py", "an unprobed source is claimed as MEASURED",
+     '    verified_status="MEASURED: HTTP 200, payload parsed -- opensearch "',
+     '    verified_status="assumed reachable; not probed. "'),
+
+    # --- TIER B: licence-permitted but unreachable --------------------------
+    # The dangerous mutation is not "GDELT is disabled" but "GDELT is enabled
+    # because its licence is excellent" -- conflating permission with
+    # reachability. That is the mistake the entry exists to prevent.
+    ("sources.py", "GDELT enabled on the strength of its licence alone",
+     '    trust_level="PERMITTED_NEWS",\n    enabled=False,',
+     '    trust_level="PERMITTED_NEWS",\n    enabled=True,'),
+    ("sources.py", "GDELT's refusal is reworded as a licence prohibition",
+     '    descope_reason="NOT a licence refusal -- the licence is the best in this "',
+     '    descope_reason="Prohibited by licence. "'),
+    ("sources.py", "the measured HTTP 000 is softened to 'service down'",
+     '    verified_status="ToS-VERIFIED / ENDPOINT-UNVERIFIED. MEASURED: HTTP 000 "',
+     '    verified_status="GDELT is down. "'),
+    ("sources.py", "BIS re-enabled despite the 400-word extract cap",
+     '    trust_level="PERMITTED_RESEARCH",\n    enabled=False,\n    rate_limit_qps=1,\n    licence="PARTIALLY permitted',
+     '    trust_level="PERMITTED_RESEARCH",\n    enabled=True,\n    rate_limit_qps=1,\n    licence="PARTIALLY permitted'),
+    ("sources.py", "the '404 body size proves nothing' lesson is deleted",
+     '                    "IS NOT EVIDENCE OF SUCCESS.",',
+     '                    "returned large HTML bodies.",'),
+
+    # --- R45: the AI-web-search refusal ------------------------------------
+    ("sources.py", "AI web search is registered as an ingestible news source",
+     '    key="ai_web_search",\n    name="AI web-search / grounding services (machine ingestion prohibited)",\n    base_url="",',
+     '    key="ai_web_search",\n    name="AI web search",\n    base_url="",\n    enabled=True,'),
+    ("sources.py", "AI web search is given borrowed authority",
+     '    trust_level="UNVERIFIED",\n    enabled=False,\n    licence="PROHIBITED by every provider',
+     '    trust_level="PERMITTED_NEWS",\n    enabled=False,\n    licence="PROHIBITED by every provider'),
+    ("sources.py", "the transport-is-not-licence reason is dropped",
+     '    descope_reason="A search tool changes the TRANSPORT, not the LICENCE: "',
+     '    descope_reason="Not currently wired up. "'),
+
+    # --- the FRED attribution obligation -----------------------------------
+    # This is the mutation class that matters most, because the ORIGINAL defect
+    # was not a wrong notice -- it was a MISSING one, in a source that already
+    # recorded part of its licence correctly and therefore looked reviewed.
+    ("sources.py", "the mandatory FRED notice is deleted entirely",
+     '    "fred": "This product uses the FRED\\u00ae API but is not endorsed or "\n            "certified by the Federal Reserve Bank of St. Louis.",',
+     ''),
+    ("sources.py", "the prescribed FRED wording is paraphrased",
+     '    "fred": "This product uses the FRED\\u00ae API but is not endorsed or "\n            "certified by the Federal Reserve Bank of St. Louis.",',
+     '    "fred": "Data from FRED, St. Louis Fed.",'),
+    ("sources.py", "notices are silently duplicated per series",
+     '        if notice and notice not in out:',
+     '        if notice:'),
+    ("sources.py", "attribution over-claims for sources never used",
+     '    if keys is None:\n        keys = [k for k, s in SOURCES.items() if s.enabled]',
+     '    keys = [k for k, s in SOURCES.items() if s.enabled]'),
+    ("sources.py", "REQUIRED_NOTICES handed out as a mutable dict",
+     'REQUIRED_NOTICES: Mapping[str, str] = MappingProxyType({',
+     'REQUIRED_NOTICES: Mapping[str, str] = ({'),
 ]
 
 
