@@ -3,9 +3,14 @@ Tool subsetting for a 16K context window (master prompt SS.5.2, SS.5.3; D-0023).
 
 WHY THIS EXISTS
 ---------------
-MEASURED: all 84 tool schemas cost 8,920 tokens = 54.4% of a 16K window, before
+MEASURED: all 84 tool schemas cost 9,122 tokens = 55.7% of a 16K window, before
 the user has said anything. Phase 3 puts retrieved documents in that same
 window. All 84 tools + RAG context + conversation history does not fit.
+
+(That figure was 8,920 = 54.4% until 2026-08-31. It was MEASURED, correctly,
+against the WRONG MODEL's tokenizer -- see the CORRECTION note above
+MEASURED_FAMILY_TOKENS and D-0088. The conclusion did not change; the numbers
+did.)
 
 So tools must be selected per query. That makes this module correctness-
 relevant, not an optimization: if the selector drops the tool the model needed,
@@ -15,7 +20,7 @@ exact failure SS.0B forbids.
 DESIGN PRINCIPLE: RECALL OVER PRECISION
 ---------------------------------------
 The two errors are not symmetric.
-  - Including a tool that is not needed costs ~106 tokens. Recoverable.
+  - Including a tool that is not needed costs ~109 tokens. Recoverable.
   - Excluding a tool that IS needed can produce a fabricated number. Not
     recoverable, and invisible to the user.
 Therefore every ambiguous signal widens the selection. The selector is allowed
@@ -152,17 +157,53 @@ _KEYWORDS: Dict[str, Sequence[str]] = {
 # mandatory under SS.6.3, and returning an empty toolset would strand the model.
 CORE_FAMILIES = ("returns_risk",)
 
-# Token cost per family, MEASURED with the real Qwen3 tokenizer against the
-# real chat template. Used for budgeting and asserted by tests, so it cannot
-# drift silently as tools are added.
+# Token cost per family, MEASURED with the SHIPPED model's tokenizer
+# (Qwen/Qwen3.5-4B) against the SHIPPED model's chat template. Used for
+# budgeting and asserted by tests, so it cannot drift silently as tools are
+# added.
+#
+# CORRECTION, 2026-08-31 (D-0088). These constants previously read:
+#
+#     returns_risk 2079, valuation 2400, technicals 1458,
+#     fixed_income 1370, derivatives 1921, ALL 8920
+#
+# and the comment said "MEASURED with the real Qwen3 tokenizer". Those numbers
+# were measured honestly and reproducibly -- against /tmp/qwen3_tokenizer.json
+# and /tmp/qwen3_tokcfg.json, which D-0087 established belong to
+# Qwen3-4B-Instruct-2507, NOT the shipped Qwen3.5-4B. (Vocabulary 151,936 vs
+# 248,320; chat template 2,630 chars vs 7,756.) So "the real Qwen3 tokenizer"
+# named a real tokenizer for a model this project does not run.
+#
+# THIS WAS NOT MERELY A STALE COMMENT -- IT WAS A LIVE DEFECT. MEASURED
+# 2026-08-31 against the shipped tokenizer, select_tools()'s estimated_tokens
+# UNDER-PREDICTED the actual rendered cost in 15 of 15 held-out cases (worst
+# ratio 1.067). An under-predicting budget is worse than no budget: it
+# authorises a prompt that then overflows the window and silently truncates the
+# retrieved documents Phase 3 depends on. The suite's own guard --
+# "estimate never under-predicts actual" -- PASSED throughout, because it
+# measured actual cost with the same wrong tokenizer. Two wrongs agreeing is
+# not a verification.
+#
+# WHY THE COST ROSE, MEASURED rather than assumed: it is not vocabulary drift.
+# The raw JSON of all 84 schemas costs 8,961 tokens under the old tokenizer and
+# 8,959 under the new -- effectively identical. The whole delta is Qwen3.5's
+# LONGER tool-calling preamble in the template itself (wrapper + one tool costs
+# 145 tokens over bare on the old template, 266 on the new). That is why every
+# family rose by a near-constant ~130-146 tokens regardless of how many tools it
+# holds, and why the per-tool mean barely moved (106.2 -> 108.6).
+#
+# Each value below is the rendered delta (full prompt minus bare prompt) for
+# that family's schemas, measured with tokenizers + jinja2 on the files fetched
+# from Qwen/Qwen3.5-4B. Reproduce with /tmp/r11/measure_per_family.py, or
+# refetch per the README's Prerequisites section.
 MEASURED_FAMILY_TOKENS: Dict[str, int] = {
-    "returns_risk": 2079,
-    "valuation": 2400,
-    "technicals": 1458,
-    "fixed_income": 1370,
-    "derivatives": 1921,
+    "returns_risk": 2219,     # 21 tools; was 2079
+    "valuation": 2546,        # 26 tools; was 2400
+    "technicals": 1590,       # 13 tools; was 1458
+    "fixed_income": 1501,     # 11 tools; was 1370
+    "derivatives": 2054,      # 13 tools; was 1921
 }
-MEASURED_ALL_TOKENS = 8920
+MEASURED_ALL_TOKENS = 9122    # was 8920
 CONTEXT_TARGET = 16384
 
 

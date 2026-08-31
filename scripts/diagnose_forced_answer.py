@@ -42,17 +42,25 @@ version and is willing to pay for it.
 
 WHAT WOULD MAKE THIS RUN INVALID, AND WHY IT IS CHECKED
 -------------------------------------------------------
-`<think>` and `</think>` have DEDICATED IDS in this tokenizer -- 151667 and
-151668, VERIFIED 2026-08-31 in added_tokens_decoder. (Precision: those entries
-carry "special": false, so they are dedicated ADDED tokens rather than special
-tokens like <|im_start|>. An earlier note of mine called them special; that was
-wrong. It does not change the design -- what matters is that each is ONE id.)
+`<think>` and `</think>` must each resolve to ONE DEDICATED token. If llama-cpp
+tokenizes the prefill as ordinary text spelling "<think>" instead, the model
+never sees a closed reasoning block, and the whole run is meaningless -- while
+still printing plausible output. That failure mode is silent, so this script
+tokenizes the prefill and REFUSES to interpret the results unless each tag is a
+single token that decodes back to itself.
 
-If llama-cpp tokenizes the prefill as ordinary text spelling "<think>" instead
-of as those two ids, the model never sees a closed reasoning block, and the
-whole run is meaningless -- while still printing plausible output. That failure
-mode is silent, so this script tokenizes the prefill and REFUSES to interpret
-the results unless both ids are present.
+The ids are DISCOVERED from the loaded model, never hardcoded. The first version
+of this script hardcoded 151667/151668 from a tokenizer_config in /tmp, and on
+its first real run REFUSED a prefill that had tokenized perfectly -- because
+that config described Qwen3-4B-Instruct-2507 (vocab 151,936), not the shipped
+Qwen3.5-4B (text vocab 248,320), where the same two tags are 248068/248069. The
+gate's logic was right and its constant was borrowed; the constant is gone. See
+D-0087.
+
+Precision retained from that episode: these are dedicated ADDED tokens, not
+special tokens -- their entries carry "special": false, unlike <|im_start|>.
+What matters for the design is only that each is ONE id, not a spelling, and
+the discovery check establishes that directly rather than by reference.
 
 WHAT THE CHECK STILL CANNOT PROVE
 ---------------------------------
@@ -100,28 +108,49 @@ from diagnose_zero_tokens import (  # noqa: E402
 
 CONSOLE_UTF8 = L.make_console_safe()
 
-# VERIFIED 2026-08-31 by reading added_tokens_decoder in the real
-# tokenizer_config (/tmp/qwen3_tokcfg.json).
+# THE DEFECT THIS BLOCK USED TO CONTAIN, AND WHY IT IS GONE (D-0087).
 #
-# CORRECTION TO AN EARLIER NOTE OF MINE. I previously wrote that these are
-# "dedicated SPECIAL tokens". They are dedicated ADDED tokens, which is not the
-# same thing: their entries carry "special": false, unlike <|im_start|> /
-# <|im_end|> / <|endoftext|> which carry "special": true and are listed in
-# additional_special_tokens. <think> and </think> sit in the same class as
-# <tool_call> and <|fim_prefix|> -- single ids in the vocabulary, but not
-# flagged special.
+# This file previously hardcoded THINK_OPEN_ID = 151667 / THINK_CLOSE_ID =
+# 151668, read out of /tmp/qwen3_tokcfg.json, and refused to run unless the
+# prefill tokenized to exactly those numbers. On 2026-08-31 the user ran it
+# against the real C:\models\Qwen3.5-4B-Q5_K_M.gguf and it REFUSED, reporting
 #
-# WHY IT STILL MATTERS, AND WHY THE CHECK STILL PASSES special=True: the risk
-# this gate exists to catch is the prefill being split into ordinary text
-# pieces ("<", "think", ">") instead of resolving to one id. That risk is real
-# regardless of the special flag. special=True is the permissive setting -- it
-# asks the tokenizer to resolve markup rather than escape it -- so if the ids
-# are absent even under special=True, they would be absent in any stricter
-# mode too, and the refusal is sound. The reverse is NOT established: passing
-# here does not prove llama-cpp's own prompt path resolves them identically.
-# That is recorded as a residual limitation, not papered over.
-THINK_OPEN_ID = 151667
-THINK_CLOSE_ID = 151668
+#     ids=[248068, 271, 248069, 271] (expected 151667 and 151668 present)
+#
+# That refusal was WRONG. Those four ids are the CORRECT tokenization:
+# VERIFIED 2026-08-31 against Qwen/Qwen3.5-4B's own published tokenizer files,
+# 248068 = "<think>", 248069 = "</think>" (both added tokens, "special": false)
+# and 271 = the byte-level pair "\u010a\u010a", i.e. "\n\n". The prefill had
+# resolved perfectly; my CONSTANTS were from a different model. 151667/151668
+# belong to Qwen3-4B-Instruct-2507, whose vocabulary is 151,936 -- while
+# Qwen3.5-4B's text vocabulary is 248,320. The config file I verified against
+# was never this model's config.
+#
+# THE LESSON, which is the reason this comment is this long: a premise checked
+# against a convenient nearby artefact is not a checked premise. The gate was
+# sound; the number it compared to was inherited without provenance, and a gate
+# that hardcodes an unprovenanced number can only ever be as right as that
+# number. So the ids are now DISCOVERED from the loaded model itself and
+# round-tripped back to text, which needs no constant and cannot go stale when
+# the model changes.
+#
+# What survives from the old note, and is still true of THIS model:
+# <think>/</think> are dedicated ADDED tokens, not special tokens -- their
+# entries carry "special": false, unlike <|im_start|> / <|im_end|> /
+# <|endoftext|> which carry "special": true. They sit in the same class as
+# <tool_call>. What matters for the design is that each is ONE id, not a
+# spelling, and that is what the discovery check now establishes directly.
+#
+# The residual limitation is UNCHANGED and still not papered over: tokenize(
+# ..., special=True) is the permissive setting, so a FAILURE here is
+# conclusive, but a PASS does not prove llama-cpp's own completion prompt path
+# resolves the same string identically. The prompt-token delta printed under
+# --with-control is the cross-check on that gap (R38).
+
+# How many token ids a single tag may occupy before the gate calls it
+# "spelled out as ordinary text". A dedicated added token is exactly 1. This is
+# a threshold, not an id: it carries no assumption about WHICH id.
+MAX_IDS_PER_TAG = 1
 
 # Above this projected wall-clock, refuse to start without --yes. Lower than
 # diagnose_zero_tokens.py's 20 because this script's entire claim is that it is
@@ -135,9 +164,63 @@ def p(s=""):
     sys.stdout.flush()
 
 
+def _tok(llm, text):
+    """Tokenize one string with markup resolution, or raise _NoTokenizer."""
+    try:
+        return list(llm.tokenize(text.encode("utf-8"), special=True))
+    except TypeError:
+        # Older llama-cpp-python without the `special` keyword. Without it
+        # markup in the string is escaped rather than resolved, so a negative
+        # result would not distinguish "this build cannot do it" from "the
+        # prefill is wrong" -- hence UNVERIFIED, not a failure.
+        raise _NoTokenizer("this llama-cpp build's tokenize() has no "
+                           "`special` argument, so the check cannot be "
+                           "performed")
+    except Exception as e:  # noqa: BLE001
+        raise _NoTokenizer("tokenize() raised %s: %s"
+                           % (type(e).__name__, e))
+
+
+class _NoTokenizer(Exception):
+    """The build cannot answer the question. Distinct from answering 'no'."""
+
+
+def _detok(llm, ids):
+    """Detokenize ids back to text, or return None if the build cannot."""
+    try:
+        out = llm.detokenize(list(ids))
+    except Exception:  # noqa: BLE001
+        return None
+    if isinstance(out, bytes):
+        try:
+            return out.decode("utf-8")
+        except Exception:  # noqa: BLE001
+            return None
+    return out if isinstance(out, str) else None
+
+
 def check_prefill_tokenization(llm):
     """
-    Return (ok, detail): does the prefill resolve to the <think>/</think> ids?
+    Return (ok, detail): does the prefill resolve to DEDICATED think tokens?
+
+    DISCOVERS the ids from the loaded model rather than comparing against a
+    constant. That is the whole point of this function's existence in its
+    current form: the previous version compared against 151667/151668, read
+    from a tokenizer_config that turned out to describe a DIFFERENT model, and
+    so refused a run whose prefill had tokenized perfectly (D-0087). A gate
+    must test the property -- "each tag is one dedicated token, and it decodes
+    back to itself" -- not a number it inherited.
+
+    The property checked, in order:
+      1. "<think>" alone tokenizes to exactly MAX_IDS_PER_TAG id(s), and
+         likewise "</think>". More than that means the tag was spelled out as
+         ordinary text, which is the silent failure this gate exists for.
+      2. Each id round-trips: detokenizing it returns the tag's own text. This
+         is what makes the discovery trustworthy without a hardcoded number --
+         a wrong-but-single id would pass step 1 and fail here.
+      3. Both discovered ids appear in the tokenization of the FULL prefill,
+         so the check cannot pass on the tags in isolation while the assembled
+         string does something else.
 
     Returns ok=None when the build exposes no usable tokenizer, which is NOT
     the same as a failure and must not be reported as one. A None here means
@@ -145,24 +228,63 @@ def check_prefill_tokenization(llm):
     rather than reporting any number as evidence.
     """
     try:
-        tok = llm.tokenize(RP.FORCED_CLOSED_THINK.encode("utf-8"),
-                           special=True)
-    except TypeError:
-        # Older llama-cpp-python without the `special` keyword. Without it
-        # markup in the string is escaped rather than resolved, so a negative
-        # result would not distinguish "this build cannot do it" from "the
-        # prefill is wrong" -- hence None, not False.
-        return None, ("this llama-cpp build's tokenize() has no `special` "
-                      "argument, so the check cannot be performed")
-    except Exception as e:  # noqa: BLE001
-        return None, "tokenize() raised %s: %s" % (type(e).__name__, e)
+        open_ids = _tok(llm, RP.THINK_OPEN)
+        close_ids = _tok(llm, RP.THINK_CLOSE)
+        full_ids = _tok(llm, RP.FORCED_CLOSED_THINK)
+    except _NoTokenizer as e:
+        return None, str(e)
 
-    ids = list(tok)
-    have_open = THINK_OPEN_ID in ids
-    have_close = THINK_CLOSE_ID in ids
-    detail = "ids=%s (expected %d and %d present)" % (
-        ids, THINK_OPEN_ID, THINK_CLOSE_ID)
-    return (have_open and have_close), detail
+    # --- step 1: one id per tag -------------------------------------------
+    for tag, ids in ((RP.THINK_OPEN, open_ids), (RP.THINK_CLOSE, close_ids)):
+        if len(ids) != MAX_IDS_PER_TAG:
+            return False, (
+                "%r tokenizes to %d ids %s, not %d -- it is being spelled out "
+                "as ordinary text rather than resolving to a dedicated token "
+                "(full prefill: %s)"
+                % (tag, len(ids), ids, MAX_IDS_PER_TAG, full_ids))
+
+    open_id = open_ids[0]
+    close_id = close_ids[0]
+    if open_id == close_id:
+        return False, ("%r and %r tokenize to the SAME id %d, so a closed "
+                       "block is indistinguishable from an open one "
+                       "(full prefill: %s)"
+                       % (RP.THINK_OPEN, RP.THINK_CLOSE, open_id, full_ids))
+
+    # --- step 2: round-trip ------------------------------------------------
+    # A build with no usable detokenize() cannot confirm identity. That is a
+    # gap in the CHECK, not evidence against the prefill, so it degrades to
+    # UNVERIFIED rather than refusing a possibly-correct run.
+    round_trips = []
+    for tag, tid in ((RP.THINK_OPEN, open_id), (RP.THINK_CLOSE, close_id)):
+        back = _detok(llm, [tid])
+        if back is None:
+            return None, ("ids discovered (%r=%d, %r=%d) but this build's "
+                          "detokenize() could not confirm they decode back to "
+                          "those tags, so the discovery is unverified"
+                          % (RP.THINK_OPEN, open_id, RP.THINK_CLOSE, close_id))
+        round_trips.append((tag, tid, back))
+    for tag, tid, back in round_trips:
+        if back.strip() != tag:
+            return False, (
+                "id %d was discovered for %r but decodes back to %r -- the "
+                "tokenizer is not treating that tag as itself "
+                "(full prefill: %s)" % (tid, tag, back, full_ids))
+
+    # --- step 3: both ids present in the assembled prefill -----------------
+    missing = [t for t, i in ((RP.THINK_OPEN, open_id),
+                              (RP.THINK_CLOSE, close_id))
+               if i not in full_ids]
+    if missing:
+        return False, (
+            "the tags resolve to dedicated ids in isolation (%r=%d, %r=%d) "
+            "but %s absent from the assembled prefill %s"
+            % (RP.THINK_OPEN, open_id, RP.THINK_CLOSE, close_id,
+               " and ".join(repr(t) for t in missing), full_ids))
+
+    return True, ("%r=%d, %r=%d, both round-tripped; prefill ids=%s"
+                  % (RP.THINK_OPEN, open_id, RP.THINK_CLOSE, close_id,
+                     full_ids))
 
 
 def main():
@@ -274,14 +396,16 @@ note:
     # ---- the validity check, BEFORE spending any decode time --------------
     tok_ok, tok_detail = check_prefill_tokenization(llm)
     if tok_ok is True:
-        p("prefill tok: OK -- <think>/</think> resolve to their own ids "
-          "%d/%d" % (THINK_OPEN_ID, THINK_CLOSE_ID))
+        # The ids are REPORTED, not asserted against a constant. Printing what
+        # was discovered is what makes a future vocabulary change visible
+        # instead of fatal -- the failure mode that produced D-0087.
+        p("prefill tok: OK -- %s" % tok_detail)
     elif tok_ok is False:
         p("prefill tok: *** WRONG *** %s" % tok_detail)
         p("")
         raise SystemExit(
-            "REFUSING TO RUN: the prefill does not tokenize to the dedicated\n"
-            "  <think>/</think> ids, so the model would never see a closed\n"
+            "REFUSING TO RUN: the prefill does not resolve to DEDICATED\n"
+            "  <think>/</think> tokens, so the model would never see a closed\n"
             "  reasoning block and any answer it gave would prove nothing "
             "about\n"
             "  this technique. Fix the tokenization before spending decode "
@@ -476,8 +600,7 @@ note:
         elif delta_spelled:
             p("        *** the delta is >= 12 on every case, which suggests")
             p("        the block was spelled out as plain text rather than")
-            p("        resolved to ids %d/%d -- the tokenization gate above"
-              % (THINK_OPEN_ID, THINK_CLOSE_ID))
+            p("        resolved to its dedicated tokens -- the gate above")
             p("        passed but the completion call did something else.")
             p("        Investigate before believing any verdict below.")
         else:
@@ -511,10 +634,9 @@ note:
         # string mentioning one -- so an answer is not evidence for the
         # technique, however good the answer looks.
         p("READING: INVALID. The pre-closed block appears to have been spelled")
-        p("out as ordinary text rather than resolved to ids %d/%d: it cost"
-          % (THINK_OPEN_ID, THINK_CLOSE_ID))
-        p("12+ prompt tokens on every case where ~6 was expected. If so the")
-        p("model never saw a closed reasoning block, and any answer above is")
+        p("out as ordinary text rather than resolved to its dedicated tokens:")
+        p("it cost 12+ prompt tokens on every case where ~6 was expected. If")
+        p("so the model never saw a closed reasoning block, and any answer is")
         p("not evidence about this technique. Fix the tokenization first.")
     elif tok_ok is None:
         p("READING: UNVERIFIED. The prefill's tokenization could not be")

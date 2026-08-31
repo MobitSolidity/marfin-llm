@@ -106,16 +106,35 @@ sovereign yield still computes). See D-0022.
 
 ## 6. The measured finding that constrains Phase 3
 
-Tokenized with the **real Qwen3 tokenizer** against the **real chat template**:
+Tokenized with **Qwen/Qwen3.5-4B's own tokenizer** against **its own chat
+template** — i.e. the model this project actually runs.
 
-| Quantity | Value | Label |
-|---|---|---|
-| Prompt without tools | 34 tokens | MEASURED |
-| Prompt with 84 tools | 8,954 tokens | MEASURED |
-| **Tool block cost** | **8,920 tokens** | **MEASURED** |
-| Share of 16K context | **54.4%** | MEASURED |
-| Mean per tool | 106.2 tokens | MEASURED |
-| Costliest | `binomial_price` 164, `black_scholes` 163, `contract_payoff` 150 | MEASURED |
+> **⚠️ CORRECTED 2026-08-31 (D-0088).** This table originally read 34 / 8,954 /
+> **8,920** / 54.4% / 106.2, labelled MEASURED against "the real Qwen3
+> tokenizer". Those numbers were measured correctly against
+> `Qwen3-4B-Instruct-2507`'s tokenizer, which D-0087 established is **not** the
+> shipped model's. Both columns are shown below so the size of the error is
+> visible rather than quietly overwritten. **The conclusion did not change** —
+> more than half the window is still consumed before the user speaks, and tool
+> subsetting is still mandatory.
+
+| Quantity | Qwen3.5-4B (shipped) | was recorded | Label |
+|---|---|---|---|
+| Prompt without tools | 36 tokens | 34 | MEASURED |
+| Prompt with 84 tools | 9,158 tokens | 8,954 | MEASURED |
+| **Tool block cost** | **9,122 tokens** | 8,920 | **MEASURED** |
+| Share of 16K context | **55.7%** | 54.4% | MEASURED |
+| Mean per tool | 108.6 tokens | 106.2 | MEASURED |
+| Costliest schema bodies | `binomial_price` 164, `black_scholes` 163, `contract_payoff` 150 | unchanged | MEASURED |
+
+**Why the cost rose, MEASURED rather than assumed.** It is not vocabulary
+drift. The raw JSON of all 84 schemas costs **8,961** tokens under the old
+tokenizer and **8,959** under the shipped one — and the three costliest schema
+bodies above tokenize to *identical* counts in both. The entire +202 difference
+is Qwen3.5's **longer tool-calling preamble in the template itself** (2,630 →
+7,756 template chars; wrapper + one tool costs 145 tokens over bare on the old
+template, **266** on the new). That is why every family rose by a near-constant
+~130–146 tokens regardless of how many tools it holds.
 
 **More than half the context window is consumed before the user says
 anything.** Phase 3 adds retrieved documents to that same window. All 84 tools

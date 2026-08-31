@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0086). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0088). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -24,7 +24,7 @@ paper/live trading controls.
 | `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
 | `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
 | `scripts/diagnose_zero_tokens.py` | **Cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. **Run once, on 2026-08-31: result INCONCLUSIVE, because a defect in this script graded token counts instead of answers, and a 512-token budget cut every reply off inside `<think>`.** Now judges on the visible answer, prints a READING in **every** mode including `--skip-old` (D-0084), and refuses to start above 20 projected minutes without `--yes`. **Run a second time at 3072 tokens on 2026-08-31: all three cases hit the ceiling inside an unterminated `<think>` block with NO visible answer (10,647 / 11,184 / 11,940 chars of reasoning) — a real finding that the model never finishes thinking, and evidence against the full re-run (D-0085).** Cost basis is now affine (34.1 s fixed + tokens/4.47), fitted to the MEASURED 512/2048/3072 budgets, after two flat tok/s figures were each refuted by the next run. See D-0082, D-0083, D-0084, D-0085. |
-| `scripts/diagnose_forced_answer.py` | **The forced-closed-`<think>` prefill test (D-0086). Built, dry-run, mutation-tested, NOT YET RUN.** Prefills the assistant turn with an already-closed empty reasoning block (`<think>\n\n</think>\n\n`) so the model's next token is the first token of its answer — the only remaining lever after D-0085 MEASURED that the model never finishes thinking at 512, 2048 or 3072 tokens, `/think`/`/nothink` are documented not to work on Qwen3.5, and the shipped template has no `enable_thinking` flag. **Refuses before spending any decode time** unless the prefill resolves to the dedicated `<think>`/`</think>` ids 151667/151668 — otherwise the model would never see a closed block while still printing plausible output. Default budget 512 (not 3072): if the block is pre-closed the reply should *be* the answer. Writes no file any grader reads; never touches `PROJECT_STATE.json`. ~7 min ESTIMATED for 3 generations. |
+| `scripts/diagnose_forced_answer.py` | **The forced-closed-`<think>` prefill test (D-0086). Built, dry-run, mutation-tested, NOT YET RUN.** Prefills the assistant turn with an already-closed empty reasoning block (`<think>\n\n</think>\n\n`) so the model's next token is the first token of its answer — the only remaining lever after D-0085 MEASURED that the model never finishes thinking at 512, 2048 or 3072 tokens, and `/think`/`/nothink` are documented not to work on Qwen3.5. The prefill is **byte-for-byte what Qwen3.5's own chat template renders with `enable_thinking=false`** (VERIFIED) — i.e. the officially-supported string, not a workaround; an earlier note here claimed the template *had no such flag*, which was checked against another model's config (D-0087). **Refuses before spending any decode time** unless each of `<think>`/`</think>` resolves to exactly one dedicated token that decodes back to itself — otherwise the model would never see a closed block while still printing plausible output. The ids are **discovered from the loaded model, never hardcoded**: the first version compared against 151667/151668 and refused the real model, whose ids are 248068/248069 (D-0087). Default budget 512 (not 3072): if the block is pre-closed the reply should *be* the answer. Writes no file any grader reads; never touches `PROJECT_STATE.json`. ~7 min ESTIMATED for 3 generations. |
 | `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
@@ -35,7 +35,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,320 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,337 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -196,7 +196,7 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Persian numeral parsing | **VERIFIED** by execution |
 | Chat template + 84 tool schemas | **VERIFIED** by rendering |
 | No execution capability | **VERIFIED** by test |
-| Tool-schema context cost | **MEASURED** — 8,920 tokens = 54.4% of 16K |
+| Tool-schema context cost | **MEASURED** — 9,122 tokens = 55.7% of 16K, against Qwen3.5-4B's own tokenizer and template. Was recorded as 8,920 = 54.4% until 2026-08-31; that figure was measured against another model's tokenizer and the budget built on it **under-predicted the real cost in 15 of 15 cases** (D-0088) |
 | Decode speed | **There is no single decode speed — that framing was the defect (D-0085).** MEASURED per-generation means on the i5-12400: **512 tok → 154.1 s (3.32 tok/s)**, **2048 tok → 478.7 s (4.28 tok/s)**, **3072 tok → 729.8 s (4.21 tok/s)**. The effective rate *rises* with the budget because each generation pays a fixed cost (prefill, sampler setup) that does not scale with tokens produced. Two flat figures were recorded as MEASURED and each refuted by the next run — 4.03 tok/s (fitted at 2048) under-predicted the 512-token run; 3.32 tok/s (fitted at 512) over-predicted the 3072-token run by 27 %. Both replaced an **ESTIMATED ~14.7 tok/s** that was 3.6× too optimistic. The cost basis is now affine: **34.1 s fixed + tokens/4.47**, residuals −3.5 % / +2.8 % / −1.2 % across all three MEASURED budgets. Arm-to-arm spread at the 2048 ceiling (MEASURED, 18 generations): rag 4.27, tools 4.03, plain 3.58 tok/s — carried as a 1.19× multiplier, not averaged away. |
 | Model load time | **MEASURED 0.8–2.5 s; the “understated ~3×” claim is WITHDRAWN (D-0085, R37).** Recorded per invocation on 2026-08-30: **0.84 / 0.80 / 0.82 s**. One 512-token run on 2026-08-31 read **2.5 s**; the 3072-token run the same day read **0.8 s**. So 2.5 s was a single outlier, and the claim built on it — that the earlier figure understated load by ~3× — was wrong. A claim asserted from one observation, then contradicted by the next. |
 | Persian generation quality | **GRADED FAIL, BUT THE RUN IS CONFOUNDED** (D-0081 + D-0082). 37 graded: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4; `unsupported_claim_rate` 10.81 % vs max 3 %; fabrication count 8 vs max 0. The defects those answers were generated through (raw-completion prompts to a ChatML model; temperature 0.8 with a random seed) were found on 2026-08-31 and fixed. The FAIL stands as *"this model **with that harness**"*, **not** as a verdict on the model. R10 REOPENED pending a re-run — see R30. |
@@ -254,12 +254,12 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,320 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,337 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
 
-**Seeded-defect inventory, MEASURED by AST count 2026-08-30 — 983 mutants
+**Seeded-defect inventory, MEASURED by AST count, re-counted 2026-08-31 — 984 mutants
 across 12 batteries:**
 
 | Battery | Mutants |
@@ -274,13 +274,13 @@ across 12 batteries:**
 | `mutate_alpha_vantage.py` | 59 |
 | `mutate_execution.py` | 53 |
 | `mutate_llm_providers.py` | 41 |
-| `mutate_selector.py` | 20 |
+| `mutate_selector.py` | 21 |
 | `mutation_test.sh` (bash, 5 calc modules) | 56 |
-| **total** | **983** |
+| **total** | **984** |
 
 ⚠️ **The aggregate KILL total is still UNRECONCILED and is not presented as
 verified.** This section once read "920 seeded across 11 batteries, 915 killed,
-5 documented equivalents"; the count is now 983 across 12, and the aggregate
+5 documented equivalents"; the count is now 984 across 12, and the aggregate
 kill verdict was never updated as batteries grew. **No aggregate kill total is
 claimed here** until a full `./tests/run_all.sh --mutate` is re-run and
 re-counted. Replacing a stale number with a fresher-looking but equally
@@ -589,14 +589,47 @@ already finished deliberating:
 The user approved this on 2026-08-31. Per Route A the tooling is built and
 dry-run here; **the user runs it.** Nothing has been launched.
 
-**Everything checked before code was written**
+**Everything checked before code was written — and what that check was actually
+worth (see D-0087 below).** Every row of this table was verified against
+`/tmp/qwen3_tokcfg.json`. That file is **`Qwen3-4B-Instruct-2507`'s**
+tokenizer_config. The model this project runs is **`Qwen3.5-4B-Q5_K_M.gguf`**.
+They are different models with different vocabularies, so three of these four
+labels were wrong or narrower than stated. The corrected table:
 
-| premise | how | result |
-|---|---|---|
-| the template's generation branch emits exactly `<\|im_start\|>assistant\n` | read the template | VERIFIED |
-| our `chatml_prompt()` matches a jinja2 render of it | rendered both, compared | VERIFIED byte-identical |
-| no `enable_thinking` flag exists | substring search | VERIFIED absent |
-| `<think>` / `</think>` have dedicated ids | `added_tokens_decoder` | VERIFIED 151667 / 151668 |
+| premise | checked against | original label | corrected label |
+|---|---|---|---|
+| the generation branch emits exactly `<\|im_start\|>assistant\n` | wrong model's template | VERIFIED | **WRONG for this model.** Qwen3.5's branch emits `<\|im_start\|>assistant\n<think>\n` — it opens a reasoning block *for* the model |
+| our `chatml_prompt()` matches a jinja2 render of it | wrong model's template | VERIFIED byte-identical | **NARROWER.** Byte-identical to `Qwen3-4B-Instruct-2507`; against Qwen3.5 it matches only after removing the trailing `<think>\n` |
+| no `enable_thinking` flag exists | wrong model's template | VERIFIED absent | **WRONG.** Qwen3.5's template **has** the flag |
+| `<think>` / `</think>` have dedicated ids | wrong model's `added_tokens_decoder` | VERIFIED 151667 / 151668 | **WRONG NUMBERS, right property.** In Qwen3.5 they are **248068 / 248069**, still dedicated added tokens |
+
+Re-verified 2026-08-31 against `Qwen/Qwen3.5-4B`'s **own** published
+`config.json`, `tokenizer_config.json` and `tokenizer.json`: text vocabulary
+**248,320** (vs 151,936), 33 added tokens (vs 26), `<think>` = 248068 and
+`</think>` = 248069 with `"special": false`, and token **271** = `ĊĊ`, i.e.
+`"\n\n"`.
+
+**The one thing that got better, not worse.** Qwen3.5's template does have an
+`enable_thinking` flag, and its `enable_thinking=false` branch renders
+
+```jinja
+{{- '<|im_start|>assistant\n' }}
+{%- if enable_thinking is defined and enable_thinking is false %}
+    {{- '<think>\n\n</think>\n\n' }}
+{%- else %}
+    {{- '<think>\n' }}
+{%- endif %}
+```
+
+which is **byte-for-byte** `chatml_prompt(...) + FORCED_CLOSED_THINK` (VERIFIED
+by rendering it). So the prefill is not a workaround for a missing switch — **it
+is the switch, spelled out.** Four assertions now pin that equivalence, and they
+announce themselves as SKIPPED if the config file is absent rather than
+subtracting silently.
+
+This also **explains D-0085**: this model's own template hands the assistant an
+*open* `<think>` block by default. `chatml_prompt()` omitted it, so the model
+opened one itself — and never closed it, at 512, 2048 and 3072 tokens.
 
 **A correction to an earlier note in this repo.** These were recorded as
 "dedicated SPECIAL tokens". They are dedicated **added** tokens: both entries
@@ -666,6 +699,211 @@ controlled A/B** — the script says so in its own output, and `--with-control`
 buys the strict version. And nothing here speaks to whether the answers are
 *correct*: only whether answers exist to be graded, which stays a separate human
 step (R10).
+
+### D-0087: the gate refused a correct prefill — my constants were another model's
+
+**The user ran the option-A tool. It refused, before spending any decode time:**
+
+```
+load time  : 0.8 s  [MEASURED]
+prefill tok: *** WRONG *** ids=[248068, 271, 248069, 271] (expected 151667 and 151668 present)
+
+REFUSING TO RUN: the prefill does not tokenize to the dedicated
+  <think>/</think> ids, ...
+```
+
+Zero generations. Same with `--with-control`.
+
+**The refusal was wrong, and the gate was right to make it.** Both are true.
+The gate declined to interpret a run whose premise it could not confirm — that
+is its job, and it cost ~7 minutes instead of ~7 minutes plus a plausible
+conclusion drawn from nothing. What it could not know is that the number it
+compared against was mine, not the model's.
+
+**What those ids actually are — VERIFIED against the shipped model's own files,
+not inferred from the shape of the output:**
+
+| fact | source | value |
+|---|---|---|
+| text vocabulary | `Qwen/Qwen3.5-4B/config.json` → `text_config.vocab_size` | **248,320** |
+| `<think>` | its `added_tokens_decoder` | **248068**, `"special": false` |
+| `</think>` | same | **248069**, `"special": false` |
+| token `271` | its `tokenizer.json` vocab | **`ĊĊ`** = `"\n\n"` |
+| added tokens | same | **33** (the other file has 26) |
+
+So the prefill tokenized **perfectly** — `<think>`, `\n\n`, `</think>`, `\n\n`.
+The defect was entirely in the constant.
+
+**The root cause.** `/tmp/qwen3_tokcfg.json` is `Qwen3-4B-Instruct-2507`'s
+tokenizer_config. The model this project runs is `Qwen3.5-4B-Q5_K_M.gguf`.
+**They were never the same model.** The file was fetched in phase 2 while
+candidate models were still being compared, and was inherited thereafter as
+"the real tokenizer config" without anyone re-asking *which model* it described.
+I then hardcoded ids from it into a gate whose whole purpose was to catch an
+unchecked premise. The gate's logic was sound; its reference was borrowed. Logged
+as **R40**.
+
+**Everything downgraded as a result** — not just the ids. See the corrected
+premise table earlier in this section; in short, two claims were **wrong for
+this model**, one was **narrower** than labelled, and one had the **wrong
+numbers** while its property held.
+
+**The finding that came out of the correction, which is bigger than the bug.**
+Qwen3.5-4B's template *does* have an `enable_thinking` flag, and its
+`enable_thinking=false` branch renders **byte-for-byte**
+`chatml_prompt(...) + FORCED_CLOSED_THINK` (VERIFIED by rendering it). Option A
+is therefore **not a workaround for a missing switch — it is that switch,
+rendered by hand.** That is a stronger justification than D-0086 had, which
+rested on the flag being absent. And it **explains D-0085**: this model's own
+template hands the assistant an *open* `<think>` block by default;
+`chatml_prompt()` omitted it, so the model opened one itself and never closed it.
+
+**The fix: discover, do not compare.** `THINK_OPEN_ID` / `THINK_CLOSE_ID` are
+**deleted**. The gate now checks the property in three steps — (1) each tag is
+exactly one id and the two differ; (2) each id **round-trips** back to its own
+text, which is what a length-only check would miss; (3) both discovered ids
+appear in the **assembled** prefill, so the tags cannot pass in isolation while
+the concatenation does something else. A build lacking `tokenize(special=)`
+**or** a usable `detokenize()` yields **UNVERIFIED**, not a failure — inability
+to confirm is not evidence against, and refusing there would repeat this very
+defect in the opposite direction.
+
+| verification | result |
+|---|---|
+| the shipped model's real ids (248068/248069) | now **PASS** |
+| the *other* model's ids (151667/151668) | also **PASS** — the gate must know neither |
+| tag spelled out as ordinary text | **REFUSES**, 0 generations |
+| one shared id for both tags | **REFUSES**, 0 generations |
+| single id that decodes to the wrong text | **REFUSES**, 0 generations |
+| tag missing from the assembled prefill | **REFUSES**, 0 generations |
+| no `special=` / no `detokenize()` | **UNVERIFIED**, run continues, reading says so |
+| the ten reading branches, `--with-control` delta, `--yes` cost gate | unchanged, all still behave |
+| harness suite | 707 → **711** assertions, 0 failed |
+| mutation battery | **29 seeded, 29 KILLED, 0 survived**, sources restored to exact md5s |
+
+**Two of my own defects found while fixing this one.**
+
+| defect | how it surfaced | fix |
+|---|---|---|
+| the two id assertions guarded the *edit*, not the property — and were actively **defending** the bug (they would have failed had I fixed it) | tried to change the constant | assert the **mechanism**: no hardcoded id exists, ids come from tokenizing each tag alone, confirmed by detokenizing, and the gate passes on **both** vocabularies |
+| the 4 new template assertions vanished **silently** when `/tmp/q35_tokcfg.json` was absent — suite printed `707 passed, 0 failed`, fully green | deliberately moved the file and re-ran | explicit `SKIP` line naming what did not run; fetch documented in the prerequisites |
+
+That second one is D-0062's defect exactly (a skip hiding two mutation
+survivors), found while fixing a silent *wrong answer*. **R39, third instance.**
+
+**Standing lessons.**
+
+1. **A premise checked against a convenient nearby artefact is not a checked
+   premise.** "VERIFIED against the real tokenizer config" was true of a file
+   and false of the model. Provenance is part of the verification.
+2. **Never hardcode a value read from an artefact whose identity is not pinned
+   to the thing under test.** Discover it from the thing itself.
+3. **A gate that refuses is not thereby correct.** Interrogate the refusal as
+   hard as the pass.
+4. **Inability to confirm must never be reported as a negative finding** — same
+   error class as this bug, pointed the other way.
+5. **Leave the wrong record visible** with a pointer to its correction. Deleting
+   it destroys the evidence of how it came to be believed.
+
+**Status: the option-A run has still NOT been launched.**
+`phase_4/measurements_recorded` is `None`.
+
+### D-0088: the sweep after D-0087 found a *live* defect, not stale prose
+
+D-0087 ended with a chore: grep the repo for any remaining claim that
+`/tmp/qwen3_tokcfg.json` describes the shipped model. The expectation was
+paperwork. What the sweep actually found was a **mis-calibrated budget in a
+module D-0087 never touched**.
+
+`src/tools/selector.py` decides how many tool schemas fit in a 16K window. Its
+constants were labelled *"MEASURED with the real Qwen3 tokenizer"* — and they
+were, against **`Qwen3-4B-Instruct-2507`**, the same wrong model. Measured
+against the shipped tokenizer, the selector's estimate **under-predicted the real
+rendered cost in 15 of 15 held-out cases** (worst ratio 1.067).
+
+That is not cosmetic. An under-predicting budget authorises a prompt that then
+overflows the window and silently truncates the retrieved documents Phase 3
+depends on.
+
+**The guard that should have caught it was green for three weeks.**
+`test_selector.py` already asserted *"estimate never under-predicts actual"*,
+comparing the estimate against a freshly **rendered** cost — exactly the right
+shape of test. But it rendered and tokenized with the same wrong-model files the
+budget was calibrated on. It compared a wrong estimate against a wrong actual and
+found them consistent.
+
+> **Two wrongs agreeing is not a verification.** A guard is only as good as the
+> evidence it points at, and a guard that supplies its own reference can agree
+> with itself indefinitely.
+
+**MEASURED, both tokenizers, identical method** (the method reproduces the
+recorded OLD column exactly, which is what makes the NEW column comparable):
+
+| Quantity | recorded (wrong model) | shipped Qwen3.5-4B |
+|---|---|---|
+| tool block, 84 schemas | 8,920 tok (54.4% of 16K) | **9,122 tok (55.7%)** |
+| mean per tool | 106.2 | **108.6** |
+| returns_risk / valuation | 2,079 / 2,400 | **2,219 / 2,546** |
+| technicals / fixed_income / derivatives | 1,458 / 1,370 / 1,921 | **1,590 / 1,501 / 2,054** |
+| held-out under-predictions | 0 of 15 | **15 of 15** (worst 1.067) |
+
+**Why the cost rose — measured, not assumed.** The obvious guess is vocabulary
+drift. It is wrong: raw schema JSON costs **8,961** tokens old vs **8,959** new,
+and the three costliest schema bodies tokenize to *identical* counts in both. The
+whole +202 is Qwen3.5's **longer tool-calling preamble in the template** (2,630 →
+7,756 template chars; wrapper + one tool 145 → **266** tokens). Hence every
+family rose by a near-constant ~130–146 tokens regardless of size. The mechanism
+matters: a future tool addition moves the per-tool part, a template change moves
+the constant part, and they need different responses.
+
+**A recorded figure that no longer reproduced — and had two causes.** D-0026
+recorded *"mean subset 2,552 tokens (15.6%), worst 4,479"*. No plausible basis
+reproduced it today, so rather than quietly overwrite it I checked out the
+D-0026-era selector (`20f124a`) and ran it with its own constants: **2,552.3 /
+15.6% / 4,479, exact**, over all 21 eval rows. So it was right when written, and
+is stale for **two independent reasons** — the wrong tokenizer *and* the router's
+keyword lists growing when R18 was closed (`1bd2ff3`). Blaming the tokenizer
+alone would have been tidy, plausible and wrong. Today's figure: **3,114 tokens
+(19.0%)**.
+
+**A third silent skip, found while testing the fix.** Verifying that the repointed
+suites *skip loudly* when files are absent, I hid the old files and re-ran
+everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
+711 — two assertions gone, no skip line, and the runner still reporting
+`SKIPPED: 0`. Cause: an `if os.path.exists(...)` with no `else` and a bare
+`except ImportError: pass`. Both now announce themselves.
+
+**What changed**
+
+- Constants corrected to measurements, each annotated with its old value and
+  tool count.
+- Both suites now read `/tmp/q35_tok.json` + `/tmp/q35_tokcfg.json`. **The old
+  files are deliberately not a fallback** — a fallback restores the silent pass.
+- New: the worst-case actual/estimate **margin** is asserted and printed (a count
+  of under-predictions cannot reveal a budget drifting toward the line), and
+  `MEASURED_ALL_TOKENS` must **equal the freshly rendered cost** — that assertion
+  fails by 202 under the old constant.
+- `test_tools.py`'s *"generation prompt appended"* corrected: the old template
+  ended `<|im_start|>assistant\n`, the shipped one ends
+  `<|im_start|>assistant\n<think>\n`. Repointing the path without re-checking the
+  expectation would have inverted it — and "fixing" it by loosening it would have
+  erased the very fact that explains D-0085.
+- Mutation anchors updated (`2079`→`2219`, `8920`→`9122`): the old anchors matched
+  nothing, and **a mutant that cannot be applied is reported as killed**. Plus a
+  new mutant reproducing this exact defect.
+
+**Verification.** Restoring the six old constants fails **4 assertions**,
+including the three-week-green under-prediction guard. Mutation battery: **21
+seeded, 21 killed, 0 survived**, source restored to md5
+`35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
+unique and non-no-op *before* the battery ran. Full regression: **3,337
+assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
+skip behaviour verified in both directions.
+
+**The lesson that generalises.** Correcting the instance is not correcting the
+class. D-0087 fixed the token ids; the same borrowed file had quietly
+mis-calibrated an unrelated subsystem, and only a deliberate sweep found it. See
+D-0088, R41, R42.
 
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
@@ -974,8 +1212,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,320 assertions across 18 suites + 7 probes (~9 s)
-./tests/run_all.sh --mutate     # + 983 seeded defects across 12 batteries (~205 s)
+./tests/run_all.sh              # 3,337 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -997,14 +1235,53 @@ any interrupted run:
 git diff --stat HEAD -- scripts/ tests/ src/    # must be empty before you believe a verdict
 ```
 
-The token-cost checks in `test_tools.py` and `test_selector.py` need the real
-tokenizer; without it they SKIP rather than guessing. **Fetch these before you
-believe a green run** — a skipped assertion protects nothing, and this exact
-skip was measured hiding two mutation survivors (D-0062):
+The token-cost checks in `test_tools.py` and `test_selector.py` need the
+**shipped model's** tokenizer and chat template; without them they SKIP rather
+than guessing. **Fetch these before you believe a green run** — a skipped
+assertion protects nothing, and this exact skip was measured hiding two mutation
+survivors (D-0062):
 
 ```bash
-curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer.json \
-  -o /tmp/qwen3_tokenizer.json
+curl -sL https://huggingface.co/Qwen/Qwen3.5-4B/resolve/main/tokenizer.json \
+  -o /tmp/q35_tok.json
+curl -sL https://huggingface.co/Qwen/Qwen3.5-4B/resolve/main/tokenizer_config.json \
+  -o /tmp/q35_tokcfg.json
+```
+
+> **⚠️ These paths changed on 2026-08-31 (D-0088), and the reason matters more
+> than the paths.** Until then the token-cost checks read
+> `/tmp/qwen3_tokenizer.json` and `/tmp/qwen3_tokcfg.json`, fetched from
+> **`Qwen/Qwen3-4B-Instruct-2507`** — a real model, but **not the one this
+> project runs**. The shipped weights are `Qwen3.5-4B-Q5_K_M.gguf`: text
+> vocabulary **248,320** not 151,936, chat template **7,756** chars not 2,630,
+> and `<think>` / `</think>` at **248068 / 248069** not 151667 / 151668.
+>
+> This was **not merely a stale comment.** The tool-token budget in
+> `src/tools/selector.py` was calibrated on those files, and MEASURED against
+> the shipped tokenizer it **under-predicted the real rendered cost in 15 of 15
+> held-out cases** (worst ratio 1.067). An under-predicting budget authorises a
+> prompt that then overflows and silently truncates retrieved documents. The
+> suite's own guard — *"estimate never under-predicts actual"* — was green the
+> whole time, because it measured the actual cost with the **same wrong
+> tokenizer**. Two wrongs agreeing is not a verification.
+>
+> The old files are **deliberately not accepted as a fallback**: a fallback
+> would restore exactly the silent pass this defect came from. If the shipped
+> files are missing, the affected suites now print an explicit `SKIP` naming
+> how many assertions did not run.
+
+Trusting the wrong file's ids is also what made the forced-answer gate refuse a
+perfectly correct prefill on its first real run (D-0087). `q35_tokcfg.json`
+above additionally enables the 4 assertions that pin the prefill to the model's
+*official* `enable_thinking=false` rendering.
+
+The two `Qwen3-4B-Instruct-2507` files are **no longer needed by any test.** One
+assertion still uses `qwen3_tokcfg.json`, and only to state a historical fact —
+that `chatml_prompt()` is byte-identical to *that* model's template — so it may
+be skipped without loss:
+
+```bash
+# optional, historical comparison only
 curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer_config.json \
   -o /tmp/qwen3_tokcfg.json
 ```
@@ -1150,10 +1427,25 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
   that same outcome, so the **forced-closed-`<think>` test comes first**. That
   test now exists — `scripts/diagnose_forced_answer.py`, built and mutation-tested
   on 2026-08-31 (D-0086), 3 generations at 512 tokens, ~7 min ESTIMATED, **not yet
-  run**. Until it reports, Q8 has no new evidence either way. See R35, R38.
+  run**. The user's first attempt was **refused by the tool's own validity gate**,
+  which turned out to be comparing against another model's token ids; that is
+  fixed (D-0087) and the run is again awaiting approval. Two things did change in
+  Q8's favour meanwhile: the prefill is now known to be **byte-identical to
+  Qwen3.5's official `enable_thinking=false` rendering**, and D-0085's
+  never-closing `<think>` block is now **explained** — this model's own template
+  opens one by default and the harness's prompt omitted it. Until the test
+  reports, Q8 still has no new *measured* evidence either way. See R35, R38, R40.
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
-  recall-first. MEASURED — mean subset 2,552 tokens (15.6% of 16K) versus 8,920
-  for all 84 schemas; recall 24/24 across the eval and held-out sets.
+  recall-first. MEASURED (re-measured 2026-08-31, D-0088) — mean subset **3,114
+  tokens (19.0% of 16K)** over the 21 eval rows versus **9,122** for all 84
+  schemas; recall 24/24 across the eval and held-out sets. The originally
+  recorded "2,552 tokens (15.6%), worst 4,479" was **exactly reproducible** and
+  is stale for **two independent reasons**, both verified rather than assumed:
+  the token constants came from another model's tokenizer, *and* the router's
+  keyword lists grew when R18 was closed (`1bd2ff3`), so it now selects more
+  families per query. Running the D-0026-era selector with its own constants
+  reproduces 2,552.3 / 15.6% / 4,479 to the digit — so the old figure was
+  correct when recorded, and both changes since are accounted for.
 
 ## API Providers and the Project Panel
 
@@ -1242,7 +1534,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,320 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,337 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1291,7 +1583,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,320-assertion base is trustworthy.
+3,337-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

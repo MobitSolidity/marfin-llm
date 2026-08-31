@@ -36,10 +36,20 @@ MUTATIONS = [
      "hit = [f for f in FAMILIES if scores[f] > 1]"),
     ("word-boundary matching disabled",
      'if _WORDY.match(w):', 'if False:'),
+    # D-0088: these anchors were '"returns_risk": 2079,' and
+    # 'MEASURED_ALL_TOKENS = 8920'. Both constants were corrected to the
+    # SHIPPED model's measured values, so the old anchors no longer match any
+    # line -- a mutant that cannot be applied is a mutant that proves nothing,
+    # and this battery would have reported it as "killed".
     ("family token cost understated",
-     '"returns_risk": 2079,', '"returns_risk": 1000,'),
+     '"returns_risk": 2219,', '"returns_risk": 1000,'),
     ("all-tools baseline understated",
-     "MEASURED_ALL_TOKENS = 8920", "MEASURED_ALL_TOKENS = 3000"),
+     "MEASURED_ALL_TOKENS = 9122", "MEASURED_ALL_TOKENS = 3000"),
+    # NEW (D-0088): reverting to the pre-correction constants must be fatal.
+    # This is the mutant that reproduces the actual historical defect -- an
+    # under-predicting budget calibrated on Qwen3-4B-Instruct-2507.
+    ("budget reverted to the wrong model's calibration",
+     "MEASURED_ALL_TOKENS = 9122", "MEASURED_ALL_TOKENS = 8920"),
     ("unclassified tools silently dropped",
      "    for n in tool_names():\n        if n not in TOOL_FAMILY and n not in chosen:\n            chosen.append(n)",
      "    pass"),

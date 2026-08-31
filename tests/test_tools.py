@@ -5,7 +5,8 @@ Tool-layer verification (Phase 2 acceptance: "test structured tool calls").
 Covers what the calculation tests cannot:
   1. Persian numeral arguments survive the dispatch boundary.
   2. Every failure mode returns a structured refusal, never a number.
-  3. Tool schemas are well-formed and render into the real Qwen3 chat template.
+  3. Tool schemas are well-formed and render into the SHIPPED model's chat
+     template (Qwen/Qwen3.5-4B's own, not Qwen3-4B-Instruct-2507's -- D-0088).
   4. All five calculation families are reachable through one uniform contract.
   5. Argument coercion refuses wrong TYPES, not just wrong values.
   6. The rendered tool block fits the context budget (MEASURED, not assumed).
@@ -293,7 +294,12 @@ for desc, name, args in domain_cases:
            "not" in r.get("guidance", "").lower())
 
 print("\n[chat template integration]")
-tmpl_path = "/tmp/qwen3_tokcfg.json"
+# CORRECTION 2026-08-31 (D-0088): this block used /tmp/qwen3_tokcfg.json, which
+# is Qwen3-4B-Instruct-2507's config, NOT the shipped Qwen3.5-4B's (D-0087). It
+# therefore asserted things about a template this project never renders. The
+# old model's files are deliberately not accepted as a fallback: a fallback
+# would silently restore the wrong-model measurement this defect came from.
+tmpl_path = "/tmp/q35_tokcfg.json"
 if os.path.exists(tmpl_path):
     try:
         from jinja2 import Template
@@ -305,7 +311,18 @@ if os.path.exists(tmpl_path):
             tools=schemas, add_generation_prompt=True)
         ok("template renders with tools", "<tools>" in out and "</tools>" in out)
         ok("tool names reach the prompt", "position_size" in out and "cagr" in out)
-        ok("generation prompt appended", out.rstrip().endswith("<|im_start|>assistant"))
+        # MEASURED 2026-08-31, and it is NOT what the old template did. Under
+        # Qwen3-4B-Instruct-2507 the render ended '<|im_start|>assistant\n';
+        # Qwen3.5-4B appends an OPEN reasoning block, ending
+        # '<|im_start|>assistant\n<think>\n'. Had this assertion simply been
+        # pointed at the new file it would have started failing -- and had it
+        # been "fixed" by loosening it, the very fact that explains D-0085 (the
+        # model is handed an open <think> by default) would have been erased.
+        # So it now asserts the SHIPPED behaviour explicitly.
+        ok("generation prompt appended",
+           out.rstrip().endswith("<|im_start|>assistant\n<think>"))
+        ok("...and it opens a reasoning block, which is why D-0085 happened",
+           out.endswith("<think>\n"))
         ok("tool_call protocol present", "<tool_call>" in out)
         # One name from each new family must actually survive rendering.
         ok("all five families reach the prompt",
@@ -313,9 +330,11 @@ if os.path.exists(tmpl_path):
                                   "black_scholes")))
 
         # ---- MEASURED context cost --------------------------------------
-        # Not estimated: tokenized with the real Qwen3 tokenizer. At 16K this
-        # is the binding constraint on how many tools may be exposed at once.
-        tokenizer_path = "/tmp/qwen3_tokenizer.json"
+        # Not estimated: tokenized with the SHIPPED model's tokenizer
+        # (Qwen/Qwen3.5-4B). At 16K this is the binding constraint on how many
+        # tools may be exposed at once. Was /tmp/qwen3_tokenizer.json until
+        # 2026-08-31; see D-0088. MEASURED difference: 8,920 -> 9,122 tokens.
+        tokenizer_path = "/tmp/q35_tok.json"
         if os.path.exists(tokenizer_path):
             from tokenizers import Tokenizer
             tk = Tokenizer.from_file(tokenizer_path)
@@ -339,11 +358,18 @@ if os.path.exists(tmpl_path):
                cost > 0.25 * ctx,
                "exceeds 25%% -- tool subsetting is REQUIRED, see DECISIONS D-0023")
         else:
-            print("  SKIP  %s absent (token cost not measured)" % tokenizer_path)
+            print("  SKIP  %s absent: 2 assertions bounding the tool block "
+                  "against the SHIPPED tokenizer did not run "
+                  "(token cost not measured)" % tokenizer_path)
     except ImportError as exc:
-        print("  SKIP  optional dependency missing (%s)" % exc)
+        print("  SKIP  optional dependency missing (%s): the chat-template "
+              "integration assertions did not run" % exc)
 else:
-    print("  SKIP  %s absent (fetch tokenizer_config.json to enable)" % tmpl_path)
+    print("  SKIP  %s absent: the whole chat-template integration block "
+          "(7+ assertions) did NOT run. Fetch Qwen/Qwen3.5-4B's "
+          "tokenizer_config.json per README Prerequisites; the old "
+          "Qwen3-4B-Instruct-2507 file is deliberately NOT a fallback "
+          "(D-0088)." % tmpl_path)
 
 print("\n" + "=" * 82)
 print("RESULT: %d passed, %d failed" % (PASS, FAIL))

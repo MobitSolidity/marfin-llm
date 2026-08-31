@@ -11,7 +11,11 @@ jargon-free paraphrases and Persian-only phrasing that were not used to write
 the keyword lists.
 
 Verification methods used:
-  (A) measured   -- token costs tokenized with the real Qwen3 tokenizer
+  (A) measured   -- token costs tokenized with the SHIPPED model's tokenizer
+                    (Qwen/Qwen3.5-4B). Named precisely on purpose: this file
+                    used to say "the real Qwen3 tokenizer", which was true of a
+                    model the project does not run, and the budget calibrated
+                    on it under-predicted in 15/15 cases (D-0088).
   (C) invariant  -- recall, monotonicity, fallback behaviour
   (D) must-hold  -- integrity properties that make silent failure impossible
 
@@ -30,7 +34,7 @@ from tools.selector import (  # noqa: E402
     NAME_KEYWORDS, TOOL_FAMILY, UNCLASSIFIED, schemas_for, score_families,
     select_families, select_tools,
 )
-from tools.registry import tool_names  # noqa: E402
+from tools.registry import tool_names, tool_schemas  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 
@@ -184,11 +188,21 @@ for label, text in spellings.items():
 # ---------------------------------------------------------------------------
 section("token budget -- MEASURED, and the saving must be real")
 
-# (A) These constants are measured with the real tokenizer against the real
-# chat template. Pinning them means a future tool addition that blows the
-# budget fails a test instead of degrading Phase 3 silently.
-check("all-tools cost is the measured 8920", MEASURED_ALL_TOKENS, 8920,
-      method="(A) real Qwen3 tokenizer")
+# (A) These constants are measured with the SHIPPED model's tokenizer against
+# the SHIPPED model's chat template. Pinning them means a future tool addition
+# that blows the budget fails a test instead of degrading Phase 3 silently.
+#
+# CORRECTION 2026-08-31 (D-0088): this assertion read
+#     check("all-tools cost is the measured 8920", MEASURED_ALL_TOKENS, 8920,
+#           method="(A) real Qwen3 tokenizer")
+# and was green for three weeks. 8920 was measured against
+# Qwen3-4B-Instruct-2507's tokenizer, not the shipped Qwen3.5-4B's (D-0087).
+# The shipped figure is 9122, MEASURED. A pinned constant only protects the
+# number it was pinned to; it cannot tell you the number came from the wrong
+# model. That is what the rendered-cost guard below is for -- and why that
+# guard now reads the shipped model's files.
+check("all-tools cost is the measured 9122", MEASURED_ALL_TOKENS, 9122,
+      method="(A) Qwen/Qwen3.5-4B tokenizer + its own chat template")
 check_true("every family has a measured cost",
            all(f in MEASURED_FAMILY_TOKENS for f in FAMILIES), method="(A)")
 
@@ -212,10 +226,23 @@ check_true("mean saving over 5000 tokens",
 section("estimates must not under-predict the real rendered cost")
 
 # (A) A budget that under-predicts is worse than no budget: it authorises a
-# prompt that then overflows. Verified against the real template, so the
-# estimate is required to be conservative.
-tok_path = "/tmp/qwen3_tokenizer.json"
-cfg_path = "/tmp/qwen3_tokcfg.json"
+# prompt that then overflows. Verified against the SHIPPED model's template, so
+# the estimate is required to be conservative.
+#
+# WHY THE PATHS CHANGED, 2026-08-31 (D-0088). This block used to read
+# /tmp/qwen3_tokenizer.json + /tmp/qwen3_tokcfg.json -- Qwen3-4B-Instruct-2507's
+# files (D-0087). It therefore compared an estimate calibrated on the wrong
+# model against an actual cost measured with the same wrong model, and PASSED.
+# MEASURED on the shipped tokenizer with the OLD constants: 15 of 15 held-out
+# cases UNDER-predicted, worst ratio 1.067. The guard was structurally correct
+# and pointed at the wrong evidence, which is the D-0087 lesson repeating in a
+# second place: two wrongs agreeing is not a verification.
+#
+# The old model's files are deliberately NOT accepted as a fallback here. A
+# fallback would restore exactly the silent-pass this defect came from; if the
+# shipped model's files are absent, this must SKIP loudly instead.
+tok_path = "/tmp/q35_tok.json"
+cfg_path = "/tmp/q35_tokcfg.json"
 if os.path.exists(tok_path) and os.path.exists(cfg_path):
     from tokenizers import Tokenizer
     from jinja2 import Template
@@ -232,15 +259,40 @@ if os.path.exists(tok_path) and os.path.exists(cfg_path):
         return full - bare
 
     under = []
+    worst_ratio = 0.0
     for q, _ in HELD_OUT:
         est = select_tools(q)["estimated_tokens"]
         act = rendered_cost(q, schemas_for(q))
+        if est:
+            worst_ratio = max(worst_ratio, act / float(est))
         if act > est:
             under.append((q[:30], est, act))
     check_true("estimate never under-predicts actual", not under,
                method="(A) %s" % (under[:2] or "conservative on all"))
+    # (D) The count above can only say "none under-predicted". It cannot say
+    # how close the margin got, so a budget drifting toward under-prediction
+    # would stay invisible until it crossed. MEASURED 2026-08-31 with the
+    # corrected constants: worst actual/estimate = 1.0000 (exact, because each
+    # family cost IS the rendered delta). With the pre-D-0088 constants this
+    # was 1.067 on the same tokenizer.
+    check_true("...and the worst-case margin is reported, not just the count",
+               worst_ratio <= 1.0,
+               method="(D) worst actual/estimate = %.4f" % worst_ratio)
+    # (D) The all-tools constant must itself be MEASURED against the shipped
+    # files, not merely pinned. This is the assertion that would have caught
+    # D-0088: with MEASURED_ALL_TOKENS = 8920 and these paths it fails by 202.
+    _all_act = rendered_cost("portfolio risk and option valuation",
+                             tool_schemas())
+    check("all-tools constant equals the shipped rendered cost",
+          MEASURED_ALL_TOKENS, _all_act, 0,
+          method="(A) rendered with Qwen3.5-4B's own template")
 else:
-    print("  SKIP  tokenizer absent; rendered-cost check not run")
+    # MEASURED 2026-08-31: a bare "SKIP tokenizer absent" hid WHICH tokenizer
+    # and how many assertions vanished -- the D-0062 silent-skip class. Say it.
+    print("  SKIP  %s / %s absent: 3 assertions pinning the tool-token budget "
+          "to Qwen/Qwen3.5-4B's OWN tokenizer+template did NOT run. Fetch them "
+          "per README Prerequisites. The old Qwen3-4B-Instruct-2507 files are "
+          "deliberately NOT used as a fallback (D-0088)." % (tok_path, cfg_path))
 
 # ---------------------------------------------------------------------------
 section("selection behaviour")

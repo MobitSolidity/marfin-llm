@@ -175,7 +175,11 @@
     "D-0085 (2026-08-31): interpreted the user's 3072-token diagnostic run. MEASURED: 0 visible answers of 3, all three at the token ceiling inside an unterminated <think> block, 36.5 min total, load 0.8 s. The reasoning scales with the budget and never terminates -- a model property, not a harness defect -- so raising --max-tokens cannot fix it and Q8 option (b) ('lean on RAG') is close to refuted. Also DISCLOSED that this run refutes the MEASURED_DECODE_TPS = 3.32 basis I installed hours earlier (real rate here ~4.21 tok/s) and withdrew the README load-time claim. Replaced the flat rate with an affine cost model fitted to all three MEASURED budgets. Nothing launched.",
     "D-0085b (2026-08-31): replaced the test that pinned the literal 'MEASURED_DECODE_TPS = 3.32' with assertions on the PROPERTY the cost basis must have -- that projected_seconds() reproduces all three MEASURED budgets within 5%, that the fixed overhead is nonzero, and that effective tok/s rises with the budget as MEASURED. The old assertion would have passed on the already-refuted 4.03 and made correcting the constant require editing its own guard. 9 mutants seeded, 9 killed, 0 survived.",
     "D-0086: Option A built -- the forced-closed-<think> prefill (scripts/diagnose_forced_answer.py). VERIFIED the chat template tail, byte-identity with chatml_prompt(), the absence of enable_thinking, and the <think>/</think> ids 151667/151668. CORRECTED my own earlier note: those tokens carry special=false, so they are dedicated ADDED tokens, not special tokens. Tool refuses before any decode if the prefill does not resolve to those ids. NOTHING LAUNCHED.",
-    "D-0086b: Four defects found by my own dry runs before the tool was offered (branch ordering for the 4th time; truncated prose counted as an answer; the control arm told the prefill had failed; an invalidating state printed after a success verdict), and four more found by the mutation battery IN MY TESTS -- all four caused by asserting source-line ORDER where the mutant changed BEHAVIOUR. 25/25 mutants now killed; 697 assertions."
+    "D-0086b: Four defects found by my own dry runs before the tool was offered (branch ordering for the 4th time; truncated prose counted as an answer; the control arm told the prefill had failed; an invalidating state printed after a success verdict), and four more found by the mutation battery IN MY TESTS -- all four caused by asserting source-line ORDER where the mutant changed BEHAVIOUR. 25/25 mutants now killed; 697 assertions.",
+    "D-0087: the option-A gate REFUSED the user's real run, reporting ids=[248068, 271, 248069, 271] against an expected 151667/151668. The refusal was WRONG: VERIFIED against Qwen/Qwen3.5-4B's own published tokenizer files, 248068=<think>, 248069=</think>, 271='\\n\\n', text vocab 248,320 -- the prefill had tokenized perfectly and my CONSTANTS came from Qwen3-4B-Instruct-2507's config, which never described this model. Gate rewritten to DISCOVER the ids and round-trip them; THINK_OPEN_ID and THINK_CLOSE_ID deleted. NOTHING LAUNCHED.",
+    "D-0087b: the same wrong config file invalidates three further claims logged as VERIFIED. DOWNGRADED: (a) 'the generation branch emits exactly <|im_start|>assistant\\n' is WRONG for this model -- Qwen3.5 emits '<|im_start|>assistant\\n<think>\\n'; (b) 'chatml_prompt is byte-identical to the shipped template' holds only for Qwen3-4B-Instruct-2507; (c) 'no enable_thinking flag exists' is WRONG -- Qwen3.5's template HAS it. That last correction STRENGTHENS option A: rendering Qwen3.5's own template with enable_thinking=false is BYTE-IDENTICAL to chatml_prompt(...) + FORCED_CLOSED_THINK, so the prefill is the officially-supported string, not a workaround. It also explains D-0085: this model's default rendering opens a <think> block for the assistant, and ours did not.",
+    "D-0088: the wrong-model tokenizer config had ALSO mis-calibrated the tool-token budget in src/tools/selector.py. MEASURED: the selector's estimate UNDER-predicted the real rendered cost in 15 of 15 held-out cases (worst 1.067) because both the constants and the guard that checked them read Qwen3-4B-Instruct-2507's files instead of the shipped Qwen3.5-4B's. Constants corrected to measurements (ALL 8920 -> 9122); tests repointed with NO fallback to the old files; +1 mutant reproducing the defect; 21/21 killed; regression 3337 assertions, 0 skipped.",
+    "D-0088b: the cause was NOT vocabulary drift. MEASURED: raw schema JSON costs 8961 tokens old vs 8959 new (identical), and the three costliest schema bodies tokenize the same in both. The whole +202 is Qwen3.5's longer tool-calling preamble (template 2630 -> 7756 chars; wrapper+1 tool 145 -> 266 tokens), which is why every family rose by a near-constant ~130-146 tokens."
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -327,7 +331,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0086",
+  "decisions_logged": "D-0001..D-0088",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -352,8 +356,21 @@
     "R35 (HIGH, MEASURED 2026-08-31): the model does not finish thinking at any budget yet tested. At 3072 tokens all three diagnostic cases hit the ceiling inside an unterminated <think> block with NO visible answer, producing 10,647 / 11,184 / 11,940 chars of reasoning against 6,094 / 7,908 / 7,532 at 2048. Reasoning grows with the budget (~3.5 chars/token) and never closes, so raising --max-tokens is not a route to an answer and the argument used to pick 3072 was circular. Row 7 of the work plan (~10.4 h at 3072, ~7.1 h at 2048 per the corrected fit) would on this evidence produce no answers for cases of this kind. Untested mitigation: prefill the assistant turn with a closed empty <think> block, since /think and /nothink are documented NOT to work on Qwen3.5 and the shipped chat_template has no enable_thinking flag. NOT launched; needs approval.",
     "R36 (MEDIUM, 2026-08-31): my cost basis has now been wrong three times, twice recorded as MEASURED and refuted by the next run -- 4.03 tok/s (fitted at 2048) under-predicted the 512-token run, 3.32 tok/s (fitted at 512) over-predicted the 3072-token run by 27%. Cause: a flat tokens-per-second figure ignores the fixed per-generation overhead, so a rate measured at one budget mis-predicts every other budget, systematically. Replaced by an affine fit (34.1 s fixed + tokens/4.47) with residuals -3.5%/+2.8%/-1.2% across all three MEASURED budgets. Residual risk: the fit uses three points on ONE machine and ONE arm; the MEASURED arm-to-arm spread (rag 4.27, tools 4.03, plain 3.58 tok/s at the 2048 ceiling) is carried as a 1.19x multiplier, not hidden.",
     "R37 (LOW, 2026-08-31): the README claim that model load was MEASURED at 2.5 s and that the recorded 0.84 s 'understated ~3x' is WITHDRAWN. The 3072-token run measured 0.8 s, matching the recorded load_seconds_per_invocation [0.84, 0.8, 0.82]; the 2.5 s reading was a single outlier and a claim was built on it after one observation.",
-    "R38 (MEDIUM): the prefill tokenization gate calls tokenize(..., special=True), which makes a FAILURE conclusive but a PASS weak -- it does not prove llama-cpp's completion path resolves the block the same way. Mitigation: --with-control prints the prefill-minus-control prompt-token delta (~6 = ids used, ~19 = spelled out as text) and the reading reports INVALID for an impossible or spelled-out delta. Residual: without --with-control that cross-check is unavailable.",
-    "R39 (LOW): my own test assertions have twice guarded the EDIT rather than the PROPERTY -- D-0085 pinned a constant's literal value, and D-0086 grepped sentences I had written myself, so four behavioural mutants survived the first battery. Mitigation: property assertions plus a mutation battery on the final bytes. Residual: the technique catches this only where a mutant was thought of."
+    "R38 (MEDIUM, REVISED 2026-08-31 by D-0087): the prefill tokenization gate calls tokenize(..., special=True), which makes a FAILURE conclusive but a PASS weak -- it does not prove llama-cpp's own completion prompt path resolves the same string identically. UNCHANGED by D-0087. What DID change is that the gate no longer compares against hardcoded ids (151667/151668, which described a different model and caused it to refuse a perfectly correct prefill); it now DISCOVERS the ids from the loaded model, requires exactly one per tag, round-trips each back to its text, and requires both in the assembled prefill. Mitigation for the residual gap is still the prompt-token delta printed under --with-control (~6 = ids used, ~19 = spelled out, <=0 = arithmetically impossible). Residual: --with-control costs 2x the generations, so the strict cross-check is opt-in.",
+    "R39 (LOW): my own test assertions have twice guarded the EDIT rather than the PROPERTY -- D-0085 pinned a constant's literal value, and D-0086 grepped sentences I had written myself, so four behavioural mutants survived the first battery. Mitigation: property assertions plus a mutation battery on the final bytes. Residual: the technique catches this only where a mutant was thought of.",
+    "R40 (MEDIUM, 2026-08-31): artefacts in /tmp are inherited across sessions WITHOUT their provenance. /tmp/qwen3_tokcfg.json was fetched in phase 2 for Qwen3-4B-Instruct-2507 and then treated for two weeks as 'the real tokenizer config' for Qwen3.5-4B -- a different model with a 248,320-token vocabulary instead of 151,936. Four claims labelled VERIFIED against it were wrong or narrower than stated (D-0087). Mitigation: the shipped model's OWN config is now fetched to /tmp/q35_tokcfg.json and four assertions pin the prefill to its enable_thinking=false rendering, with an explicit SKIP line when absent. Residual: BOTH files live in /tmp and are destroyed by a sandbox reset, and nothing in the repo can tell which model a /tmp file describes without re-reading it.",
+    {
+      "id": "R41",
+      "severity": "MEDIUM",
+      "risk": "A test that compares an estimate against an 'actual' it computes itself can agree with itself indefinitely. MEASURED 2026-08-31: test_selector.py's 'estimate never under-predicts actual' guard was green for three weeks while the budget under-predicted the shipped model in 15 of 15 cases, because the guard rendered and tokenized with the same wrong-model files the budget was calibrated on.",
+      "mitigation": "Both sides of an estimate-vs-actual guard must be traceable to an EXTERNAL reference (here: files published by the model's own repo), and the reference must be named in the assertion's method string so a wrong reference is visible in the output. Fallbacks to a previous reference are forbidden -- they restore the silent pass. Residual: the external files still have to be fetched by hand, so an absent file degrades to SKIP; the SKIP lines now name how many assertions did not run (see R40, D-0088)."
+    },
+    {
+      "id": "R42",
+      "severity": "LOW",
+      "risk": "Mutation anchors quote source text verbatim, so correcting a constant silently disarms every mutant that named it. A mutant whose find-string matches nothing is reported as KILLED.",
+      "mitigation": "A pre-flight check now asserts every anchor appears EXACTLY ONCE in the source and that applying it actually changes the file, before the battery runs. Run it whenever a constant changes. Verified 2026-08-31: 21/21 anchors unique and non-no-op (D-0088)."
+    }
   ],
   "awaiting_approval_for": null,
   "phase_2": {
@@ -473,13 +490,14 @@
     },
     "context_cost": {
       "label": "MEASURED",
-      "method": "real Qwen3 tokenizer + real chat template",
-      "tokens_no_tools": 34,
-      "tokens_84_tools": 8954,
-      "tool_block_tokens": 8920,
-      "pct_of_16k": 54.4,
-      "mean_tokens_per_tool": 106.2,
-      "consequence": "tool subsetting REQUIRED for Phase 3 (D-0023)"
+      "method": "Qwen/Qwen3.5-4B's OWN tokenizer.json + its OWN chat_template (the SHIPPED model)",
+      "tokens_no_tools": 36,
+      "tokens_84_tools": 9158,
+      "tool_block_tokens": 9122,
+      "pct_of_16k": 55.7,
+      "mean_tokens_per_tool": 108.6,
+      "consequence": "tool subsetting REQUIRED for Phase 3 (D-0023)",
+      "superseded_note": "Until 2026-08-31 this block read method='real Qwen3 tokenizer + real chat template', 34 / 8954 / 8920 / 54.4 / 106.2. Those were measured against Qwen3-4B-Instruct-2507's files, not the shipped Qwen3.5-4B's (D-0087). The budget built on them UNDER-predicted the real cost in 15 of 15 held-out cases. Cause is NOT vocabulary drift: raw schema JSON costs 8961 vs 8959 tokens; the whole +202 is Qwen3.5's longer tool-calling preamble (template 2630 -> 7756 chars). See D-0088."
     },
     "execution_capability": "NONE - asserted across all 84 tools",
     "not_measured": [
@@ -494,19 +512,21 @@
     "answer": "Deterministic bilingual family router, recall-first (D-0026)",
     "module": "src/tools/selector.py",
     "rejected": {
-      "shorten_descriptions": "descriptions are only 1199/8920 tokens = 13%; parameters are 5602 = 63%",
+      "shorten_descriptions": "descriptions are only 1199/8920 tokens = 13%; parameters are 5602 = 63% (measured on the old tokenizer; the ratio is what matters and it is unchanged -- see D-0088)",
       "model_based_router": "needs a model call and its own context budget"
     },
     "measured": {
       "label": "MEASURED",
-      "all_tools_tokens": 8920,
-      "mean_subset_tokens": 2552,
-      "mean_pct_of_16k": 15.6,
-      "worst_case_tokens": 4479,
-      "mean_saving_tokens": 6368,
+      "all_tools_tokens": 9122,
+      "mean_subset_tokens": 3114,
+      "mean_pct_of_16k": 19.0,
+      "worst_case_tokens": 8320,
+      "mean_saving_tokens": 6008,
       "recall_eval_set": "10/10",
       "recall_held_out": "14/14",
-      "estimate_bias": "conservative; over-predicts by <=154 tokens, never under"
+      "estimate_bias": "conservative; MEASURED worst actual/estimate = 1.0000 on the 15 held-out cases, never under. With the pre-D-0088 constants it was 1.067, i.e. it DID under-predict.",
+      "tokenizer": "Qwen/Qwen3.5-4B (the SHIPPED model), its own tokenizer.json + chat_template",
+      "superseded_note": "Until 2026-08-31 this block read all_tools 8920, mean_subset 2552, mean_pct 15.6, worst_case 4479, mean_saving 6368. Those were MEASURED against Qwen3-4B-Instruct-2507's tokenizer (D-0087), and the router's keywords have also grown since (R18 close, 1bd2ff3). The D-0026-era selector with its own constants still reproduces 2552.3/15.6%/4479 exactly, so the old figures were correct when recorded. See D-0088."
     },
     "defects_found_by_held_out_testing": [
       "'iv' matched inside 'relative' (word-boundary bug)",

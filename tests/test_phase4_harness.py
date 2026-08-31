@@ -1533,13 +1533,105 @@ if os.path.exists(_tokcfg):
             add_generation_prompt=True)
         _mine = RP.chatml_prompt(RP.SYSTEM_RAG, "\u0633\u0648\u062f "
                                                 "\u062e\u0627\u0644\u0635?")
-        check_true("chatml_prompt is BYTE-IDENTICAL to the shipped Qwen3 "
-                   "template", _real == _mine,
-                   "(A) rendered via jinja2 from tokenizer_config.json")
+        # NAME CORRECTED 2026-08-31 (D-0087). This assertion used to be called
+        # "BYTE-IDENTICAL to the shipped Qwen3 template". It is not: this file
+        # is Qwen3-4B-Instruct-2507's tokenizer_config (vocab 151,936), while
+        # the shipped model is Qwen3.5-4B (text vocab 248,320). The equivalence
+        # it proves is real and still worth holding -- the ChatML envelope is
+        # the same in both -- but an assertion name that overstates its scope is
+        # how "VERIFIED against the real template" got believed for a model
+        # this file never described.
+        check_true("chatml_prompt is BYTE-IDENTICAL to the "
+                   "Qwen3-4B-Instruct-2507 template in /tmp",
+                   _real == _mine,
+                   "(A) rendered via jinja2 from tokenizer_config.json. NOT "
+                   "the shipped Qwen3.5-4B's config -- see the Qwen3.5 block "
+                   "below for that one")
         check_true("...and the model's own eos token is the one we stop on",
                    _cfg.get("eos_token") in RP.STOP_TOKENS, "(A)")
     except ImportError:
-        pass
+        # MEASURED 2026-08-31: this was a bare `pass`, so a missing jinja2
+        # deleted 2 assertions in total silence (D-0062's class, D-0088's
+        # second instance). Announce it.
+        print("  SKIP  %s present but jinja2 is not: 2 assertions comparing "
+              "chatml_prompt to the Qwen3-4B-Instruct-2507 template did NOT "
+              "run" % _tokcfg)
+else:
+    # MEASURED 2026-08-31 by hiding the file: the suite printed
+    # "709 passed, 0 failed" instead of 711, with NO skip line anywhere and the
+    # runner still reporting "SKIPPED: 0". Fully green, 2 fewer checks.
+    print("  SKIP  %s absent: 2 assertions comparing chatml_prompt to "
+          "Qwen3-4B-Instruct-2507's template did NOT run. That file is "
+          "OPTIONAL and historical -- see README Prerequisites (D-0088)."
+          % _tokcfg)
+
+
+# THE SHIPPED MODEL'S OWN TEMPLATE (D-0087).
+#
+# Qwen3.5-4B's chat_template DOES have an `enable_thinking` flag -- the opposite
+# of what this project recorded, because that claim was checked against the
+# wrong file. Its enable_thinking=false branch renders exactly
+# '<|im_start|>assistant\n<think>\n\n</think>\n\n'.
+#
+# That makes FORCED_CLOSED_THINK not a workaround but the official rendering,
+# and this is the assertion that pins it. If a future Qwen3.5 revision changes
+# that branch, the prefill silently stops being what the model expects -- so it
+# must fail here rather than in an hour of decode time.
+_q35cfg = "/tmp/q35_tokcfg.json"
+if os.path.exists(_q35cfg):
+    try:
+        from jinja2 import Environment as _JEnv
+        _c35 = json.load(open(_q35cfg))
+        _env35 = _JEnv()
+        _env35.globals["raise_exception"] = lambda m: (_ for _ in ()).throw(
+            Exception(m))
+        _t35 = _env35.from_string(_c35["chat_template"])
+        _msgs35 = [{"role": "system", "content": RP.SYSTEM_RAG},
+                   {"role": "user", "content": "\u0633\u0648\u062f "
+                                               "\u062e\u0627\u0644\u0635?"}]
+        _mine35 = RP.chatml_prompt(RP.SYSTEM_RAG,
+                                   "\u0633\u0648\u062f "
+                                   "\u062e\u0627\u0644\u0635?")
+        _off_closed = _t35.render(messages=_msgs35, add_generation_prompt=True,
+                                  enable_thinking=False)
+        _off_default = _t35.render(messages=_msgs35,
+                                   add_generation_prompt=True)
+        check_true("Qwen3.5's template HAS an enable_thinking flag",
+                   "enable_thinking" in _c35["chat_template"],
+                   "(D) MEASURED CORRECTION: this project recorded 'no "
+                   "enable_thinking flag exists', VERIFIED against a config "
+                   "file that described a DIFFERENT model. The flag exists")
+        check_true("prefill == Qwen3.5's OWN enable_thinking=false rendering",
+                   _mine35 + RP.FORCED_CLOSED_THINK == _off_closed,
+                   "(D) this is what makes the prefill legitimate rather than "
+                   "a trick: it is byte-for-byte what the model's own template "
+                   "emits when thinking is switched off. If this ever fails, "
+                   "the prefill has stopped being the officially-supported "
+                   "string and no run using it means anything")
+        check_true("...and the DEFAULT rendering opens a think block instead",
+                   _off_default.endswith("<think>\n")
+                   and _off_default != _mine35,
+                   "(D) explains D-0085: this model's own template hands the "
+                   "assistant an OPEN <think> block by default. Our "
+                   "chatml_prompt() omits it, so the model opened one itself "
+                   "and never closed it")
+        check_true("...so chatml_prompt alone is NOT this model's default",
+                   _mine35 != _off_default,
+                   "(A) stating the limit explicitly, because the older "
+                   "assertion's name implied full equivalence")
+    except ImportError:
+        print("  SKIP  %s present but jinja2 is not: 4 Qwen3.5 template "
+              "assertions did not run" % _q35cfg)
+else:
+    # MEASURED 2026-08-31: with this file absent the suite printed
+    # "707 passed, 0 failed" instead of 711 -- four assertions vanished and
+    # the run still looked completely green. That is D-0062's defect exactly
+    # (a skip hiding two mutation survivors), and the reason a missing
+    # prerequisite must ANNOUNCE itself rather than subtract silently.
+    print("  SKIP  %s absent: 4 assertions pinning the prefill to Qwen3.5's "
+          "OWN enable_thinking=false rendering did NOT run. Fetch it (see "
+          "README) before believing a green run of this suite."
+          % _q35cfg)
 
 
 # -- SAMPLING IS EXPLICIT AND REPRODUCIBLE -------------------------------
@@ -3887,15 +3979,42 @@ check_true("the close tag follows the open tag in the prefill",
            _p_pre.rindex(RP.THINK_CLOSE) > _p_pre.rindex(RP.THINK_OPEN),
            "(D) reversed tags would read as an unterminated block")
 
-# The ids are what make this technique possible at all. They are asserted here
-# so that a tokenizer swap cannot silently turn the prefill into plain text.
-check("<think> is token id 151667 in the shipped tokenizer",
-      _FA.THINK_OPEN_ID, 151667, 0,
-      "(D) VERIFIED 2026-08-31 in added_tokens_decoder. If the prefill does "
-      "not resolve to a dedicated id the model never sees a closed block")
-check("</think> is token id 151668",
-      _FA.THINK_CLOSE_ID, 151668, 0,
-      "(D) as above; the close tag is the half that matters")
+# WHAT THESE ASSERTIONS USED TO BE, AND WHY THEY CHANGED (D-0087).
+#
+# Until 2026-08-31 the two assertions here read
+#     check("<think> is token id 151667 ...", _FA.THINK_OPEN_ID, 151667, 0)
+#     check("</think> is token id 151668",    _FA.THINK_CLOSE_ID, 151668, 0)
+# They were green, and they were worse than useless: they pinned the script to
+# a number taken from a tokenizer_config that described a DIFFERENT model. The
+# shipped Qwen3.5-4B numbers the same two tags 248068/248069, so the gate
+# refused a prefill that had tokenized perfectly, and these assertions were
+# the thing guaranteeing it kept doing so.
+#
+# This is R39 in its third instance: an assertion that guards the EDIT (the
+# literal number I typed) instead of the PROPERTY (each tag is one dedicated
+# token that decodes back to itself). The property is vocabulary-agnostic; the
+# number was not. So what is asserted now is the MECHANISM, plus a ban on the
+# constants ever coming back.
+check_true("the script holds NO hardcoded think-token id",
+           not hasattr(_FA, "THINK_OPEN_ID")
+           and not hasattr(_FA, "THINK_CLOSE_ID"),
+           "(D) MEASURED FAILURE 2026-08-31: hardcoded 151667/151668 refused "
+           "the real model, whose ids are 248068/248069. A gate may not "
+           "compare against a number whose provenance is another model")
+check_true("...and the ids are discovered by tokenizing each tag alone",
+           "_tok(llm, RP.THINK_OPEN)" in _fa_text
+           and "_tok(llm, RP.THINK_CLOSE)" in _fa_text,
+           "(D) discovery is what makes the check survive a vocabulary "
+           "change; comparing to a constant is what broke")
+check_true("...and confirmed by detokenizing them back to the tag text",
+           "_detok(" in _fa_text and "MAX_IDS_PER_TAG" in _fa_text,
+           "(D) a length-only check would pass a single WRONG id. The "
+           "round-trip is what makes discovery trustworthy without a "
+           "constant to compare against")
+check("one dedicated token per tag is the threshold",
+      _FA.MAX_IDS_PER_TAG, 1, 0,
+      "(A) a dedicated added token is exactly one id; more means the tag was "
+      "spelled out as ordinary text, which is the silent failure")
 check_true("the script does not claim these are SPECIAL tokens",
            "special\": false" in _fa_text
            or "\"special\": false" in _fa_text
@@ -3924,8 +4043,27 @@ check_true("...and calls the tokenizer, rather than assuming a pass",
            "behavioural half is the refusal test below")
 
 
+# The REAL vocabulary of the shipped model, VERIFIED 2026-08-31 against
+# Qwen/Qwen3.5-4B's own published tokenizer.json and tokenizer_config.json:
+# text vocab 248,320; <think>=248068 and </think>=248069, both "special":
+# false; 271 is the byte-level pair for "\n\n". The user's refused run reported
+# exactly [248068, 271, 248069, 271], i.e. a CORRECT tokenization.
+_Q35_OPEN, _Q35_CLOSE, _Q35_NL2 = 248068, 248069, 271
+# The ids of Qwen3-4B-Instruct-2507, the model whose config was mistakenly
+# trusted. Kept deliberately: the gate must pass on BOTH, because it must not
+# know either.
+_Q25_OPEN, _Q25_CLOSE, _Q25_NL = 151667, 151668, 198
+
+
 class _TokModel(object):
-    """Fake whose tokenize() behaviour is selectable, like the real risk."""
+    """Fake whose tokenize()/detokenize() behaviour is selectable.
+
+    tokenize() is now STRING-DEPENDENT, because the gate no longer asks one
+    question ("are these two ids in the prefill?") but three: is each tag one
+    id, does that id decode back to the tag, and are both present in the
+    assembled prefill. A fake that ignored its argument could not distinguish
+    those, and would let a gate that skipped two of the three stay green.
+    """
 
     def __init__(self, kind, text="Net sales were $383,285 million [1].",
                  ctok=20):
@@ -3933,14 +4071,58 @@ class _TokModel(object):
         self.text = text
         self.ctok = ctok
 
+    def _ids(self):
+        if self.kind == "old_vocab":
+            return _Q25_OPEN, _Q25_CLOSE, _Q25_NL
+        return _Q35_OPEN, _Q35_CLOSE, _Q35_NL2
+
     def tokenize(self, b, special=False):
-        if self.kind == "notok":
+        k = self.kind
+        if k == "notok":
             raise TypeError("tokenize() got an unexpected keyword 'special'")
-        if self.kind == "raises":
+        if k == "raises":
             raise RuntimeError("model not loaded")
-        if self.kind == "spelled":
-            return [27, 82260, 29, 271, 522, 82260, 29, 271]
-        return [151667, 198, 198, 151668, 198, 198]
+        s = b.decode("utf-8") if isinstance(b, bytes) else b
+        o, c, nl = self._ids()
+        if k == "spelled":
+            if s == RP.THINK_OPEN:
+                return [27, 82260, 29]
+            if s == RP.THINK_CLOSE:
+                return [522, 82260, 29]
+            return [27, 82260, 29, nl, 522, 82260, 29, nl]
+        if k == "same_id":
+            return [o] if s in (RP.THINK_OPEN, RP.THINK_CLOSE) \
+                else [o, nl, o, nl]
+        if k == "not_in_full":
+            if s == RP.THINK_OPEN:
+                return [o]
+            if s == RP.THINK_CLOSE:
+                return [c]
+            return [o, nl, nl]
+        if s == RP.THINK_OPEN:
+            return [o]
+        if s == RP.THINK_CLOSE:
+            return [c]
+        return [o, nl, c, nl]
+
+    def detokenize(self, ids):
+        k = self.kind
+        if k == "no_detok":
+            raise RuntimeError("this build has no detokenize()")
+        o, c, nl = self._ids()
+        if k == "bad_round_trip":
+            return b"<tool_call>" if list(ids) == [o] else b"</tool_call>"
+        out = []
+        for i in ids:
+            if i == o:
+                out.append(RP.THINK_OPEN)
+            elif i == c:
+                out.append(RP.THINK_CLOSE)
+            elif i in (_Q35_NL2, _Q25_NL):
+                out.append("\n\n")
+            else:
+                out.append("?")
+        return "".join(out).encode("utf-8")
 
     def __call__(self, prompt, max_tokens=256, echo=False, temperature=None,
                  seed=None, stop=None):
@@ -3950,16 +4132,58 @@ class _TokModel(object):
 
 
 _ok, _detail = _FA.check_prefill_tokenization(_TokModel("good"))
-check_true("the gate PASSES when both think ids are present",
-           _ok is True, "(A) the intended path must not refuse")
+check_true("the gate PASSES on the SHIPPED model's ids (248068/248069)",
+           _ok is True,
+           "(D) MEASURED FAILURE 2026-08-31: the previous gate REFUSED this "
+           "exact tokenization because it expected 151667/151668. This is the "
+           "assertion that would have caught it")
+check_true("...and reports the ids it discovered rather than expected ones",
+           "248068" in _detail and "248069" in _detail,
+           "(A) printing what was found is what makes a vocabulary change "
+           "visible instead of fatal")
+_ok2, _d2 = _FA.check_prefill_tokenization(_TokModel("old_vocab"))
+check_true("the gate ALSO passes on the other model's ids (151667/151668)",
+           _ok2 is True,
+           "(D) the gate must be vocabulary-agnostic in BOTH directions. "
+           "Passing only 248k ids would just be the same defect with a newer "
+           "constant")
+check_true("...and reports those ids instead",
+           "151667" in _d2 and "248068" not in _d2,
+           "(A) the detail must describe the model in front of it")
 _bad, _bd = _FA.check_prefill_tokenization(_TokModel("spelled"))
-check_true("the gate FAILS when the prefill is spelled out as text",
+check_true("the gate FAILS when a tag is spelled out as ordinary text",
            _bad is False,
            "(D) this is the silent failure: the model would answer plausibly "
            "while never having seen a closed reasoning block")
-check_true("...and says which ids it expected",
-           "151667" in _bd and "151668" in _bd,
-           "(A) a refusal the user cannot act on is a dead end")
+check_true("...and says how many ids the tag actually took",
+           "3 ids" in _bd and "not 1" in _bd,
+           "(A) a refusal the user cannot act on is a dead end. It must name "
+           "the observed shape, not a number it hoped for")
+_same, _sd = _FA.check_prefill_tokenization(_TokModel("same_id"))
+check_true("the gate FAILS when open and close share one id",
+           _same is False,
+           "(D) one id for both tags makes a CLOSED block indistinguishable "
+           "from an open one, so the experiment could not mean anything")
+_trip, _td = _FA.check_prefill_tokenization(_TokModel("bad_round_trip"))
+check_true("the gate FAILS when a single id decodes to the wrong text",
+           _trip is False,
+           "(D) exactly the hole a length-only check leaves: one id per tag, "
+           "but the wrong one. Without the round-trip this passes")
+check_true("...and shows what it decoded to instead",
+           "tool_call" in _td,
+           "(A) the user needs to see the mismatch to act on it")
+_nif, _nifd = _FA.check_prefill_tokenization(_TokModel("not_in_full"))
+check_true("the gate FAILS when a tag vanishes from the assembled prefill",
+           _nif is False,
+           "(D) the tags could resolve correctly in isolation while the "
+           "concatenated prefill does something else; checking the tags alone "
+           "would certify a prefill the model never receives")
+_nodt, _nodtd = _FA.check_prefill_tokenization(_TokModel("no_detok"))
+check_true("a build with no usable detokenize() is UNVERIFIED, not a failure",
+           _nodt is None,
+           "(D) inability to CONFIRM is not evidence AGAINST. Refusing here "
+           "would block a possibly-correct run, which is the same class of "
+           "error as D-0087 itself")
 _none, _nd = _FA.check_prefill_tokenization(_TokModel("notok"))
 check_true("a build without tokenize(special=) is UNVERIFIED, not a failure",
            _none is None,
@@ -4011,6 +4235,39 @@ def _run_forced(model_obj, extra_argv):
             sys.modules["llama_cpp"] = saved_mod
 
 
+def _good_tokenize(b, special=False):
+    """A tokenizer that resolves each tag to one dedicated id, Qwen3.5-style.
+
+    Shared by the reading-branch fakes so that none of them accidentally
+    becomes the reason a branch is unreachable. Before D-0087 these fakes
+    returned a fixed list regardless of the string they were given, which
+    satisfied the OLD gate (a membership test) but cannot satisfy the new one
+    (one id per tag, round-tripped, present in the assembled prefill) -- a
+    fake that could not pass the gate would push every reading test onto the
+    UNVERIFIED branch and quietly stop testing what it claims to test.
+    """
+    s = b.decode("utf-8") if isinstance(b, bytes) else b
+    if s == RP.THINK_OPEN:
+        return [_Q35_OPEN]
+    if s == RP.THINK_CLOSE:
+        return [_Q35_CLOSE]
+    return [_Q35_OPEN, _Q35_NL2, _Q35_CLOSE, _Q35_NL2]
+
+
+def _good_detokenize(ids):
+    out = []
+    for i in ids:
+        if i == _Q35_OPEN:
+            out.append(RP.THINK_OPEN)
+        elif i == _Q35_CLOSE:
+            out.append(RP.THINK_CLOSE)
+        elif i == _Q35_NL2:
+            out.append("\n\n")
+        else:
+            out.append("?")
+    return "".join(out).encode("utf-8")
+
+
 class _FAModel(object):
     """One fake per outcome the reading is supposed to distinguish."""
 
@@ -4018,10 +4275,8 @@ class _FAModel(object):
         self.kind = kind
         self.calls = 0
 
-    def tokenize(self, b, special=False):
-        if self.kind == "spelled_prompt":
-            return [151667, 198, 198, 151668, 198, 198]
-        return [151667, 198, 198, 151668, 198, 198]
+    tokenize = staticmethod(_good_tokenize)
+    detokenize = staticmethod(_good_detokenize)
 
     def __call__(self, prompt, max_tokens=256, echo=False, temperature=None,
                  seed=None, stop=None):
@@ -4222,8 +4477,8 @@ class _DeltaModel(object):
     def __init__(self, kind):
         self.kind = kind
 
-    def tokenize(self, b, special=False):
-        return [151667, 198, 198, 151668, 198, 198]
+    tokenize = staticmethod(_good_tokenize)
+    detokenize = staticmethod(_good_detokenize)
 
     def __call__(self, prompt, max_tokens=256, echo=False, temperature=None,
                  seed=None, stop=None):

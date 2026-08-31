@@ -144,12 +144,30 @@ DEFAULT_MAX_TOKENS = 2048
 # not get. This constant is stdlib-only, needs no jinja2 at run time, and
 # cannot go missing on the user's Windows machine.
 #
-# VERIFIED 2026-08-31: rendering via jinja2 from the real tokenizer_config
-# chat_template and rendering via chatml_prompt() below produce BYTE-IDENTICAL
-# output on four cases including a Persian question and a multi-line system
-# prompt. test_phase4_harness.py asserts that equivalence whenever the
-# tokenizer config is present, so a future divergence is a test failure rather
-# than a silent regression.
+# VERIFIED 2026-08-31: rendering via jinja2 from the tokenizer_config
+# chat_template in /tmp and rendering via chatml_prompt() below produce
+# BYTE-IDENTICAL output on four cases including a Persian question and a
+# multi-line system prompt. test_phase4_harness.py asserts that equivalence
+# whenever the tokenizer config is present, so a future divergence is a test
+# failure rather than a silent regression.
+#
+# WHAT THAT VERIFICATION IS AND IS NOT, CORRECTED 2026-08-31 (D-0087). The file
+# it checks against, /tmp/qwen3_tokcfg.json, is Qwen3-4B-Instruct-2507's
+# tokenizer_config -- NOT the shipped Qwen3.5-4B's. So the equivalence above is
+# real but narrower than it was labelled: it says chatml_prompt() matches
+# Qwen3-4B-Instruct-2507's template.
+#
+# Against Qwen3.5-4B's OWN template, fetched and rendered directly:
+#   chatml_prompt(...)                      == its add_generation_prompt render
+#                                              MINUS a trailing '<think>\n'
+#                                              -> NOT byte-identical
+#   chatml_prompt(...) + FORCED_CLOSED_THINK == its enable_thinking=false render
+#                                              -> BYTE-IDENTICAL, VERIFIED
+#
+# In other words the ChatML envelope is the same in both models and that part of
+# the verification carries over, but this model's default rendering opens a
+# reasoning block for the model, and ours does not. The pre-closed prefill below
+# is the officially-rendered alternative, exactly.
 IM_START = "<|im_start|>"
 IM_END = "<|im_end|>"
 
@@ -181,11 +199,36 @@ def chatml_prompt(system, user):
 # --max-tokens is not a route to an answer. See D-0085.
 #
 # The model card documents that Qwen3.5's /think and /nothink soft switches are
-# NOT supported (recorded at phase4_lib.py:212), and the shipped chat_template
-# contains no `enable_thinking` flag -- VERIFIED by inspecting the real
-# tokenizer_config: the template's only generation branch emits
-# '<|im_start|>assistant\n' with nothing after it. So neither a prompt-level
-# switch nor a template flag is available.
+# NOT supported (recorded at phase4_lib.py:212).
+#
+# CORRECTION, 2026-08-31 (D-0087). An earlier version of this comment said the
+# shipped chat_template "contains no `enable_thinking` flag", VERIFIED against
+# /tmp/qwen3_tokcfg.json. That file is Qwen3-4B-Instruct-2507's config, NOT this
+# model's -- its vocabulary is 151,936 while Qwen3.5-4B's text vocabulary is
+# 248,320. Qwen/Qwen3.5-4B's OWN tokenizer_config, fetched and read directly,
+# DOES have the flag, and its generation branch is:
+#
+#     {%- if add_generation_prompt %}
+#         {{- '<|im_start|>assistant\n' }}
+#         {%- if enable_thinking is defined and enable_thinking is false %}
+#             {{- '<think>\n\n</think>\n\n' }}
+#         {%- else %}
+#             {{- '<think>\n' }}
+#         {%- endif %}
+#     {%- endif %}
+#
+# So the claim "no flag exists" was WRONG, and it was wrong in a way that turns
+# out to VINDICATE this constant rather than undermine it: the official
+# enable_thinking=false rendering is byte-for-byte
+# '<|im_start|>assistant\n<think>\n\n</think>\n\n', which is exactly
+# chatml_prompt(...) + FORCED_CLOSED_THINK. VERIFIED byte-identical 2026-08-31
+# by rendering the real template with jinja2. The prefill below is not a
+# workaround for a missing switch; it IS the switch, spelled out.
+#
+# A consequence worth stating plainly, because it changes what to expect: this
+# model's DEFAULT rendering appends '<think>\n' after the assistant header. The
+# harness's chatml_prompt() does not, which is why the model was free to open
+# its own block and never close it (D-0085).
 #
 # What IS available is prefilling the assistant turn. Appending an already-closed
 # empty reasoning block after the assistant header puts the model at a position
@@ -194,15 +237,26 @@ def chatml_prompt(system, user):
 # technique for Qwen-family reasoning models and needs no library support.
 #
 # WHY THE TOKENS MATTER, AND WHY THE CALLER MUST CHECK. `<think>` and `</think>`
-# have DEDICATED IDS in this tokenizer -- 151667 and 151668, VERIFIED
-# 2026-08-31 in added_tokens_decoder.
+# have DEDICATED IDS in this tokenizer. In Qwen3.5-4B they are 248068 and
+# 248069 -- VERIFIED 2026-08-31 in Qwen/Qwen3.5-4B's own added_tokens_decoder,
+# and MEASURED on the user's machine, where the prefill tokenized to exactly
+# [248068, 271, 248069, 271] (271 = "\n\n").
+#
+# THE NUMBERS ARE RECORDED HERE FOR PROVENANCE AND NOTHING ELSE. No code may
+# compare against them. An earlier version of this comment gave 151667/151668,
+# copied from a config file that described a different model, and
+# diagnose_forced_answer.py hardcoded those numbers into a gate -- which then
+# refused a perfectly correct prefill on first contact with the real model. The
+# gate now DISCOVERS the ids from the loaded model and round-trips them. See
+# D-0087.
 #
 # Precision, because an earlier version of this comment overstated it: those
 # entries carry "special": false. They are dedicated ADDED tokens, not special
 # tokens; <|im_start|> and <|im_end|> are the special ones and are listed in
 # additional_special_tokens, while <think> sits in the same class as
-# <tool_call>. The distinction does not change the design -- what matters is
-# that each is ONE id, not a spelling.
+# <tool_call>. This is true of Qwen3.5-4B as well -- re-checked against its own
+# config, not inherited. The distinction does not change the design -- what
+# matters is that each is ONE id, not a spelling.
 #
 # If llama-cpp tokenizes this prefix as literal text (several ordinary tokens
 # spelling "<think>") rather than as those two ids, the model does not see a

@@ -386,6 +386,14 @@ not over-reach: a real -0.4% sovereign yield still computes.
 ## is REQUIRED before Phase 3 adds retrieval
 **Date:** 2026-08-10 · **Phase:** 2a (R14) · **Status:** Active · **Severity:** High
 
+> **⚠️ THE NUMBERS IN THIS ENTRY WERE SUPERSEDED ON 2026-08-31 BY D-0088.**
+> "The real Qwen3 tokenizer" was `Qwen3-4B-Instruct-2507`'s — a real tokenizer,
+> for a model this project does not run. The shipped Qwen3.5-4B figures are
+> **9,122 tokens (55.7% of 16K), 108.6 tokens/tool**. The entry is left
+> uncorrected below because deleting a wrong record destroys the evidence of how
+> it came to be believed. **The decision it reaches is unchanged** — subsetting
+> is still required, and by a slightly larger margin.
+
 MEASURED with the real Qwen3 tokenizer against the real chat template: the
 rendered tool block costs 8,920 tokens, 106.2 tokens/tool. Two tests in
 `test_tools.py` guard this from both sides — it must stay under 70% of context,
@@ -449,6 +457,14 @@ standing rule: never verify a factor at the value where it disappears.
 `src/tools/selector.py` selects tools per query by keyword-scoring five
 families. Chosen over the two alternatives I offered, both now ruled out **by
 measurement rather than preference**:
+
+> **⚠️ THE TOKEN FIGURES IN THIS TABLE WERE SUPERSEDED ON 2026-08-31 BY
+> D-0088**, for **two independent** reasons: they were measured against another
+> model's tokenizer, *and* the router's keyword lists grew when R18 was closed
+> (`1bd2ff3`). Running the D-0026-era selector with its own constants still
+> reproduces **2,552.3 / 15.6% / 4,479 exactly**, so the row below was correct
+> when written. Today's equivalent, MEASURED: **mean 3,114 tokens (19.0%) vs
+> 9,122**. The verdicts are unchanged.
 
 | Option | Verdict |
 |---|---|
@@ -3279,6 +3295,14 @@ ESTIMATED — against ~10.4 h for the full re-run this is meant to inform.
 | no `enable_thinking` / `think` / `no_think` flag exists | substring search | VERIFIED absent |
 | `<think>` / `</think>` have dedicated ids | `added_tokens_decoder` | VERIFIED 151667 / 151668 |
 
+> **⚠️ EVERY ROW OF THIS TABLE WAS SUPERSEDED ON 2026-08-31 BY D-0087.** All four
+> were verified against `/tmp/qwen3_tokcfg.json`, which is
+> `Qwen3-4B-Instruct-2507`'s config — **not** the shipped `Qwen3.5-4B`'s. Rows 1
+> and 3 are **WRONG for this model**, row 2 is **narrower** than labelled, and
+> row 4 has the **wrong numbers** (248068 / 248069) while its property holds.
+> The table is left in place, uncorrected, because deleting a wrong record
+> destroys the evidence of how it was believed. Read D-0087 before using it.
+
 **A CORRECTION TO MY OWN EARLIER NOTE.** I had recorded these as "dedicated
 SPECIAL tokens". They are dedicated **added** tokens: both entries carry
 `"special": false`, and neither appears in `additional_special_tokens`.
@@ -3369,3 +3393,341 @@ rather than rebuilt beside it.
 **What this does NOT establish.** Nothing about whether the prefill works: no
 model has been run. It also says nothing about answer *correctness* — only
 whether answers exist to be graded, which remains a separate human step (R10).
+
+---
+
+## D-0087 — The gate refused a correct prefill: my constants described a different model
+
+**Date:** 2026-08-31
+**Status:** CLOSED (tooling corrected; the option-A run is still NOT launched)
+**Supersedes:** the premise table in D-0086, and three claims labelled VERIFIED
+in D-0083/D-0086.
+
+### What happened
+
+The user ran the option-A tool built in D-0086. It refused before spending any
+decode time:
+
+```
+load time  : 0.8 s  [MEASURED]
+prefill tok: *** WRONG *** ids=[248068, 271, 248069, 271] (expected 151667 and 151668 present)
+
+REFUSING TO RUN: the prefill does not tokenize to the dedicated
+  <think>/</think> ids, so the model would never see a closed
+  reasoning block and any answer it gave would prove nothing about
+  this technique. Fix the tokenization before spending decode time.
+```
+
+Zero generations. Same with `--with-control`.
+
+**The refusal was WRONG, and the tool was right to make it.** Those two
+statements are both true and it matters to keep them apart. The gate did exactly
+what it was built to do — it declined to interpret a run whose premise it could
+not confirm, before spending the ~7 minutes. What it could not know is that the
+number it was comparing against was mine, not the model's.
+
+### What the ids actually are — VERIFIED, not inferred
+
+My first reading of `[248068, 271, 248069, 271]` was a hypothesis: four tokens
+shaped `[A, "\n\n", B, "\n\n"]`, so probably a correct tokenization in a larger
+vocabulary. A hypothesis is not a finding, so I fetched the shipped model's own
+published tokenizer files and read them:
+
+| fact | source | value |
+|---|---|---|
+| text vocabulary | `Qwen/Qwen3.5-4B/config.json` → `text_config.vocab_size` | **248,320** |
+| `<think>` | its `added_tokens_decoder` | **248068**, `"special": false` |
+| `</think>` | same | **248069**, `"special": false` |
+| token `271` | its `tokenizer.json` vocab | **`ĊĊ`** = `"\n\n"` |
+| added tokens | same | **33** (the other model has 26) |
+
+So the prefill had tokenized **perfectly**: `<think>`, `\n\n`, `</think>`,
+`\n\n` — four tokens, exactly the intended shape. The failure was entirely in
+the constant.
+
+### The actual defect, stated plainly
+
+`/tmp/qwen3_tokcfg.json` is **`Qwen3-4B-Instruct-2507`'s** tokenizer_config
+(vocab 151,936, 26 added tokens, 2630-char template). The model this project
+runs is **`Qwen3.5-4B-Q5_K_M.gguf`** (text vocab 248,320, 33 added tokens,
+7756-char template). **They were never the same model.** The file was fetched
+back in phase 2, when the project was still choosing between candidate models,
+and it was inherited as "the real tokenizer config" without anyone re-asking
+which model it described.
+
+I then hardcoded ids out of it into a gate whose entire purpose was to catch an
+unchecked premise. **The gate's logic was sound; its reference was borrowed.**
+A gate that compares against an unprovenanced number can only ever be as right
+as that number.
+
+### Every claim that must be downgraded
+
+Not just the ids. Everything I verified against that file has to be re-labelled,
+because the file does not describe this model. This is the part that would be
+easiest to skip and most dishonest to skip.
+
+| claim as recorded | corrected status |
+|---|---|
+| `<think>`/`</think>` are ids 151667/151668 — VERIFIED | **WRONG NUMBERS.** 248068/248069. The *property* (each is one dedicated added token, `"special": false`) survives, re-verified against the right config |
+| the template's generation branch emits exactly `<\|im_start\|>assistant\n` — VERIFIED | **WRONG for this model.** Qwen3.5's branch emits `<\|im_start\|>assistant\n<think>\n` |
+| `chatml_prompt()` is byte-identical to the shipped template — VERIFIED | **NARROWER than labelled.** True of `Qwen3-4B-Instruct-2507`. Against Qwen3.5 it matches only after dropping a trailing `<think>\n` |
+| no `enable_thinking` flag exists — VERIFIED absent | **WRONG.** Qwen3.5's template **has** the flag |
+| `<think>`/`</think>` are added, not special, tokens — CORRECTED in D-0086 | **STILL TRUE**, and now verified against the right file rather than by luck |
+
+### The finding that came out of the correction
+
+Qwen3.5-4B's own `chat_template` contains:
+
+```jinja
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+    {%- if enable_thinking is defined and enable_thinking is false %}
+        {{- '<think>\n\n</think>\n\n' }}
+    {%- else %}
+        {{- '<think>\n' }}
+    {%- endif %}
+{%- endif %}
+```
+
+Two consequences, both larger than the bug that revealed them.
+
+**1. The prefill is the officially-supported string.** Rendering that template
+with `enable_thinking=False` produces output **byte-for-byte identical** to
+`chatml_prompt(...) + FORCED_CLOSED_THINK` — VERIFIED by rendering it with
+jinja2 and comparing. Option A is therefore not a trick or a workaround for a
+missing switch; **it is that switch, rendered by hand.** That is a materially
+stronger justification than the one D-0086 had, which rested on the flag being
+absent.
+
+**2. It explains D-0085.** This model's own template hands the assistant an
+**open** `<think>` block by default. `chatml_prompt()` omits it — so the model
+opened one itself and never closed it, at 512, 2048 and 3072 tokens, which is
+precisely the behaviour D-0085 MEASURED and could not account for.
+
+### The fix: discover, do not compare
+
+`check_prefill_tokenization()` no longer holds any id. `THINK_OPEN_ID` and
+`THINK_CLOSE_ID` are **deleted**. It now checks the *property*, in three steps:
+
+1. `<think>` alone tokenizes to exactly **one** id; likewise `</think>`; and the
+   two ids differ. More than one id per tag is the spelling-out failure the gate
+   exists for; one shared id would make a closed block indistinguishable from an
+   open one.
+2. Each id **round-trips**: detokenizing it returns the tag's own text. Step 1
+   alone would wave through a single *wrong* id, which is exactly the shape of
+   the bug being fixed.
+3. Both discovered ids appear in the tokenization of the **assembled** prefill,
+   so the tags cannot pass in isolation while the concatenated string does
+   something else.
+
+A build with no `tokenize(special=)` **or no usable `detokenize()`** yields
+**UNVERIFIED**, not a failure — inability to confirm is not evidence against,
+and refusing there would repeat this very defect in the opposite direction.
+Genuine spelling-out still refuses, before any decode.
+
+### Verification
+
+- **Dry-run all 13 branches** against fakes: the shipped model's real ids
+  (248068/248069) now **PASS**; the *other* model's ids (151667/151668) also
+  pass, because the gate must know neither; spelled-out tags, one-shared-id,
+  wrong-round-trip and missing-from-prefill all **REFUSE with 0 generations**;
+  no-`special` and no-`detokenize` both read UNVERIFIED; and the ten reading
+  branches, the `--with-control` delta and the `--yes` cost gate all still
+  behave.
+- **Harness suite: 707 → 711 assertions**, 0 failed.
+- **Mutation battery: 29 seeded, 29 KILLED, 0 survived.** Sources restored to
+  their exact pre-battery md5s. New mutants target each discovery step, the
+  threshold, the UNVERIFIED/FAILURE distinction, an attempt to re-hardcode a
+  constant, and a prefill that stops matching the official render.
+
+### R39, third instance — and the test that had been guaranteeing the bug
+
+The two assertions guarding the ids were:
+
+```python
+check("<think> is token id 151667 in the shipped tokenizer",
+      _FA.THINK_OPEN_ID, 151667, 0, ...)
+```
+
+They were green throughout. **They were worse than absent:** they pinned the
+script to the wrong number and would have failed had I fixed it. That is R39 —
+an assertion guarding the *edit* I made rather than the *property* I wanted —
+for the third time in this project, and the first time one of them actively
+defended a defect.
+
+They are replaced by assertions on the mechanism: that the module holds **no**
+hardcoded think-token id at all, that the ids are obtained by tokenizing each
+tag alone, that they are confirmed by detokenizing, and that the gate passes on
+**both** vocabularies.
+
+### A silent skip, caught while fixing a silent wrong answer
+
+The four new template assertions read `/tmp/q35_tokcfg.json`. With the file
+absent the suite printed **`707 passed, 0 failed`** instead of 711 — fully
+green, four fewer checks. That is D-0062's defect exactly (a skip hiding two
+mutation survivors). The block now prints an explicit `SKIP` line naming what
+did not run, and the README documents the fetch.
+
+### Standing lessons
+
+1. **A premise checked against a convenient nearby artefact is not a checked
+   premise.** "VERIFIED against the real tokenizer config" was true of a file
+   and false of the model. Provenance is part of the verification, not metadata
+   about it.
+2. **Never hardcode a value read from an artefact whose identity you have not
+   pinned to the thing under test.** Discover it from the thing itself.
+3. **A gate that refuses is not thereby correct.** Both the pass and the refusal
+   have to be interrogated. This one refused for a reason that was mine.
+4. **Inability to confirm must never be reported as a negative finding** — that
+   is the same error class as this bug, pointed the other way.
+5. **When a wrong record is corrected, leave the wrong record visible** with a
+   pointer. Deleting it destroys the evidence of how it came to be believed.
+6. **The cheap gate paid for itself on first contact.** It cost ~7 minutes of
+   the user's time to discover a defect that would otherwise have sat under a
+   plausible-looking answer. The lesson is not "gates are annoying".
+
+## D-0088 — The same wrong-model config had silently mis-calibrated the tool-token budget
+**Date:** 2026-08-31 · **Phase:** 2b/4 (sweep after D-0087) · **Status:** Active · **Severity:** High
+
+### What this is
+D-0087 closed with a routine task: sweep the repo for any *remaining* claim that
+`/tmp/qwen3_tokcfg.json` describes the shipped model. The sweep was expected to
+find stale prose. It found a **live defect** instead, in a module D-0087 never
+touched.
+
+### The finding
+`src/tools/selector.py` budgets how many tool schemas fit in a 16K window. Its
+constants were labelled *"MEASURED with the real Qwen3 tokenizer"*:
+
+    returns_risk 2079, valuation 2400, technicals 1458,
+    fixed_income 1370, derivatives 1921, ALL 8920
+
+Those numbers were measured honestly, reproducibly, and against
+**`Qwen3-4B-Instruct-2507`** — the same wrong model D-0087 identified.
+`/tmp/qwen3_tokenizer.json` has a 151,643-entry vocab; the shipped
+`Qwen/Qwen3.5-4B` has 248,044. Two test suites read those files.
+
+**This was not merely a stale comment.** MEASURED 2026-08-31 against the shipped
+tokenizer, `select_tools()`'s `estimated_tokens` **UNDER-PREDICTED the actual
+rendered cost in 15 of 15 held-out cases**, worst ratio **1.067**. An
+under-predicting budget is worse than no budget: it authorises a prompt that then
+overflows the window and silently truncates the retrieved documents Phase 3
+depends on.
+
+### Why nothing caught it
+`tests/test_selector.py` already held the right assertion — *"estimate never
+under-predicts actual"* — comparing the estimate against a **rendered** cost. It
+was green for three weeks. It rendered with `/tmp/qwen3_tokcfg.json` and
+tokenized with `/tmp/qwen3_tokenizer.json`: it compared an estimate calibrated on
+the wrong model against an actual measured with **the same wrong model**.
+
+> **Two wrongs agreeing is not a verification.** A guard is only as good as the
+> evidence it points at, and a guard that supplies its own reference can agree
+> with itself indefinitely.
+
+This is the D-0087 lesson repeating in a second place, which is why the sweep was
+worth running rather than declaring the correction complete.
+
+### MEASURED, both tokenizers, same method
+| Quantity | Qwen3-4B-Instruct-2507 (recorded) | Qwen3.5-4B (shipped) |
+|---|---|---|
+| tool block, 84 schemas | 8,920 tok (54.4% of 16K) | **9,122 tok (55.7%)** |
+| mean per tool | 106.2 | **108.6** |
+| returns_risk (21 tools) | 2,079 | **2,219** |
+| valuation (26) | 2,400 | **2,546** |
+| technicals (13) | 1,458 | **1,590** |
+| fixed_income (11) | 1,370 | **1,501** |
+| derivatives (13) | 1,921 | **2,054** |
+| held-out under-predictions | 0 of 15 | **15 of 15** (worst 1.067) |
+
+The method reproduces the recorded OLD column **exactly**, which is what makes
+the NEW column comparable rather than a different measurement.
+
+### Why the cost rose — MEASURED, not assumed
+It is **not** vocabulary drift, which was the obvious guess:
+
+- raw JSON of all 84 schemas: **8,961** tokens old vs **8,959** new — identical.
+- the three costliest schema bodies (`binomial_price` 164, `black_scholes` 163,
+  `contract_payoff` 150) tokenize to the **same** counts under both.
+- wrapper + one tool over bare: **145** tokens old, **266** new.
+- chat template: **2,630** chars old, **7,756** new.
+
+The entire +202 is Qwen3.5's **longer tool-calling preamble in the template**.
+That is why every family rose by a near-constant ~130–146 tokens regardless of
+how many tools it holds, and why the per-tool mean barely moved. Recording the
+mechanism matters: a future tool addition changes the per-tool part, a future
+template change changes the constant part, and they need different responses.
+
+### A second silent-skip, found by testing the fix
+While verifying that the corrected suites SKIP rather than silently pass when the
+shipped files are absent, I hid the *old* files and re-ran everything. MEASURED:
+`test_phase4_harness.py` printed **709 passed, 0 failed** instead of 711 — two
+assertions gone, **no skip line, and the runner still reporting `SKIPPED: 0`**.
+Cause: `if os.path.exists(_tokcfg):` with no `else`, plus a bare
+`except ImportError: pass`. Both now announce themselves. This is D-0062's class
+for the third time; the pattern is always *a conditional block whose absence is
+indistinguishable from success*.
+
+### The `2,552` figure: stale for TWO independent reasons
+D-0026 recorded *"mean subset 2,552 tokens (15.6% of 16K), worst 4,479"*. None of
+four plausible bases reproduced it with today's code, so rather than quietly
+replace it I checked out the D-0026-era selector (`20f124a`) and ran it with its
+own constants: **mean 2,552.3, 15.6%, worst 4,479** — exact, over all 21 eval
+rows. So the figure was *correct when recorded* and is now stale because **(a)**
+the constants came from the wrong model's tokenizer and **(b)** the router's
+keyword lists grew when R18 was closed (`1bd2ff3`), so it selects more families
+per query. Today's equivalent, MEASURED: **3,114 tokens (19.0%)**.
+
+Attributing the whole drift to the tokenizer would have been a plausible,
+tidy, and **wrong** explanation.
+
+### The fix
+1. `MEASURED_FAMILY_TOKENS` / `MEASURED_ALL_TOKENS` corrected to the shipped
+   model's measured values, each annotated with its previous value and tool count.
+2. `test_selector.py` and `test_tools.py` now read `/tmp/q35_tok.json` +
+   `/tmp/q35_tokcfg.json`. **The old files are deliberately NOT a fallback** — a
+   fallback would restore exactly the silent pass this defect came from.
+3. Two new assertions: the worst-case actual/estimate **margin** is reported
+   (a count of under-predictions cannot show a budget drifting toward the line),
+   and `MEASURED_ALL_TOKENS` must **equal the freshly rendered cost** — that one
+   fails by 202 under the old constant.
+4. `test_tools.py`'s *"generation prompt appended"* assertion corrected: the old
+   template ended `<|im_start|>assistant\n`, the shipped one ends
+   `<|im_start|>assistant\n<think>\n`. Repointing the path without re-checking the
+   expectation would have flipped this from true to false — and "fixing" it by
+   loosening it would have erased the very fact that explains D-0085.
+5. Explicit `SKIP` lines naming how many assertions did not run, in three places.
+6. Mutation anchors updated (`2079`→`2219`, `8920`→`9122`) — the old anchors no
+   longer matched any line, and **a mutant that cannot be applied is reported as
+   killed**. Plus a new mutant, *"budget reverted to the wrong model's
+   calibration"*, that reproduces this exact historical defect.
+
+### Verification
+- **Revert test:** restoring the six old constants fails **4 assertions**,
+  including the under-prediction guard that was green for three weeks. Source
+  restored to md5 `35705e179916f3234665f039c655908a`.
+- **Mutation battery:** 21 seeded, **21 killed, 0 survived**, `source restored
+  intact: True` — including the new revert mutant.
+- **Pre-flight anchor check:** all 21 anchors unique and non-no-op before running
+  (the D-0087 no-op-mutant lesson, applied as a standing pre-flight).
+- **Full regression: 3,337 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3
+  new, fully accounted for. Skip behaviour verified in **both** directions.
+
+### Standing lessons
+1. **A guard must point at evidence it did not supply.** Estimate-vs-actual is
+   worthless when both sides read the same wrong reference.
+2. **Correcting the instance is not correcting the class.** D-0087 fixed the
+   token ids; the same file had mis-calibrated a completely different subsystem.
+   *Always sweep for the class.*
+3. **When a recorded number no longer reproduces, find out why before replacing
+   it.** Here it had two causes, and the plausible single-cause story was wrong.
+4. **Re-pointing a test at new evidence requires re-checking its expectation**,
+   not just its path.
+5. **A conditional test block with no `else` is a silent skip.** Third occurrence.
+6. **Mutation anchors are code that rots.** Correcting a constant silently
+   disarms every mutant that quoted it.
+
+**Trade-off:** the tool budget is now ~2 % more conservative, costing a little
+context that was never really free.
+**Reversal:** re-measure against whatever model actually ships and update both
+the constants and the two `/tmp/q35_*` paths together.
