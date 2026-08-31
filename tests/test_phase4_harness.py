@@ -4571,6 +4571,114 @@ check_true("it does not import or touch PROJECT_STATE.json",
                "modify PROJECT_STATE.json", ""),
            "(A) phase_4/measurements_recorded must stay None")
 
+
+# ===========================================================================
+# D-0089: TWO GRADER DEFECTS FOUND BY GRADING A REAL MODEL REPLY
+#
+# These assertions PIN DEFECTS THAT ARE STILL PRESENT. They assert the CURRENT,
+# WRONG behaviour, each with an explicit note saying so, for one reason: fixing
+# a grader changes what D-0081's "37 graded cases, verdict FAIL" means, so the
+# fix is a separately-approved decision, not a repair to slip in here. Until
+# then the defect must be VISIBLE and REGRESSION-LOCKED rather than remembered.
+#
+# When either is fixed, the corresponding assertion MUST be inverted in the same
+# commit. A pinned-defect assertion that outlives its defect is a test that
+# forbids the fix.
+#
+# HOW THEY WERE FOUND. The user ran the forced-closed-<think> prefill on
+# 2026-08-31; all three previously-silent cases answered. I graded the three
+# replies with grade_rag_case and got MODEL_FAILURE: 2. Both failures were the
+# grader's. See D-0089.
+# ===========================================================================
+section("D-0089: grader defects, pinned as present")
+
+# ---- DEFECT 1: the RAG prompt renders no units, the grader requires them ----
+#
+# MEASURED: the fixture passage carries units_note='million'; the prompt the
+# model receives carries source, accession, date and URL, and no scale word.
+_d89_corpus = RP.load_jsonl(os.path.join(_ROOT, "evals", "rag_corpus_v1.jsonl"))
+_d89_gold = RP.load_jsonl(os.path.join(_ROOT, "evals", "rag_gold_v1.jsonl"))
+_d89_index = RP.build_index(_d89_corpus)
+_d89_by_id = {}
+for _g in _d89_gold:
+    _d89_by_id[_g["id"]] = _g
+
+_d89_row = _d89_by_id["RAG-EN-005"]
+_d89_hits = list(_d89_index.search(_d89_row["query"], top_k=4).hits)
+check_true("the retrieved passage DOES declare its units",
+           any(h.units_note == "million" for h in _d89_hits),
+           "(A) the information exists in the corpus")
+
+_d89_prompt = RP.build_rag_prompt(_d89_row["query"], _d89_hits)
+_SCALE_WORDS_EN = ("million", "billion", "thousand", "trillion")
+check_true("DEFECT PINNED: ...and the prompt then drops them entirely",
+           not any(w in _d89_prompt.lower() for w in _SCALE_WORDS_EN),
+           "(D) D-0089 defect 1, STILL PRESENT: build_rag_prompt renders "
+           "provenance.citation() + text, and citation() has no units field. "
+           "INVERT THIS ASSERTION WHEN FIXED.")
+
+# And the consequence, on the model's own words rather than a constructed
+# string: 394,328 IS the gold figure, from the right document, with the right
+# year distinguished -- and it grades False.
+_d89_reply = ("Based on the evidence provided, Apple's total net sales in "
+              "fiscal 2022 were **394,328**.  This figure is found in "
+              "evidence [1], which corresponds to the filing dated "
+              "2022-10-28.")
+_d89_mag = _d89_row["gold_magnitude"]
+_d89_tol = max(abs(_d89_mag) * 1e-6, 0.5)
+check_true("DEFECT PINNED: a correct answer fails for the missing unit",
+           not L.value_matches(_d89_mag, _d89_reply, _d89_tol, scaled=True),
+           "(D) D-0089 defect 1: MEASURED on the reply the model actually "
+           "produced 2026-08-31. INVERT WHEN FIXED.")
+check_true("...and the SAME answer passes once the unit is present",
+           L.value_matches(_d89_mag,
+                           _d89_reply.replace("**394,328**",
+                                              "**394,328 million**"),
+                           _d89_tol, scaled=True),
+           "(C) which isolates the cause to the missing word, not the model")
+
+# The signature this left in the recorded evidence, asserted so it cannot be
+# re-read as a model weakness: the only answerable RAG row that ever graded OK
+# is the one whose gold figure needs no scale word at all.
+_d89_unscaled = [g["id"] for g in _d89_gold
+                 if g.get("answerable") and g.get("gold_magnitude") is not None
+                 and abs(g["gold_magnitude"]) < 1e6]
+check_true("only ONE answerable row has a gold value needing no scale word",
+           _d89_unscaled == ["RAG-EN-004"],
+           "(A) and it is the only answerable row recorded OK -- the "
+           "signature of defect 1, not of the model")
+
+# ---- DEFECT 2: the Persian arm's comma is in neither separator table -------
+#
+# U+066C ARABIC THOUSANDS SEPARATOR is what the FIXTURE uses.
+# U+060C ARABIC COMMA is what the MODEL emits. Only the first is in the table.
+_D89_U066C = "\u06f3\u06f8\u06f3\u066c\u06f2\u06f8\u06f5 \u0645\u06cc\u0644\u06cc\u0648\u0646"
+_D89_U060C = "\u06f3\u06f8\u06f3\u060c\u06f2\u06f8\u06f5 \u0645\u06cc\u0644\u06cc\u0648\u0646"
+
+check("the fixture's separator U+066C parses as one magnitude",
+      L.extract_magnitudes(_D89_U066C)[0], 383285000000.0, 1.0,
+      "(A) 383,285 million, correct")
+check_true("DEFECT PINNED: the model's separator U+060C splits the number",
+           len(L.extract_magnitudes(_D89_U060C)) == 2,
+           "(D) D-0089 defect 2, STILL PRESENT: U+060C is in neither "
+           "_THOUSANDS_SEPARATORS nor _DECIMAL_SEPARATORS. INVERT WHEN FIXED.")
+check_true("...and the scale word attaches to the WRONG fragment",
+           L.extract_magnitudes(_D89_U060C)[1] == 285000000.0,
+           "(D) worse than losing the number: 285,000,000 is manufactured. "
+           "A magnitude that was never written is worse than none.")
+check_true("U+060C is absent from BOTH separator tables",
+           "\u060c" not in L._THOUSANDS_SEPARATORS
+           and "\u060c" not in L._DECIMAL_SEPARATORS,
+           "(A) naming the cause, so a fix has one place to go")
+# The suite ALREADY knew this character -- for mask_years, which handles it
+# correctly. Asserted against mask_years' real behaviour rather than against
+# this file's own source text, so it states a capability, not a string match.
+check("mask_years DOES handle U+060C, so the knowledge existed",
+      L.mask_years("\u062f\u0631 \u0633\u0627\u0644 1402\u060c "
+                   "\u0633\u0648\u062f").count("1402"), 0, 0,
+      "(D) the year was masked, so U+060C was parsed there -- taught to one "
+      "function and never to the numeric path")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

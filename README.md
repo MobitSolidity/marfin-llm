@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0088). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0089). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -35,7 +35,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,337 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,347 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -254,7 +254,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,337 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,347 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -533,11 +533,22 @@ is sufficient, and none is known to be.**
 on this evidence produce no answers for cases of this kind — the script's own
 reading calls it *evidence against* spending those hours. Q8 option (b), “accept
 the speed and lean on RAG”, is close to refuted: under determinism the rag arm
-cannot emit an answer at all. The untested candidate mitigation is to force the
+cannot emit an answer at all. The candidate mitigation was to force the
 block closed by **prefilling the assistant turn** with `<think>\n\n</think>\n\n`,
 since `/think` and `/nothink` are documented not to work on Qwen3.5 and the
 shipped `chat_template` contains no `enable_thinking` flag. That is one
-generation, not hours. **Nothing has been launched.** See R35.
+generation, not hours. See R35.
+
+> **SUPERSEDED 2026-08-31 by D-0089.** Two claims in the paragraph above are
+> no longer true and are corrected rather than deleted. The mitigation is no
+> longer *untested*: it was run on the target machine and **all 3 cases
+> answered at a 512-token budget**, using 14 % of it, with 0 re-opened think
+> blocks. And “Nothing has been launched” no longer holds — the user launched
+> it. Row 7's price falls with it, from ~10.4 h to **~22–32 min
+> [ESTIMATED]**, so “evidence against spending those hours” is also void:
+> the hours are no longer the cost. Q8 option (b) is back in contention. What
+> the run did NOT settle is whether the answers are *correct* — and grading
+> them exposed two defects in the grader itself. See D-0089.
 
 **And the run refuted my own cost basis, for the third time — this time
 upward.** `MEASURED_DECODE_TPS = 3.32`, installed hours earlier, projected 46
@@ -805,8 +816,11 @@ survivors), found while fixing a silent *wrong answer*. **R39, third instance.**
 5. **Leave the wrong record visible** with a pointer to its correction. Deleting
    it destroys the evidence of how it came to be believed.
 
-**Status: the option-A run has still NOT been launched.**
-`phase_4/measurements_recorded` is `None`.
+**Status: the option-A run HAS now been run by the user (2026-08-31) and
+the prefill WORKED — see D-0089 below. This line previously read "has still
+NOT been launched"; it is corrected rather than deleted.**
+`phase_4/measurements_recorded` is still `None`: the run was a DIAGNOSTIC,
+no threshold was evaluated, and no measurement was recorded.
 
 ### D-0088: the sweep after D-0087 found a *live* defect, not stale prose
 
@@ -896,7 +910,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,337
+unique and non-no-op *before* the battery ran. Full regression: **3,347
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -904,6 +918,100 @@ skip behaviour verified in both directions.
 class. D-0087 fixed the token ids; the same borrowed file had quietly
 mis-calibrated an unrelated subsystem, and only a deliberate sweep found it. See
 D-0088, R41, R42.
+
+
+### D-0089: the prefill works — and grading its output found two grader defects
+
+On 2026-08-31 the forced-closed-`<think>` prefill was run on the target machine
+against the shipped `Qwen3.5-4B-Q5_K_M.gguf`. Two things came out of it, and the
+second matters more than the first.
+
+**The technique works. MEASURED.** The tokenization gate passed, *discovering*
+`<think>`=248068 / `</think>`=248069 rather than asserting them — the same four
+ids the previous run was wrongly refused for (D-0087). All three cases that had
+never produced a visible answer at 512, 2048 or 3072 tokens answered at 512:
+
+| case | tokens | seconds | chars |
+|---|---|---|---|
+| RAG-EN-005 | 56 | 25.1 | 177 |
+| RAG-FA-002 | 108 | 31.0 | 281 |
+| RAG-ABST-002 | 57 | 20.6 | 228 |
+
+`re-opened think: 0 of 3`. `budget-bound: 0 of 3`. The replies used **14 %** of
+the budget. D-0085's diagnosis — that the harness omitted the `<think>\n` the
+shipped template appends, leaving the model free to open a block it never closed
+— is confirmed by its cure.
+
+**Item 7 re-priced.** The affine model `seconds = 34.1 + n_tokens/4.47` was
+fitted to runs where every generation spent its *whole* budget inside an
+unterminated block, so `n_tokens` meant *the budget*. Prefilled replies finish,
+so `n_tokens` becomes the answer's length. MEASURED: the old model over-predicts
+this run by **5.81×**. Re-fitted on the three points: `14.0 + n_tokens/6.37`
+(residuals +2.3 / 0.0 / −2.4 s). For 52 cases that is **~22–32 minutes
+[ESTIMATED]** against the recorded **10.4 h** — a ~28× reduction. The old
+figures reproduce exactly (10.42 / 7.11 h), so the comparison is arithmetic.
+Three assumptions are *not* measured and are listed in `item7_cost`; any of them
+being false moves the number **up**.
+
+**Then I graded the three replies with the project's own grader, and it returned
+`MODEL_FAILURE: 2`. Both failures are the grader's.**
+
+*Defect 1 — the prompt withholds the units, then the grader demands them.*
+RAG-EN-005 answered `total net sales in fiscal 2022 were **394,328**` — the
+exact gold figure, right document, right year distinguished from the 2023
+passage sitting beside it in the same prompt. `value_ok=False`. The gold
+magnitude is `394328000000.0` because the filing states millions; the corpus
+passage carries `units_note='million'`; but `build_rag_prompt()` renders
+`provenance.citation()` + `text`, and `citation()` emits source, accession, date
+and URL — never the units. MEASURED: no scale word appears anywhere in the
+prompt, for **7 of 7** answerable RAG rows. The same reply with `million`
+inserted grades `True`.
+
+This explains a result that has stood since the first run: in
+`evidence/phase4_merged.json` the **only** answerable RAG case ever graded OK is
+`RAG-EN-004` — the CPI index value, `308.417`, the one answerable row whose gold
+figure needs no scale word. That signature sat in the evidence for two weeks and
+was read as a model weakness.
+
+*Defect 2 — the Persian arm's own comma is in neither separator table.*
+`RAG-FA-001` answered the correct figure in Persian and was graded
+`MODEL_FAILURE`. `_THOUSANDS_SEPARATORS` contains **U+066C** ARABIC THOUSANDS
+SEPARATOR — what the *fixture* uses. The *model* writes **U+060C** ARABIC COMMA,
+which is in neither table:
+
+```
+extract_magnitudes('۳۸۳٬۲۸۵ میلیون')   -> [383285000000.0]      U+066C, fixture
+extract_magnitudes('۳۸۳،۲۸۵ میلیون')   -> [383.0, 285000000.0]  U+060C, model
+```
+
+Worse than losing the number: the scale word attached to the *second* fragment,
+manufacturing a 285,000,000 that was never written. `src/rag/citations`
+shares the blind spot. And the suite already *knew* this character — a comment
+at `test_phase4_harness.py:3506` says *"U+060C is the comma the Persian arm
+actually emits"* — for `mask_years`. Knowledge in one function is not knowledge
+in the module.
+
+**Why neither was caught, and what it costs.** Both hide in the same place: the
+fixtures and the graders were written by the same hand on the same day, so they
+agree with *each other* rather than with the model. Every test of
+`extract_magnitudes` feeds it U+066C; every test of `value_matches(scaled=True)`
+feeds it a string containing `million`. **No test ever fed either function a
+string a model produced.** This is D-0088's lesson in a new subsystem and its
+second instance — *two artefacts that agree with each other are not a
+verification* (R43). R41 was written for exactly this class and did not prevent
+it, because R41 was scoped to token budgets.
+
+**Nothing was fixed.** Both defects are recorded, measured, and pinned by **10
+new assertions that assert the wrong behaviour on purpose**, each carrying
+`INVERT THIS ASSERTION WHEN FIXED`. Fixing a grader changes what D-0081's "37
+graded cases, verdict FAIL" means, so it is a separately-approved decision, not
+a repair to slip in. R44 records the sharper version of the risk: the re-run is
+now cheap enough to be routine, which is exactly when an unfixed grader does the
+most damage — 52 false failures that would each look like the model's fault.
+
+**One operational lesson:** the diagnostic prints `text.strip()[:200]` and the
+run did not pass `--out`, so two of the three full replies are lost beyond 200
+characters and their grades are PROVISIONAL. Use `--out` next time.
 
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
@@ -1212,7 +1320,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,337 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,347 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -1423,18 +1531,35 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
   fact: at 3072 tokens the rag cases produced **no visible answer at all**,
   because the model never finishes thinking (D-0085, R35). An arm that cannot
   emit an answer cannot be leaned on. Row 7 of the work plan was the intended
-  route to answering Q8; on current evidence it would spend ~10.4 h reproducing
-  that same outcome, so the **forced-closed-`<think>` test comes first**. That
-  test now exists — `scripts/diagnose_forced_answer.py`, built and mutation-tested
-  on 2026-08-31 (D-0086), 3 generations at 512 tokens, ~7 min ESTIMATED, **not yet
-  run**. The user's first attempt was **refused by the tool's own validity gate**,
-  which turned out to be comparing against another model's token ids; that is
-  fixed (D-0087) and the run is again awaiting approval. Two things did change in
-  Q8's favour meanwhile: the prefill is now known to be **byte-identical to
-  Qwen3.5's official `enable_thinking=false` rendering**, and D-0085's
-  never-closing `<think>` block is now **explained** — this model's own template
-  opens one by default and the harness's prompt omitted it. Until the test
-  reports, Q8 still has no new *measured* evidence either way. See R35, R38, R40.
+  route to answering Q8; so the **forced-closed-`<think>` test came first**
+  (`scripts/diagnose_forced_answer.py`, D-0086). The user's first attempt was
+  **refused by the tool's own validity gate**, which turned out to be comparing
+  against another model's token ids; that was fixed in D-0087.
+
+  **UPDATED 2026-08-31 (D-0089): the test HAS now been run, and it worked.** The
+  gate passed, *discovering* the ids instead of asserting them. All 3 rag cases
+  that had never produced a visible answer answered at a **512**-token budget
+  (56 / 108 / 57 tokens, 25.1 / 31.0 / 20.6 s), using 14 % of the budget, with
+  **0** re-opened think blocks. So the sentence above — "an arm that cannot emit
+  an answer cannot be leaned on" — no longer describes the configuration
+  available: **option (b) is back in contention**, and the "~10.4 h" that made
+  row 7 look prohibitive re-prices to **~22–32 min [ESTIMATED]** because
+  prefilled replies finish instead of spending the whole budget. It is corrected
+  here rather than deleted.
+
+  Two things had already changed in Q8's favour: the prefill is
+  **byte-identical to Qwen3.5's official `enable_thinking=false` rendering**, and
+  D-0085's never-closing `<think>` block is now **explained** — this model's own
+  template opens one by default and the harness's prompt omitted it. Both are now
+  confirmed by the cure working.
+
+  **But Q8 still cannot be decided**, for a reason the run itself produced:
+  grading those 3 replies exposed **two defects in the grader** (D-0089a/b) —
+  the RAG prompt withholds the units the grader then demands, and the Persian
+  arm's own comma (U+060C) is in neither separator table. Correct answers were
+  being recorded as MODEL_FAILURE. Until those are fixed, "lean on RAG" cannot
+  be evaluated on grading evidence, because the grading evidence is wrong.
+  See R35, R38, R40, R43, R44.
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
   recall-first. MEASURED (re-measured 2026-08-31, D-0088) — mean subset **3,114
   tokens (19.0% of 16K)** over the 21 eval rows versus **9,122** for all 84
@@ -1534,7 +1659,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,337 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,347 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1583,7 +1708,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,337-assertion base is trustworthy.
+3,347-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

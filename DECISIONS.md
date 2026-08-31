@@ -3731,3 +3731,174 @@ tidy, and **wrong** explanation.
 context that was never really free.
 **Reversal:** re-measure against whatever model actually ships and update both
 the constants and the two `/tmp/q35_*` paths together.
+
+## D-0089
+
+**Date:** 2026-08-31
+**Status:** ACCEPTED
+**Context:** Request 51, option A. The forced-closed-`<think>` prefill was run on
+the user's i5-12400 against `C:\models\Qwen3.5-4B-Q5_K_M.gguf`, after D-0087
+removed the hardcoded token ids that had made the previous attempt refuse.
+
+### THE TECHNIQUE WORKS. MEASURED.
+
+The tokenization gate PASSED and reported what it discovered rather than what it
+expected:
+
+    prefill tok: OK -- '<think>'=248068, '</think>'=248069, both round-tripped;
+                 prefill ids=[248068, 271, 248069, 271]
+
+Those are the ids D-0087 predicted from the shipped model's own
+`tokenizer.json`, and they are the same four ids the previous run was REFUSED
+for producing. The gate's logic was always right; only its constant was
+borrowed. That is now settled by an independent path: the constant is gone and
+the run passed.
+
+All three cases that had NEVER produced a visible answer -- at 512, 2048 or 3072
+tokens, across two sessions -- answered at 512:
+
+| case | tokens | seconds | chars |
+|---|---|---|---|
+| RAG-EN-005 | 56 | 25.1 | 177 |
+| RAG-FA-002 | 108 | 31.0 | 281 |
+| RAG-ABST-002 | 57 | 20.6 | 228 |
+
+`re-opened think: 0 of 3`. `budget-bound: 0 of 3`. The replies used 14 % of the
+budget they were given. D-0085's diagnosis -- that the harness's
+`chatml_prompt()` omitted the `<think>\n` the shipped template appends, leaving
+the model free to open a block it never closed -- is confirmed by its cure.
+
+### WHAT THE RUN COST, AND WHAT THAT DOES TO ITEM 7
+
+The affine model `seconds = 34.1 + n_tokens/4.47` was fitted to runs in which
+every generation spent its ENTIRE budget inside an unterminated `<think>` block.
+`n_tokens` there means *the budget*, because the budget was always consumed.
+With the prefill, replies FINISH, so `n_tokens` becomes the answer's length and
+the old formula stops describing the run. MEASURED: it over-predicts this run by
+**5.81x** (148.6 s predicted per generation, 25.6 s actual).
+
+Re-fitted to the three prefill points: `seconds = 14.0 + n_tokens/6.37`
+(residuals +2.3 / 0.0 / -2.4 s). THREE POINTS, with the slope carried by a
+51-token spread -- the intercept is the trustworthy part.
+
+Item 7 re-priced, ESTIMATED from that MEASURED fit, 52 cases:
+
+| basis | per generation | 52 cases |
+|---|---|---|
+| OLD: 3072 budget, budget spent | 721.3 s | **10.42 h** (the recorded price) |
+| OLD: 2048 budget, budget spent | 492.3 s | 7.11 h |
+| NEW: prefill, MEASURED mean | 25.6 s | **0.37 h** |
+| NEW: prefill, worst of the three x1.19 slow-arm spread | -- | **0.53 h** |
+
+**About 22 to 32 minutes, against 10.4 hours: a ~28x reduction.** The old
+figures reproduce exactly from the recorded constants (10.42 / 7.11), so the
+comparison is arithmetic, not rhetoric.
+
+ASSUMPTIONS, stated so they can be falsified: that the other 49 cases answer as
+briefly as these 3 (NOT MEASURED -- these are short numeric RAG answers; the
+tools arm emits JSON and the plain arm emits prose); that no case re-opens a
+think block (MEASURED 0 of 3, i.e. on 3 of 52); that 52 is still the right case
+count. Any of these being false moves the estimate UP.
+
+### AND NOW THE PART THAT MATTERS MORE THAN THE SUCCESS
+
+I graded the three replies with the project's own `grade_rag_case`. The tally
+was `MODEL_FAILURE: 2, OK: 1`. Both failures are the GRADER's, not the model's.
+
+**DEFECT 1 -- the RAG prompt withholds the units, then the grader demands them.**
+
+RAG-EN-005 answered `total net sales in fiscal 2022 were **394,328**`, citing
+evidence [1]. 394,328 is the gold figure to the digit, from the right document,
+with the right year distinguished from the 2023 passage sitting beside it in the
+same prompt. `value_ok` came back **False**.
+
+Cause, MEASURED. The gold magnitude is `394328000000.0` -- the filing states
+millions. `grade_rag_case` calls `value_matches(..., scaled=True)`, which needs
+a scale WORD next to the number to reach 3.94e11. The corpus fixture carries
+`units_note='million'` on the passage. But `build_rag_prompt()` renders only
+`provenance.citation()` and `passage.text`, and `citation()` emits source,
+accession, date and URL -- **never the units**. MEASURED: the rendered prompt
+for RAG-EN-005 contains no scale word at all (`'million' in prompt -> False`),
+and this holds for **7 of 7** answerable RAG rows.
+
+So the harness asks a question whose evidence declares no units, forbids the
+model to use anything it remembers, and then fails it for not writing a word
+that appears nowhere in its input. MEASURED: the same reply with
+`million` inserted grades `value_ok=True`. The model was penalised for the
+harness's omission.
+
+This also explains a recorded result that has stood since the first run. In
+`evidence/phase4_merged.json`, the ONLY answerable RAG case graded OK is
+RAG-EN-004 -- the CPI index value, `gold_magnitude=308.417`, the one answerable
+row whose gold figure needs **no** scale word. Every row that needed one failed.
+That signature was visible in the evidence for two weeks and read as a model
+weakness.
+
+RAG-EN-002 and RAG-FA-001 produced non-empty output and were graded
+MODEL_FAILURE. RAG-FA-001 said `درآمد خالص کل اپل ... برابر با ۳۸۳،۲۸۵ بوده است`
+-- the correct figure, in Persian, from the Persian passage. Graded a failure.
+
+**DEFECT 2 -- the Persian arm's own comma is in neither separator table.**
+
+RAG-FA-001's figure did not merely fail the scale test; it parsed as
+`[2023.0, 383.0, 285.0]`. The number never survived extraction.
+
+Cause, MEASURED. `_THOUSANDS_SEPARATORS` contains `U+066C` ARABIC THOUSANDS
+SEPARATOR, which is what the CORPUS FIXTURE uses (`۳۸۳٬۲۸۵`). The MODEL writes
+`U+060C` ARABIC COMMA (`۳۸۳،۲۸۵`). `U+060C` is in neither
+`_THOUSANDS_SEPARATORS` nor `_DECIMAL_SEPARATORS`, so it is left in place, the
+regex `[-+]?\d+(?:\.\d+)?` stops at it, and one number becomes two:
+
+    extract_magnitudes('۳۸۳٬۲۸۵ میلیون')  -> [383285000000.0]   U+066C, fixture
+    extract_magnitudes('۳۸۳،۲۸۵ میلیون')  -> [383.0, 285000000.0]  U+060C, model
+
+The 285000000.0 is worse than the split: the scale word attached to the SECOND
+fragment. A wrong magnitude was manufactured, not just lost.
+
+`src/rag/citations.extract_numbers` has the same blind spot
+(`U+060C -> [383.0, 285.0]`). And the suite already KNOWS this character:
+`test_phase4_harness.py:3506` says *"U+060C is the comma the Persian arm
+actually emits"* -- for `mask_years`. The knowledge existed in one function and
+never reached the numeric path.
+
+### WHY NEITHER DEFECT WAS CAUGHT
+
+Both hide in the same place: **the fixtures and the graders were written by the
+same hand on the same day, so they agree with each other rather than with the
+model.** Every test of `extract_magnitudes` feeds it `U+066C`, because that is
+what the fixture author typed. Every test of `value_matches(scaled=True)` feeds
+it a string containing `million`, because the test author knew the rule. No test
+ever fed either function a string produced by the model.
+
+This is D-0088's lesson recurring in a new subsystem, and it is now the second
+time: *two artefacts that agree with each other are not a verification.* There
+the estimate and the "actual" were computed from the same wrong tokenizer; here
+the fixture and the grader share an author's assumptions. The class of defect is
+"both sides of the comparison come from the same source", and R41 was written
+for exactly this and did not prevent it, because R41 was scoped to token
+budgets.
+
+### WHAT WAS AND WAS NOT DONE
+
+NOTHING was fixed in this entry. Both defects are RECORDED, MEASURED and
+reproducible, and the fix is a separate, approved step -- because fixing a
+grader changes what "37 graded cases" and "verdict FAIL" (D-0081) mean, and that
+is a decision, not a repair. `phase_4/measurements_recorded` remains `None`. No
+threshold was evaluated. The three replies were graded by ME, mechanically, as
+diagnosis; that is NOT the human grading of task 5.
+
+The user's full reply texts are LOST beyond 200 characters: the diagnostic
+prints `text.strip()[:200]` and the run did not pass `--out`. RAG-EN-005 (177
+chars) was complete; RAG-FA-002 (281) and RAG-ABST-002 (228) were
+CONSOLE-truncated, so their grades are PROVISIONAL. That is a fourth reason to
+re-run rather than mine this output further, and `--out` must be used next time.
+
+**Decision:** record the prefill as MEASURED-EFFECTIVE; re-price item 7 from
+~10.4 h to ~22-32 min ESTIMATED; freeze both grader defects as blocking findings
+that must be fixed BEFORE any re-run, since a re-run graded by the current
+grader would reproduce the same false failures at 52-case scale.
+
+**Trade-off:** the re-run is now cheap enough to be routine, which is precisely
+when an unfixed grader does the most damage.
+**Reversal:** if the other 49 cases turn out to deliberate at length, the cost
+estimate reverts toward the old one; the two defects stand regardless.
