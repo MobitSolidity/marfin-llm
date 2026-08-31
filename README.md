@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0084). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0085). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -23,7 +23,7 @@ paper/live trading controls.
 | `scripts/run_baseline.py` | Phase 2 baseline harness. **Superseded by `run_phase4.py`; 9 MEASURED defects, never executed.** Kept for the audit trail. |
 | `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
 | `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
-| `scripts/diagnose_zero_tokens.py` | **Cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. **Run once, on 2026-08-31: result INCONCLUSIVE, because a defect in this script graded token counts instead of answers, and a 512-token budget cut every reply off inside `<think>`.** Now judges on the visible answer, prints a READING in **every** mode including `--skip-old` (D-0084), defaults to 3072 tokens, and refuses to start above 20 projected minutes without `--yes` (~46 min with `--skip-old`, ~92 min for the full comparison, at a MEASURED 3.32 tok/s). See D-0082, D-0083, D-0084. |
+| `scripts/diagnose_zero_tokens.py` | **Cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. **Run once, on 2026-08-31: result INCONCLUSIVE, because a defect in this script graded token counts instead of answers, and a 512-token budget cut every reply off inside `<think>`.** Now judges on the visible answer, prints a READING in **every** mode including `--skip-old` (D-0084), and refuses to start above 20 projected minutes without `--yes`. **Run a second time at 3072 tokens on 2026-08-31: all three cases hit the ceiling inside an unterminated `<think>` block with NO visible answer (10,647 / 11,184 / 11,940 chars of reasoning) — a real finding that the model never finishes thinking, and evidence against the full re-run (D-0085).** Cost basis is now affine (34.1 s fixed + tokens/4.47), fitted to the MEASURED 512/2048/3072 budgets, after two flat tok/s figures were each refuted by the next run. See D-0082, D-0083, D-0084, D-0085. |
 | `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
@@ -34,7 +34,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,257 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,265 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -196,8 +196,8 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Chat template + 84 tool schemas | **VERIFIED** by rendering |
 | No execution capability | **VERIFIED** by test |
 | Tool-schema context cost | **MEASURED** — 8,920 tokens = 54.4% of 16K |
-| Decode speed | **MEASURED ~3.32 tok/s** on the fixed harness (six generations of exactly 512 tokens: 3.24–3.39 tok/s, 2026-08-31, i5-12400). This supersedes **~4.03 tok/s** — itself measured, on 2026-08-30, but 17.5 % optimistic against the greedy ChatML harness — which in turn had replaced an **ESTIMATED ~14.7 tok/s** that was **3.6× too optimistic**. Two corrections in two days, both downward: an estimate left in place stops being read as an estimate, and a measurement taken through a defective harness is not a measurement of the model. |
-| Model load time | **MEASURED 2.5 s** (2026-08-31), against the **0.84 s** recorded per invocation in the 2026-08-30 run — understated by ~3×. |
+| Decode speed | **There is no single decode speed — that framing was the defect (D-0085).** MEASURED per-generation means on the i5-12400: **512 tok → 154.1 s (3.32 tok/s)**, **2048 tok → 478.7 s (4.28 tok/s)**, **3072 tok → 729.8 s (4.21 tok/s)**. The effective rate *rises* with the budget because each generation pays a fixed cost (prefill, sampler setup) that does not scale with tokens produced. Two flat figures were recorded as MEASURED and each refuted by the next run — 4.03 tok/s (fitted at 2048) under-predicted the 512-token run; 3.32 tok/s (fitted at 512) over-predicted the 3072-token run by 27 %. Both replaced an **ESTIMATED ~14.7 tok/s** that was 3.6× too optimistic. The cost basis is now affine: **34.1 s fixed + tokens/4.47**, residuals −3.5 % / +2.8 % / −1.2 % across all three MEASURED budgets. Arm-to-arm spread at the 2048 ceiling (MEASURED, 18 generations): rag 4.27, tools 4.03, plain 3.58 tok/s — carried as a 1.19× multiplier, not averaged away. |
+| Model load time | **MEASURED 0.8–2.5 s; the “understated ~3×” claim is WITHDRAWN (D-0085, R37).** Recorded per invocation on 2026-08-30: **0.84 / 0.80 / 0.82 s**. One 512-token run on 2026-08-31 read **2.5 s**; the 3072-token run the same day read **0.8 s**. So 2.5 s was a single outlier, and the claim built on it — that the earlier figure understated load by ~3× — was wrong. A claim asserted from one observation, then contradicted by the next. |
 | Persian generation quality | **GRADED FAIL, BUT THE RUN IS CONFOUNDED** (D-0081 + D-0082). 37 graded: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4; `unsupported_claim_rate` 10.81 % vs max 3 %; fabrication count 8 vs max 0. The defects those answers were generated through (raw-completion prompts to a ChatML model; temperature 0.8 with a random seed) were found on 2026-08-31 and fixed. The FAIL stands as *"this model **with that harness**"*, **not** as a verdict on the model. R10 REOPENED pending a re-run — see R30. |
 | Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 (R18 keyword reachability is CLOSED: 84/84, D-0075) |
 | Dense vector retrieval | **DOES NOT EXIST** — lexical + structured only (D-0030) |
@@ -253,7 +253,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,257 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,265 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -451,10 +451,12 @@ depend on the thing it claims to measure. The 512 default was also foreseeably
 too small — the 2026-08-30 rag arm's truncated cases used ~2031, ~2636 and
 ~2510 reasoning tokens, from data already in this repo.
 
-**Also MEASURED, and both worse than the figures previously carried:** decode
-**3.32 tok/s** (3.24–3.39 across six generations) against the 4.03 tok/s used as
-the cost basis — 17.5 % optimistic — and **load 2.5 s** against the recorded
-0.84 s. Every earlier cost estimate was understated.
+**Two figures MEASURED here were themselves refuted the same day — see D-0085
+below.** This run read decode at **3.32 tok/s** and load at **2.5 s**, and both
+were written up as corrections of the previously carried 4.03 tok/s and 0.84 s.
+The 3072-token run that followed measured **4.21 tok/s** and **0.8 s**. The
+sentence originally recorded here — “every earlier cost estimate was
+understated” — was wrong, and is withdrawn rather than softened.
 
 **What was fixed.** The verdict now keys on the **visible answer** plus
 `thinking_truncated`, marks `[AT CEILING]` whenever the budget bound the reply,
@@ -463,9 +465,10 @@ prints the reasoning volume when there is no answer, and reports
 the old-prompt side — where it would have reported the *strongest* evidence for
 the template as "the old prompt also produced output" — and was found by
 dry-running that scenario after fixing the ChatML side. The default budget is
-now 3072, and the script prints its projected cost from the MEASURED 3.32 tok/s
-*before* loading the weights, refusing to start above 20 projected minutes
-without `--yes`.
+now 3072, and the script prints its projected cost *before* loading the weights,
+refusing to start above 20 projected minutes without `--yes`. (That projection
+was based on the flat 3.32 tok/s at the time; it is now the affine fit of
+D-0085.)
 
 **Standing lesson.** Two of my diagnostics have now failed the same way: they
 measured a proxy (`completion_tokens`, `t.strip()`) instead of the property. A
@@ -488,11 +491,81 @@ that printed a table of numbers and no interpretation: the state that made the
 previous run unreadable, reintroduced through a different door. Fixed with four
 `--skip-old` readings, none of which may attribute a cause (with no comparison
 arm, attribution is unavailable), including one that reads an all-ceiling
-outcome as evidence **against** spending 13.4 h on the full re-run. A per-case
+outcome as evidence **against** spending ~10.4 h on the full re-run. A per-case
 line now also states how long the ~15-minute silence will last, so a working run
 is not mistaken for a hang. **All three defects (D-0082, D-0083, D-0084) were
 found by exercising the path about to be used, and none by reading the code.**
 See R34.
+
+### The model never finishes thinking — the 3072-token run (D-0085)
+
+The `--skip-old` diagnostic was run on the i5-12400 at 3072 tokens. It answered a
+different and more important question than the one it was built to ask.
+
+| case | tokens | seconds | reasoning chars | visible answer |
+|---|---|---|---|---|
+| RAG-EN-005 | 3072 (**ceiling**) | 734.6 | 10,647 | **none** |
+| RAG-FA-002 | 3072 (**ceiling**) | 725.8 | 11,184 | **none** |
+| RAG-ABST-002 | 3072 (**ceiling**) | 728.9 | 11,940 | **none** |
+
+**0 visible answers of 3.** Every generation spent its whole budget inside an
+unterminated `<think>` block. Across the three budgets now tested on these same
+cases:
+
+| budget | reasoning characters | answer |
+|---|---|---|
+| 512 | cut off | none |
+| 2048 | 6,094 / 7,908 / 7,532 | none |
+| 3072 | 10,647 / 11,184 / 11,940 | none |
+
+The reasoning grows with whatever budget it is given (~3.5 chars per token) and
+never closes its tag. **This is a property of the model on these prompts, not a
+harness defect** — the harness is VERIFIED to send correct ChatML with greedy
+decoding and a fixed seed, and `strip_thinking()` correctly refuses to present an
+unterminated block as an answer. So the original plan of record, *raise the token
+budget and re-run*, cannot work; and the argument used to choose 3072 (“it
+exceeds the largest observed reasoning block”) was circular, because the largest
+observed block is a function of the budget that produced it. **No budget tested
+is sufficient, and none is known to be.**
+
+**Consequences.** Row 7 of the work plan (~10.4 h at 3072, ~7.1 h at 2048) would
+on this evidence produce no answers for cases of this kind — the script's own
+reading calls it *evidence against* spending those hours. Q8 option (b), “accept
+the speed and lean on RAG”, is close to refuted: under determinism the rag arm
+cannot emit an answer at all. The untested candidate mitigation is to force the
+block closed by **prefilling the assistant turn** with `<think>\n\n</think>\n\n`,
+since `/think` and `/nothink` are documented not to work on Qwen3.5 and the
+shipped `chat_template` contains no `enable_thinking` flag. That is one
+generation, not hours. **Nothing has been launched.** See R35.
+
+**And the run refuted my own cost basis, for the third time — this time
+upward.** `MEASURED_DECODE_TPS = 3.32`, installed hours earlier, projected 46
+minutes; the run took **36.5**. The real effective rate was **~4.21 tok/s**. The
+4.03 tok/s it had replaced was fitted at 2048 tokens and under-predicted the
+512-token run; the 3.32 was fitted at 512 tokens and over-predicted the
+3072-token run by 27 %. Both were honest arithmetic on real measurements, and
+both were wrong in opposite directions, because **a flat tokens-per-second figure
+is the wrong model**: each generation pays a fixed cost that does not scale with
+tokens produced, so a rate measured at one budget mis-predicts every other one,
+systematically. The basis is now affine — 34.1 s fixed + tokens/4.47, residuals
+−3.5 % / +2.8 % / −1.2 % across all three MEASURED budgets. The load-time claim
+(“2.5 s, understated ~3×”) is likewise **withdrawn**: this run read 0.8 s,
+matching the recorded 0.84/0.80/0.82 s, so 2.5 s was an outlier that a claim had
+been built on. See R36 and R37.
+
+**What held.** The projection was labelled an upper bound and behaved as one. All
+three replies open byte-identically, confirming the greedy+seed determinism works
+— and showing the model enters the same verbose “Thinking Process:” scaffold
+even for `RAG-ABST-002`, whose gold answer is `answerable: false`.
+
+**Standing lesson: a test that pins a constant's current value guards nothing.**
+The single assertion protecting the cost basis was
+`"MEASURED_DECODE_TPS = 3.32" in _diag_text`. It would have passed just as
+happily on the already-refuted 4.03, and it made correcting the constant require
+editing its own guard. It is replaced by assertions on the *property*: that the
+shipped `projected_seconds()` reproduces all three MEASURED budgets within 5 %,
+that the fixed overhead is nonzero, and that effective tok/s rises with the
+budget as MEASURED. 9 mutants seeded, **9 killed, 0 survived.**
 
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
@@ -801,7 +874,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,257 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,265 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 983 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -964,14 +1037,18 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
 ### Open questions
 
 - **Q8** — if measured decode is below 9 tok/s: fall back to Qwen3-1.7B, accept
-  slower output and lean on RAG, or re-quantize? **The trigger has MEASURED
-  true, twice and downward: 4.03 tok/s (2026-08-30) and now 3.32 tok/s
-  (2026-08-31, on the fixed greedy ChatML harness).** The decision is still
-  open, and one of its three options is currently undefensible: *"lean on RAG"*
-  rests on a rag arm that scored **zero GOOD answers and 2 unsupported claims**
-  (R29) — evidence which is itself confounded by the harness defects (R30). So
-  the option cannot be chosen on current evidence and cannot be ruled out
-  either. Answering Q8 needs the uncontaminated re-run (table row 7); see R33.
+  slower output and lean on RAG, or re-quantize? **The trigger has MEASURED true
+  at every budget tested — 3.32 tok/s at 512, 4.28 at 2048, 4.21 at 3072 — all
+  far below the floor of 9.** (Earlier versions of this entry read "twice and
+  downward"; that was wrong, and the direction was never the point: no reading
+  has come close to 9.) The decision is still open, but option (b), *"lean on
+  RAG"*, is now **close to refuted** — not on grading evidence but on a harder
+  fact: at 3072 tokens the rag cases produced **no visible answer at all**,
+  because the model never finishes thinking (D-0085, R35). An arm that cannot
+  emit an answer cannot be leaned on. Row 7 of the work plan was the intended
+  route to answering Q8; on current evidence it would spend ~10.4 h reproducing
+  that same outcome, so the **forced-closed-`<think>` test (one generation) comes
+  first**. See R35.
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
   recall-first. MEASURED — mean subset 2,552 tokens (15.6% of 16K) versus 8,920
   for all 84 schemas; recall 24/24 across the eval and held-out sets.
@@ -1063,7 +1140,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,257 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,265 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1112,7 +1189,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,257-assertion base is trustworthy.
+3,265-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

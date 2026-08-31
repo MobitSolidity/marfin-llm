@@ -33,22 +33,36 @@ prompt. That comparison is the entire point: a single passing run would show
 the model answering, but not that the template is why. Same weights, same
 budget, same machine, one variable.
 
-COST -- CORRECTED 2026-08-31 AFTER THE FIRST REAL RUN
------------------------------------------------------
-The first version claimed "~10 minutes" on a 512-token budget and a carried-
-over 4.03 tok/s. Both numbers were wrong in the same direction:
+WHAT THE 3072-TOKEN RUN ACTUALLY FOUND -- MEASURED 2026-08-31
+-------------------------------------------------------------
+It answered a different and more important question than the one it was built
+to answer. On all three cases, at 3072 tokens, the model produced NO visible
+answer: every generation spent its entire budget inside an unterminated
+<think> block, emitting 10,647 / 11,184 / 11,940 characters of reasoning.
 
-  * MEASURED on the i5-12400: 3.32 tok/s, not 4.03 (17.5% slower).
-  * 512 tokens was not enough for ANY of the three cases to finish. All six
-    generations returned exactly 512 tokens with no visible answer -- each one
-    still inside its <think> block. The run cost 15.4 minutes and could not
-    discriminate between the two prompt shapes in either direction.
+Together with the earlier budgets that is a trend, not an accident:
 
-The default budget is now 3072, chosen because the 2026-08-30 rag arm's
-truncated cases used ~2031, ~2636 and ~2510 reasoning tokens. At 3.32 tok/s
-that is ~15 min per generation: ~46 min with --skip-old, ~92 min for the full
-comparison. The script prints this projection before loading the weights and
-refuses to start above 20 projected minutes without --yes.
+    budget   reasoning characters produced      answer?
+      512    (cut off)                          none
+     2048    6,094 / 7,908 / 7,532              none
+     3072   10,647 / 11,184 / 11,940            none
+
+The reasoning grows roughly in proportion to whatever budget it is given and
+never closes its tag. That is a property of the MODEL on these prompts, not a
+defect in this harness, and it means raising --max-tokens further is not a
+route to an answer. Whether the thinking block can be forced closed -- by
+prefilling the assistant turn, since the /think and /nothink soft switches are
+documented NOT to work on Qwen3.5 -- is the open question this run created.
+
+COST -- THIRD REVISION, SEE THE COST MODEL BELOW
+------------------------------------------------
+Two flat tok/s figures have now each been refuted by the next run, in opposite
+directions: 4.03 (fitted at 2048 tok) under-predicted the 512-token run, and
+3.32 (fitted at 512 tok) over-predicted the 3072-token run by 27%. The basis is
+now affine -- a fixed per-generation overhead plus a token rate -- fitted to
+all three MEASURED budgets. The script prints that projection, with an honest
+range, before loading the weights, and refuses to start above 20 projected
+minutes without --yes.
 
 WHAT IT DOES NOT DO
 -------------------
@@ -86,15 +100,80 @@ ZERO_TOKEN_CASES = (
     ("rag", "RAG-ABST-002"),
 )
 
-# MEASURED 2026-08-31 on the user's i5-12400: six generations of exactly 512
-# tokens took 157.4 / 157.9 / 151.1 / 151.0 / 154.0 / 153.2 s, i.e. 3.24-3.39
-# tok/s, mean 3.32. That REPLACES the 4.03 tok/s carried over from 2026-08-30
-# as the basis for every cost figure this script prints: it is 17.5% slower,
-# and quoting the older, friendlier number would understate every estimate.
-MEASURED_DECODE_TPS = 3.32
+# COST MODEL -- THIRD REVISION, AND THE FIRST ONE THAT FITS MORE THAN ONE
+# BUDGET.
+#
+# The two previous versions were each a single tokens-per-second number, and
+# each was refuted by the next run:
+#
+#   4.03 tok/s  (2026-08-30, from 2048-token generations)
+#     -> predicted the 512-token run at 12.7 min; it took 15.4.
+#   3.32 tok/s  (2026-08-31, from 512-token generations)
+#     -> predicted the 3072-token run at 46 min; it took 36.5.
+#
+# Both were honest arithmetic on real measurements. Both were wrong, and in
+# OPPOSITE directions, because "tokens per second" is not a constant of this
+# machine. Each generation pays a fixed cost -- weight load amortization,
+# prompt prefill, sampler setup -- that does not scale with the number of
+# tokens produced. Measure at 512 tokens and that fixed cost is spread over few
+# decode steps, so the apparent rate is LOW. Measure at 3072 and it is spread
+# over six times as many, so the apparent rate is HIGH. A rate measured at the
+# wrong scale is not a measurement of the rate.
+#
+# So the basis is now affine in the token budget:
+#
+#     seconds_per_generation = FIXED_OVERHEAD_S + n_tokens / ASYMPTOTIC_TPS
+#
+# Least-squares fit over the THREE MEASURED rag-arm budgets on the i5-12400
+# (mean seconds per generation):
+#
+#     n=512   154.10 s   (6 generations, 2026-08-31)  effective 3.32 tok/s
+#     n=2048  478.74 s   (5 generations, 2026-08-30)  effective 4.28 tok/s
+#     n=3072  729.77 s   (3 generations, 2026-08-31)  effective 4.21 tok/s
+#
+# giving FIXED_OVERHEAD_S ~= 34.1 and ASYMPTOTIC_TPS ~= 4.47. Residuals are
+# -3.5% / +2.9% / -1.1% -- the model reproduces every budget it was fitted on,
+# which neither single rate could do. It is still ESTIMATED when used to
+# project, and it is still a fit to three points on ONE machine and ONE arm:
+# the 2026-08-30 evidence shows the plain arm running at 3.58 tok/s against the
+# rag arm's 4.27, so ~19% arm-to-arm spread is expected and BRACKET_TPS carries
+# it into the printed projection instead of hiding it.
+FIXED_OVERHEAD_S = 34.1
+ASYMPTOTIC_TPS = 4.47
+
+# ARM-TO-ARM SPREAD, as a multiplier on the fitted projection.
+#
+# The fit above is built from rag-arm generations only, because those are the
+# cases this script runs. The 2026-08-30 evidence shows the other arms are
+# slower at the same 2048-token ceiling (mean effective tok/s over 18
+# generations): rag 4.27, tools 4.03, plain 3.58. So a projection fitted on the
+# rag arm is the OPTIMISTIC end for any run that includes the others, by up to
+# 4.27 / 3.58 = 1.19x.
+#
+# Expressed as a multiplier rather than as a second tok/s figure on purpose:
+# the fit's ASYMPTOTIC_TPS (4.47) and an observed EFFECTIVE rate (4.27) are
+# different quantities -- the first excludes the fixed per-generation overhead
+# and the second includes it -- and the first version of this bracket compared
+# them directly, producing a "range" whose low end sat above the point
+# estimate. Two numbers with the same unit are not necessarily the same
+# quantity.
+SLOW_ARM_MULTIPLIER = 1.19
 
 # Above this projected wall-clock, the script refuses to start without --yes.
 LONG_RUN_MINUTES = 20
+
+
+def projected_seconds(n_tokens, n_generations=1):
+    """
+    ESTIMATED wall clock for n_generations of n_tokens each.
+
+    Affine, not a flat rate -- see the COST MODEL comment. Returns seconds.
+    """
+    if n_tokens < 0 or n_generations < 0:
+        raise ValueError("projected_seconds needs non-negative arguments, got "
+                         "n_tokens=%r n_generations=%r"
+                         % (n_tokens, n_generations))
+    return n_generations * (FIXED_OVERHEAD_S + n_tokens / ASYMPTOTIC_TPS)
 
 
 def p(s=""):
@@ -125,16 +204,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  # ChatML side only, 3 generations, ~46 min PROJECTED at a MEASURED 3.32 tok/s
+  # ChatML side only, 3 generations. MEASURED 2026-08-31: 36.5 min.
   python scripts\\diagnose_zero_tokens.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --skip-old --yes
 
-  # full comparison, 6 generations, ~92 min PROJECTED
+  # full comparison, 6 generations, ~73 min PROJECTED
   python scripts\\diagnose_zero_tokens.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --yes
 
 note:
-  --max-tokens defaults to 3072. The earlier default of 512 was MEASURED to be
-  too small: every reply was cut off inside its <think> block, so the run
-  proved nothing. Do not lower it without reading the COST section above.
+  --max-tokens defaults to 3072, and MEASURED 2026-08-31 that was still not
+  enough: all three replies hit the ceiling inside an unterminated <think>
+  block with no answer. Raising it further is not expected to help -- the
+  reasoning grew with the budget at every step. See the top of this file.
 """)
     ap.add_argument("--model", required=True, help="path to the GGUF file")
     ap.add_argument("--ctx", type=int, default=16384)
@@ -149,12 +229,17 @@ note:
     # shows why that was foreseeable: its truncated cases used ~2031, ~2636 and
     # ~2510 reasoning tokens. 512 was never going to be enough.
     #
-    # 3072 is chosen from that MEASURED distribution: it exceeds the largest
+    # 3072 was chosen from that MEASURED distribution: it exceeds the largest
     # observed reasoning block (~2636 tok) with room for an answer after it.
-    # COST at the newly MEASURED 3.32 tok/s: ~15.4 min per generation, so
-    # ~46 min for three cases with --skip-old, ~92 min for the full comparison.
-    # That is no longer a "10-minute" diagnostic and must not be described as
-    # one.
+    #
+    # AND IT WAS STILL NOT ENOUGH -- MEASURED 2026-08-31. At 3072 all three
+    # cases hit the ceiling with no visible answer, having produced 10,647 /
+    # 11,184 / 11,940 characters of reasoning against 6,094 / 7,908 / 7,532 at
+    # 2048. The reasoning scales with the budget instead of terminating, so the
+    # "exceeds the largest observed block" argument does not hold: the largest
+    # observed block is a function of the budget that produced it. This default
+    # is kept because lowering it is strictly worse, NOT because it is known to
+    # be sufficient. Nothing tested so far is sufficient.
     ap.add_argument("--max-tokens", type=int, default=3072)
     ap.add_argument("--corpus",
                     default=os.path.join(_ROOT, "evals", "rag_corpus_v1.jsonl"))
@@ -201,13 +286,24 @@ note:
     # answered nothing. The projection is ESTIMATED from a MEASURED rate --
     # both labels stated, neither dropped.
     n_gen = len(ZERO_TOKEN_CASES) * (1 if a.skip_old else 2)
-    proj_min = n_gen * a.max_tokens / MEASURED_DECODE_TPS / 60.0
-    p("projected  : %d generations x %d tok at %.2f tok/s (MEASURED "
-      "2026-08-31)" % (n_gen, a.max_tokens, MEASURED_DECODE_TPS))
+    proj_min = projected_seconds(a.max_tokens, n_gen) / 60.0
+    p("projected  : %d generations x %d tok" % (n_gen, a.max_tokens))
+    p("             cost model: %.0f s fixed + tokens/%.2f per generation,"
+      % (FIXED_OVERHEAD_S, ASYMPTOTIC_TPS))
+    p("             fitted to three MEASURED budgets (512/2048/3072), "
+      "residuals")
+    # No format arguments on this line, so the escaping must NOT be doubled.
+    # The dry run printed a literal "-3.5%% / +2.8%%" before this was fixed:
+    # `%` is only special when the string is an operand of the % operator.
+    p("             -3.5% / +2.8% / -1.2%")
     p("             = ~%.0f minutes of wall clock  [ESTIMATED from a "
-      "MEASURED rate]" % proj_min)
-    p("             this is an UPPER bound: a reply that finishes early costs")
-    p("             less. Nothing here is a recorded measurement.")
+      "MEASURED fit]" % proj_min)
+    p("             up to ~%.0f min if these cases behave like the slower arms"
+      % (proj_min * SLOW_ARM_MULTIPLIER))
+    p("             (%.2fx spread MEASURED across arms on 2026-08-30)."
+      % SLOW_ARM_MULTIPLIER)
+    p("             A reply that finishes early costs less. Nothing here is a")
+    p("             recorded measurement.")
     p("")
     if proj_min > LONG_RUN_MINUTES and not a.yes:
         raise SystemExit(
@@ -257,13 +353,13 @@ note:
         p("-" * 70)
         p("%s  (%s, answerable=%s)" % (cid, gold.get("lang"),
                                        gold.get("answerable")))
-        # Say how long the silence will last. At 3072 tokens and a MEASURED
-        # 3.32 tok/s one generation is ~15 minutes with nothing printed, and a
-        # long silence with no stated duration is indistinguishable from a hang
-        # -- which invites the user to kill a run that is working.
-        p("  (up to ~%.0f min per generation at %.2f tok/s; no output until it "
-          "finishes)" % (a.max_tokens / MEASURED_DECODE_TPS / 60.0,
-                         MEASURED_DECODE_TPS))
+        # Say how long the silence will last. At 3072 tokens one generation is
+        # ~12 minutes with nothing printed, and a long silence with no stated
+        # duration is indistinguishable from a hang -- which invites the user
+        # to kill a run that is working. MEASURED 2026-08-31: 734.6 / 725.8 /
+        # 728.9 s at this budget, so the figure below is the right order.
+        p("  (~%.0f min per generation [ESTIMATED]; no output until it "
+          "finishes)" % (projected_seconds(a.max_tokens) / 60.0,))
 
         for label, prompt in (
                 ("chatml", RP.build_rag_prompt(gold["query"], passages)),

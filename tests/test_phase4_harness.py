@@ -1827,11 +1827,68 @@ check_true("...and explicitly refuses to attribute a cause",
 # user 15.4 minutes for a result that proved nothing.
 _diag_mod_path = _diag_src
 _diag_text = open(_diag_mod_path, encoding="utf-8").read()
-check_true("the diagnostic's cost basis is the newly MEASURED 3.32 tok/s",
-           "MEASURED_DECODE_TPS = 3.32" in _diag_text,
-           "(D) the 4.03 tok/s carried over from 2026-08-30 is 17.5% "
-           "optimistic against the machine that will run this. Quoting the "
-           "friendlier number understates every estimate")
+
+# THE COST BASIS IS NOW TESTED AGAINST THE MEASUREMENTS, NOT AGAINST A LITERAL.
+#
+# The previous assertion here read `"MEASURED_DECODE_TPS = 3.32" in _diag_text`.
+# That was the wrong shape of test twice over. It pinned a specific number
+# rather than the property that number was supposed to have, so it would have
+# passed just as happily on 4.03 (already refuted when it was written) as on
+# 3.32 (refuted hours later by the 3072-token run) -- and it made correcting
+# the constant require editing the test that was supposed to be guarding it.
+#
+# A flat tokens-per-second figure cannot be right at more than one budget,
+# because each generation pays a fixed overhead that does not scale with the
+# token count. MEASURED per-generation means on the i5-12400:
+#
+#     512 tok -> 154.10 s   (effective 3.32 tok/s)
+#    2048 tok -> 478.74 s   (effective 4.28 tok/s)
+#    3072 tok -> 729.77 s   (effective 4.21 tok/s)
+#
+# So the test is: does the shipped cost model reproduce all three, and does it
+# refuse to be a flat rate?
+import diagnose_zero_tokens as _DIAG  # noqa: E402
+
+_MEASURED_BUDGETS = ((512, 154.10), (2048, 478.74), (3072, 729.767))
+for _n_tok, _real_s in _MEASURED_BUDGETS:
+    _pred = _DIAG.projected_seconds(_n_tok)
+    _err = abs(_pred - _real_s) / _real_s
+    check_true("the cost model predicts the MEASURED %d-token generation "
+               "within 5%% (got %.1f s vs %.1f s, %.1f%%)"
+               % (_n_tok, _pred, _real_s, 100 * _err),
+               _err < 0.05,
+               "(D) two flat tok/s figures have each been refuted by the next "
+               "run -- 4.03 under-predicted 512 tok, 3.32 over-predicted 3072 "
+               "tok by 27%. A basis that cannot reproduce the runs it was "
+               "fitted on will mis-quote the next one too")
+
+check_true("...and the model is NOT a flat rate (fixed overhead is nonzero)",
+           _DIAG.FIXED_OVERHEAD_S > 0
+           and _DIAG.projected_seconds(1024) < 2 * _DIAG.projected_seconds(512),
+           "(D) proportional cost is exactly the assumption that produced both "
+           "refuted estimates: doubling the budget costs LESS than double, "
+           "because the per-generation overhead is paid once either way")
+check_true("...so the effective tok/s RISES with the budget, as MEASURED",
+           (512 / _DIAG.projected_seconds(512))
+           < (3072 / _DIAG.projected_seconds(3072)),
+           "(D) MEASURED 3.32 tok/s at 512 and 4.21 at 3072. A cost model that "
+           "does not reproduce that ordering will keep producing estimates "
+           "that are wrong in whichever direction the next budget moves")
+check_true("no flat MEASURED_DECODE_TPS constant survives in the diagnostic",
+           "MEASURED_DECODE_TPS" not in _diag_text,
+           "(D) leaving the refuted constant in place, even unused, invites "
+           "the next reader to compute a cost from it")
+check_true("the slow-arm spread is a MULTIPLIER, not a second tok/s figure",
+           "SLOW_ARM_MULTIPLIER" in _diag_text
+           and _DIAG.SLOW_ARM_MULTIPLIER > 1.0,
+           "(D) the first version of this bracket compared the fit's "
+           "ASYMPTOTIC rate against observed EFFECTIVE rates -- same unit, "
+           "different quantity -- and printed a range whose low end sat above "
+           "its own point estimate")
+check_raises("projected_seconds rejects a negative token budget",
+             lambda: _DIAG.projected_seconds(-1))
+check_raises("projected_seconds rejects a negative generation count",
+             lambda: _DIAG.projected_seconds(3072, -2))
 check_true("...and the projection is labelled ESTIMATED, not MEASURED",
            "[ESTIMATED from a " in _diag_text,
            "(C) a projection computed from a measured rate is still a "

@@ -3132,3 +3132,126 @@ readings none of which could fire in the recommended mode. Every one was found b
 Testing the path I had already tested would have found none of them.
 
 `phase_4/measurements_recorded` stays **None**. Nothing has been launched.
+
+## D-0085 — The model does not finish thinking at any budget yet tested, and my own cost basis was wrong for the third time
+
+**Date.** 2026-08-31. **Status.** Recorded. Nothing launched.
+
+**What the user's run MEASURED.** The `--skip-old` diagnostic at 3072 tokens, on
+the i5-12400, three cases:
+
+| case | tokens | seconds | reasoning chars | visible answer |
+|---|---|---|---|---|
+| RAG-EN-005 | 3072 (ceiling) | 734.6 | 10,647 | **none** |
+| RAG-FA-002 | 3072 (ceiling) | 725.8 | 11,184 | **none** |
+| RAG-ABST-002 | 3072 (ceiling) | 728.9 | 11,940 | **none** |
+
+Load 0.8 s. Total 36.5 min. Every generation spent its entire budget inside an
+unterminated `<think>` block.
+
+**FINDING 1 — the reasoning scales with the budget and never closes.** Across
+three budgets on the same three cases:
+
+| budget | reasoning characters | answer |
+|---|---|---|
+| 512 | cut off | none |
+| 2048 | 6,094 / 7,908 / 7,532 | none |
+| 3072 | 10,647 / 11,184 / 11,940 | none |
+
+Roughly 3.5 characters per additional token, with no sign of terminating. This is
+a property of the **model** on these prompts, not a harness defect: the harness
+is now VERIFIED to send correct ChatML with greedy decoding and a fixed seed, and
+`strip_thinking()` correctly returns `answer=""` for an unterminated block.
+
+The consequence is that the original plan of record — raise `--max-tokens` and
+re-run — **cannot work**, and the argument used to pick 3072 ("it exceeds the
+largest observed reasoning block") was circular: the largest observed block is a
+function of the budget that produced it. No budget tested so far is sufficient,
+and none is known to be.
+
+**FINDING 2 — my cost basis was wrong for the third time, and this time it was
+too PESSIMISTIC.** The refutation:
+
+* `MEASURED_DECODE_TPS = 3.32`, installed hours earlier, projected 46 minutes.
+* The run took **36.5 minutes**. Real effective rate 3072 ÷ 734.6 / 725.8 /
+  728.9 = 4.182 / 4.233 / 4.215, mean **≈ 4.21 tok/s**.
+
+So the 3.32 figure over-predicted by 27%, having been derived from 512-token
+generations. The 4.03 figure it replaced was derived from 2048-token generations
+and under-predicted the 512-token run. **Both were honest arithmetic on real
+measurements, and both were wrong, in opposite directions.**
+
+The cause is not measurement error but a wrong model. Each generation pays a
+fixed cost — prefill, sampler setup, load amortization — that does **not** scale
+with tokens produced. Measured at 512 tokens that cost is spread over few decode
+steps and the apparent rate is low; measured at 3072 it is spread over six times
+as many and the apparent rate is high. **A rate measured at the wrong scale is
+not a measurement of the rate**, and the error is systematic, so no amount of
+care in the arithmetic could have caught it.
+
+**FIXED.** The basis is now affine, not a flat rate:
+
+```
+seconds_per_generation = FIXED_OVERHEAD_S + n_tokens / ASYMPTOTIC_TPS
+```
+
+Least-squares over the three MEASURED rag-arm budgets (512 → 154.10 s, 2048 →
+478.74 s, 3072 → 729.77 s) gives 34.1 s fixed and 4.47 tok/s asymptotic, with
+residuals **−3.5% / +2.8% / −1.2%** — it reproduces every budget it was fitted
+on, which neither single rate could do for even two.
+
+Also: the arm-to-arm spread is now carried as a **multiplier** (1.19×, from the
+MEASURED 2048-ceiling means: rag 4.27, tools 4.03, plain 3.58) rather than as a
+second tok/s figure. The first attempt at this printed a "range" whose low end
+sat *above* its own point estimate, because it compared the fit's **asymptotic**
+rate against observed **effective** rates. Two numbers with the same unit are not
+necessarily the same quantity — caught by dry-running the output, not by reading
+it.
+
+**FINDING 3 — the README's load-time claim is withdrawn.** It said load was
+MEASURED at 2.5 s against a recorded 0.84 s and that the earlier figure
+"understated ~3×". This run measured **0.8 s**, matching the recorded
+`[0.84, 0.8, 0.82]`. The 2.5 s reading was the outlier; the claim built on it was
+wrong and is removed rather than softened.
+
+**What held.** The projection was labelled an upper bound and was one (46
+projected vs 36.5 actual). All three replies open byte-identically
+(`<think> Thinking Process:  1.  **Analyze the Request:**`), confirming that the
+greedy+seed determinism shipped in D-0080 works — and incidentally that the model
+enters the same verbose scaffold even for `RAG-ABST-002`, whose gold answer is
+`answerable: false`. The D-0084 `--skip-old` reading fired correctly on its first
+real use.
+
+**Consequences, stated not acted on.**
+
+* **Row 7 (full re-run):** ~10.4 h at 3072 tokens, ~7.1 h at 2048 (both from the
+  new fit). On this evidence it would produce no answers for cases of this kind.
+  The script's own reading calls it evidence *against* spending those hours.
+* **Q8 option (b), "accept the speed and lean on RAG":** close to refuted. Under
+  determinism the rag arm cannot emit an answer at all at any budget tested.
+
+**Verification.** 642 assertions (from 634), ALL GREEN. The cost-basis test no
+longer pins a literal: the previous assertion was
+`"MEASURED_DECODE_TPS = 3.32" in _diag_text`, which would have passed just as
+happily on the already-refuted 4.03, and which made correcting the constant
+require editing its own guard. It is replaced by assertions that the shipped
+`projected_seconds()` reproduces all three MEASURED budgets within 5%, that the
+fixed overhead is nonzero, that effective tok/s **rises** with the budget as
+MEASURED, and that no flat `MEASURED_DECODE_TPS` constant survives anywhere in
+the file. 9 mutants seeded, **9 killed, 0 survived** — including reverting to
+4.03, reverting to 3.32, making the formula proportional, and re-introducing the
+flat constant. Source md5 verified identical to clean after the battery.
+
+**Standing lesson.** A test that pins the current value of a constant guards
+nothing; it guards the *edit*, not the *property*. Three cost figures have now
+been recorded as MEASURED and two refuted, and the one assertion protecting them
+would have accepted any of the three. Assert the property the number must have —
+here, "reproduces the runs it was fitted on" — and the wrong number fails on its
+own.
+
+**Second lesson, fourth instance.** The percent-escaping bug and the
+above-the-estimate "range" were both found by **running the output**, not reading
+it. D-0082, D-0083, D-0084 and now D-0085 were each found this way.
+
+`phase_4/measurements_recorded` stays **None**. **Nothing has been launched, and
+nothing will be without explicit approval.**
