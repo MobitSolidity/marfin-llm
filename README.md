@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0080). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0081). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -196,7 +196,7 @@ Windows 11 · 16K context · Iranian market data descoped.
 | No execution capability | **VERIFIED** by test |
 | Tool-schema context cost | **MEASURED** — 8,920 tokens = 54.4% of 16K |
 | Decode speed | **ESTIMATED** ~14.7 tok/s — not yet measured |
-| Persian generation quality | **UNKNOWN** — risk R10 |
+| Persian generation quality | **MEASURED BY A HUMAN — VERDICT: FAIL** (D-0081). 37 graded: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. `unsupported_claim_rate` 10.81 % vs max 3 %; fabrication count 8 vs max 0. R10 CLOSED. |
 | Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 (R18 keyword reachability is CLOSED: 84/84, D-0075) |
 | Dense vector retrieval | **DOES NOT EXIST** — lexical + structured only (D-0030) |
 | RAG behaviour with a live model | **UNKNOWN** — risk R21 |
@@ -341,6 +341,90 @@ The two proven-equivalent mutants are deliberately **not** seeded — an
 unkillable mutant would be a permanent false alarm, and seeding it as a SKIP
 would overstate coverage — they are recorded in a comment with the 569-probe
 evidence (all 84 names, every fragment, 400 pairs, 0 family-set differences).
+
+### R10 is graded, and the model FAILS Persian financial generation (D-0081)
+
+R10 was the last threshold no automated check could decide. All 37 gradeable
+cases are now graded **by a human reader**, with a written reason per contested
+verdict. Every count below was independently recounted from the raw file.
+
+| verdict | n | of 37 |
+|---|---|---|
+| GOOD | 11 | 29.7 % |
+| WEAK | 13 | 35.1 % |
+| BAD | 7 | 18.9 % |
+| WRONG_LANGUAGE | 2 | 5.4 % |
+| UNSUPPORTED | 4 | 10.8 % |
+
+**Two approved thresholds fail, neither marginally:**
+`unsupported_claim_rate_pct_max = 3` against a MEASURED **10.81 %** (3.6×), and
+`fabricated_financial_data_count_max = 0` against a count of **8**.
+
+#### The finding that matters most: machine and human find DISJOINT defects
+
+Cross-tabulating the human verdicts against the harness's own `fabricated`
+field gives an overlap of **zero**:
+
+- machine `fabricated=True` (4 cases) → the human graded all four **BAD**, never
+  UNSUPPORTED.
+- human `UNSUPPORTED` (4 cases) → the machine scored two **`False`** and left
+  two **`None`**, meaning the check never ran.
+
+The detector did not undercount; it was finding a **different defect class**.
+The union is 8, not 4. **Had R10 been closed on the harness number — the exact
+shortcut this project forbids — the project would have recorded 4 fabrications
+and missed the worse four.**
+
+#### The worst case: fabrication wearing a citation
+
+`FA-CALC-002` asks the CAGR of 100,000 → 161,051 over 5 years. Independently
+computed: `1.1^5 = 1.61051` exactly, so the answer is **exactly 10 %**. The
+model emitted a *correct* `cagr` tool call, then wrote:
+
+> «بر اساس محاسبات انجام شده توسط ابزار … نتیجه محاسبه برابر است با تقریباً
+> **۹.۷۴٪** (محاسبه دقیق: (161051/100000)^(1/5) − 1 ≈ 0.0974)»
+
+It **attributed a fabricated figure to a tool it had correctly called**, in
+LaTeX, labelled "exact calculation". The `plain` arm produced 10.26 % — wrong
+by the same margin in the other direction. A reviewer checking *"did it call the
+tool?"* would see **yes** and trust the number. The harness's `fabricated` field
+for this case is **`None`**.
+
+#### Defects no automated metric could have caught
+
+The human reader found errors invisible to any script, ratio or abstention check:
+
+- **«درآمد خالص آیفون (Apple)»** — Apple called *iPhone*.
+- **«ریسک‌منیمنت»** — *risk management* transliterated instead of translated.
+- **«ریسک اعتباری (درکس)»** — «درکس» is not a word.
+- «بازده خالص» in the Sharpe formula where «بازده پرتفوی» is correct.
+- One table labelling **both** Stop Price and Limit Price «قیمت حد».
+- `RAG-FA-001`, the subtlest of all: the figure **383,285 is correct but
+  mislabelled** — it is *total net sales*, presented as *net income*. Fluent,
+  sourced, and wrong. **No metric detects a correct number under the wrong
+  name.**
+
+Real strengths were also recorded: Persian decimal `٫` and thousands `٬`
+separators parse correctly (۸٫۴۰ → 8.4, ۵۰٬۰۰۰ → 50000), and ZWNJ is handled.
+The best output in the corpus is `plain::FA-RISK-002`, which **refused** to
+compute and explained *why* (zero stop distance) in correct Persian.
+
+#### The graded 37 are a BEST CASE, not a sample
+
+The 15 `no_output` cases are a **budget failure, not a quality result**, and are
+never counted as passes: the evidence file records
+`answers_lost_to_thinking_truncation: 11` at `max_tokens: 2048`. The 37 graded
+cases are the subset that *survived truncation*.
+
+#### A prior claim is withdrawn
+
+`rag` scored **zero GOOD** across its 10 cases. The earlier note that rag was
+"the only arm with 0 fabrications" rested on the harness `fabricated` field;
+human grading found 2 unsupported claims in it. **That claim is withdrawn
+(R29)**, and any Q8 reasoning that leaned on it must be redone.
+
+This closes R10 and settles **nothing** about Q8. `phase_4/measurements_recorded`
+remains `None`: a hand-read of a contaminated run is not a Phase 4 measurement.
 
 ### Which sources may actually be ingested (R20 CLOSED, D-0077)
 
@@ -879,7 +963,11 @@ python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grad
 # progress report only, no prompts
 python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json --report
 
-# one arm at a time (recommended: 'rag' is the only arm with 0 fabrications)
+# one arm at a time
+# (NOTE: an earlier version of this line called rag "the only arm with 0
+#  fabrications". That rested on the harness `fabricated` field and is
+#  WITHDRAWN -- human grading found 2 UNSUPPORTED cases in rag, which scored
+#  ZERO GOOD across its 10 cases. See D-0081 / R29.)
 python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json --arm rag
 ```
 

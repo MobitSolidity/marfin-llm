@@ -2757,3 +2757,102 @@ failed**. Gates untouched: `measurements_recorded` is None,
 `live_trading_enabled` False, `active_mode` ANALYSIS_ONLY, `phase_4.status`
 unchanged, `acceptance_thresholds` (13) json-identical to the pre-session
 backup. **0 model runs launched.**
+
+## D-0081 — R10 is GRADED, and the answer is that the model FAILS Persian financial generation
+
+**Date:** 2026-08-31
+**Status:** R10 CLOSED as MEASURED-BY-HUMAN. The threshold verdict is FAIL.
+**Who decided:** the user, as the only party who can. 37 verdicts, all human.
+
+R10 (`persian_generation_quality`) was the last threshold no automated check
+could decide. The user graded all 37 gradeable cases and supplied a reasoned
+note per contested verdict. Independently recounted from the raw file; every
+count the user reported is correct:
+
+| verdict | n | of 37 |
+|---|---|---|
+| GOOD | 11 | 29.7 % |
+| WEAK | 13 | 35.1 % |
+| BAD | 7 | 18.9 % |
+| WRONG_LANGUAGE | 2 | 5.4 % |
+| UNSUPPORTED | 4 | 10.8 % |
+
+Acceptable (GOOD+WEAK) 24/37 = 64.9 %. Rejected 13/37 = 35.1 %.
+
+**Two approved thresholds FAIL, and neither is marginal:**
+
+* `unsupported_claim_rate_pct_max = 3` -> MEASURED 4/37 = **10.81 %**, 3.6x the
+  ceiling.
+* `fabricated_financial_data_count_max = 0` -> any count above zero fails. The
+  machine flagged 4; the human found 4 more.
+
+**THE FINDING THAT MATTERS MOST: the two sets are DISJOINT.**
+
+Cross-tabulating the human verdicts against the harness's own `fabricated`
+field gives an overlap of **zero**:
+
+* machine `fabricated=True` (4): FA-RISK-002, EN-ABST-001, EN-MIX-001,
+  EN-RISK-002 -- the human graded all four **BAD**, never UNSUPPORTED.
+* human `UNSUPPORTED` (4): RAG-FA-001, RAG-ABST-001, tools::FA-CALC-002,
+  plain::FA-CALC-002 -- the machine scored two **False** and left two **None**.
+
+So the automated detector did not merely undercount: it and the human reader
+were finding **different defect classes**, and the union is 8, not 4. Had R10
+been closed on the harness figure -- the exact shortcut this project forbids --
+the project would have recorded 4 fabrications and missed the worse four.
+
+**The worst single case, VERIFIED by reading the raw output.** `FA-CALC-002`
+(CAGR of 100,000 -> 161,051 over 5 years). Independently computed: 1.1^5 =
+1.61051 exactly, so the true answer is **exactly 10 %**. The model emitted a
+correct `cagr` tool call, then wrote:
+
+> "بر اساس محاسبات انجام شده توسط ابزار: ... نتیجه محاسبه برابر است با تقریباً
+> **۹.۷۴٪** (محاسبه دقیق: (161051/100000)^(1/5) - 1 ≈ 0.0974)"
+
+It **attributed a fabricated number to a tool it had correctly called**, and
+dressed it in LaTeX as an "exact calculation". The `plain` arm produced 10.26 %.
+Both wrong, symmetrically (-0.26 / +0.26 pp). This is the most dangerous
+failure mode in the whole corpus: fabrication *wearing a citation*. A user
+checking "did it call the tool?" would see yes and trust the number. The
+harness's `fabricated` field for this case is **None** -- it never even ran.
+
+**The 15 `no_output` cases are a BUDGET failure, not a quality result**, and are
+never counted as passes. The evidence file's own model block records
+`answers_lost_to_thinking_truncation: 11` at `max_tokens: 2048`, consistent with
+D-0057. So the graded 37 are a **best case**: they are the subset that survived
+truncation.
+
+**Persian-specific findings from the human reader** (these could not have come
+from any metric on file):
+
+* Real strengths: Persian decimal `٫` and thousands `٬` separators parsed
+  correctly (۸٫۴۰ -> 8.4, ۵۰٬۰۰۰ -> 50000); ZWNJ handled.
+* Real defects invisible to any automated check: **"درآمد خالص آیفون (Apple)"**
+  -- Apple called "iPhone"; **"ریسک‌منیمنت"** -- risk management transliterated;
+  **"ریسک اعتباری (درکس)"** -- "درکس" is not a word; "بازده خالص" used in the
+  Sharpe formula where "بازده پرتفوی" is correct; one table labelling both Stop
+  Price and Limit Price "قیمت حد".
+* `RAG-FA-001` graded UNSUPPORTED for the subtlest reason in the set: the figure
+  383,285 is **correct but mislabelled** -- it is total net sales, presented as
+  net income. Fluent, sourced, and wrong. No script, ratio or abstention metric
+  detects a correct number under the wrong name.
+* `plain::FA-RISK-002` is the best output in the corpus: it refused to compute,
+  and explained *why* (zero stop distance) in correct Persian.
+
+**Arm comparison, which reverses an earlier assumption.** `rag` scored **zero
+GOOD** (6 no_output, 1 WRONG_LANGUAGE, 1 BAD, 2 UNSUPPORTED). The rag arm was
+previously noted as "the only arm with 0 fabrications" -- that rested on the
+harness's `fabricated` field, and the human read found 2 unsupported claims in
+it. **The claim that rag never fabricates does not survive human grading.**
+`plain` was strongest on explanatory and abstention prompts (6 GOOD); `tools`
+often emitted a tool call and no Persian prose, and fabricated a tool result
+twice.
+
+**Consequences recorded, not acted on:** this closes R10 and settles nothing
+about Q8. The 2048-token budget failure is still in the evidence, so the decode
+figure standing against Q8 remains the contaminated one. Whether to re-run
+remains the user's call and requires explicit approval.
+
+`phase_4/measurements_recorded` stays **None**: the harness has not been re-run.
+Recording a human grading result there would misrepresent a hand-read of a
+contaminated run as a completed Phase 4 measurement.
