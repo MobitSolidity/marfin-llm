@@ -127,6 +127,38 @@ def load_cases(path):
     The merged file stores cases under `arms` -> {rag, tools, plain} -> [case].
     VERIFIED against the real file: 10 + 21 + 21 = 52.
     """
+    # A missing input file is the single most likely first-run problem, and a
+    # raw FileNotFoundError traceback tells the user nothing actionable. It is
+    # also the SECOND error a user hits: they fix the argparse complaint, then
+    # land here. Both need to name the fix, not just the fault.
+    if not os.path.exists(path):
+        here = os.path.dirname(os.path.abspath(__file__))
+        guess = os.path.join(os.path.dirname(here), "evidence",
+                             "phase4_merged.json")
+        msg = [
+            "ERROR: --input file not found: %s" % path,
+            "",
+            "  (the path is resolved against the CURRENT directory, which is",
+            "   %s)" % os.getcwd(),
+        ]
+        if os.path.exists(guess):
+            msg += [
+                "",
+                "  The evidence file IS present in this checkout. Use:",
+                "",
+                "    python %s --input %s --output grades.json" % (
+                    os.path.relpath(os.path.abspath(__file__)),
+                    os.path.relpath(guess)),
+            ]
+        else:
+            msg += [
+                "",
+                "  evidence/phase4_merged.json is NOT in this copy of the",
+                "  project. Backups made before 2026-08-31 shipped this tool",
+                "  without the one file it cannot run without. Download a",
+                "  current backup, or fetch the file from the repository.",
+            ]
+        raise SystemExit("\n".join(msg))
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     arms = data.get("arms")
@@ -297,7 +329,26 @@ def report(cases, grades):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="Record HUMAN grades for R10 Persian generation quality.")
+        description="Record HUMAN grades for R10 Persian generation quality.",
+        epilog=(
+            "BOTH --input and --output are required; running this script with "
+            "no arguments prints the usage error above and does nothing else.\n"
+            "\n"
+            "Examples (from the repository root):\n"
+            "  python tools/grade_persian.py "
+            "--input evidence/phase4_merged.json --output grades.json\n"
+            "  python tools/grade_persian.py "
+            "--input evidence/phase4_merged.json --output grades.json "
+            "--report\n"
+            "\n"
+            "From inside the tools/ directory, point --input up one level:\n"
+            "  python grade_persian.py "
+            "--input ../evidence/phase4_merged.json --output grades.json\n"
+            "\n"
+            "Windows PowerShell uses backslashes but is otherwise identical:\n"
+            "  python tools\\grade_persian.py "
+            "--input evidence\\phase4_merged.json --output grades.json\n"),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", required=True,
                     help="merged Phase 4 results file (read-only)")
     ap.add_argument("--output", required=True,
