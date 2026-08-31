@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0081). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0082). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -23,6 +23,7 @@ paper/live trading controls.
 | `scripts/run_baseline.py` | Phase 2 baseline harness. **Superseded by `run_phase4.py`; 9 MEASURED defects, never executed.** Kept for the audit trail. |
 | `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
 | `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
+| `scripts/diagnose_zero_tokens.py` | **~10 minute cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. See D-0082. |
 | `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
@@ -33,7 +34,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,208 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,229 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -195,8 +196,8 @@ Windows 11 · 16K context · Iranian market data descoped.
 | Chat template + 84 tool schemas | **VERIFIED** by rendering |
 | No execution capability | **VERIFIED** by test |
 | Tool-schema context cost | **MEASURED** — 8,920 tokens = 54.4% of 16K |
-| Decode speed | **ESTIMATED** ~14.7 tok/s — not yet measured |
-| Persian generation quality | **MEASURED BY A HUMAN — VERDICT: FAIL** (D-0081). 37 graded: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. `unsupported_claim_rate` 10.81 % vs max 3 %; fabrication count 8 vs max 0. R10 CLOSED. |
+| Decode speed | **MEASURED ~4.03 tok/s** (mean of the 7 `decode_tps` values in the 2026-08-30 run). This replaces a long-standing **ESTIMATED ~14.7 tok/s**, which was **3.6× too optimistic** — a reminder that an estimate left in place stops being read as an estimate. Carried over, not re-measured on the fixed harness. |
+| Persian generation quality | **GRADED FAIL, BUT THE RUN IS CONFOUNDED** (D-0081 + D-0082). 37 graded: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4; `unsupported_claim_rate` 10.81 % vs max 3 %; fabrication count 8 vs max 0. The defects those answers were generated through (raw-completion prompts to a ChatML model; temperature 0.8 with a random seed) were found on 2026-08-31 and fixed. The FAIL stands as *"this model **with that harness**"*, **not** as a verdict on the model. R10 REOPENED pending a re-run — see R30. |
 | Tool-selection accuracy over 84 tools | **UNKNOWN** — risk R17 (R18 keyword reachability is CLOSED: 84/84, D-0075) |
 | Dense vector retrieval | **DOES NOT EXIST** — lexical + structured only (D-0030) |
 | RAG behaviour with a live model | **UNKNOWN** — risk R21 |
@@ -251,7 +252,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,208 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,229 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -342,11 +343,83 @@ unkillable mutant would be a permanent false alarm, and seeding it as a SKIP
 would overstate coverage — they are recorded in a comment with the 569-probe
 evidence (all 84 names, every fragment, 400 pairs, 0 family-set differences).
 
-### R10 is graded, and the model FAILS Persian financial generation (D-0081)
+### The harness was talking to the model in the wrong format (D-0082)
+
+**Read this before the R10 section below.** Everything that section reports is
+still what the human reader saw, but the run it describes was contaminated, and
+the contamination was found while preparing the approved rag-arm re-run.
+
+The plan of record was to re-run the rag arm at a higher `--max-tokens`, on the
+assumption that its 6 `no_output` cases were token-budget casualties. Measuring
+before spending the hour showed only **3** of the 6 were. The other 3 had
+`completion_tokens: 0` and `raw_output: ""` — and no budget repairs a case that
+never emitted a token.
+
+The timing said why. All four zero-token cases, across two arms:
+
+| case | prompt_tokens | seconds | tok/s |
+|---|---|---|---|
+| `rag::RAG-EN-005` | 430 | 10.355 | 41.53 |
+| `rag::RAG-FA-002` | 202 | 4.862 | 41.55 |
+| `rag::RAG-ABST-002` | 315 | 7.509 | 41.95 |
+| `tools::FA-ABST-001` | 525 | 13.763 | 38.15 |
+
+That is prefill throughput with **zero decode steps**. Four independent cases
+agreeing to within 1 % is one systematic defect, not four bad answers: the model
+emitted its end-of-turn token *first*.
+
+**The cause.** `ModelRunner.generate` called `self.llm(prompt, …)` — a raw text
+completion — with a prompt shaped `SYSTEM…\n\nQuestion: …\nAnswer:`. Qwen3 is
+instruction-tuned on ChatML. It was being asked to continue a document rather
+than answer a turn.
+
+The project already had the correct template on disk and never used it:
+`/tmp/qwen3_tokcfg.json` ships the real `chat_template`, and
+`tests/test_tools.py:301` renders it — to measure the *tool block*. A resource
+the run does not depend on is a resource the run does not get, so
+`chatml_prompt()` is now a stdlib-only constant, VERIFIED byte-identical to the
+shipped template on 4 cases including Persian and the real `SYSTEM_RAG`.
+
+**A second, independent defect: no result was ever reproducible.** VERIFIED
+against llama-cpp-python's API reference and `llama.h`, the library defaults are
+`temperature=0.8`, `top_p=0.95`, `top_k=40`, `seed=0xFFFFFFFF` (**random**). The
+harness passed none of them, and the results file recorded none of them. Now
+`temperature=0.0`, `seed=20260831`, explicit stop tokens, and a
+`model.sampling` + `model.prompt_format` block in every output.
+
+**585 assertions could not see either defect.** MEASURED: the phase-4 suite
+scored **585 passed, 0 failed both before and after** the switch from raw
+completion to ChatML — identical on both sides of a defect that silenced 4 of 52
+cases. That is the `grep -q "0 failed"` hazard class. 21 new assertions now fail
+if either fix is reverted, and 11 targeted mutants were seeded with **11
+killed**.
+
+**Two of my own new guards were wrong.** `STOP_TOKENS` was built as
+`"%s user" % IM_START`, yielding `"<|im_start|> user"` — a stop string that
+matches nothing. The guard written for it (`all(t == t.strip() …)`) **survived**
+a mutant reintroducing that typo, because `strip()` cannot see *internal*
+whitespace. Both are fixed, and the episode is why the standing rule is now:
+a new guard is not trusted until a mutant that should kill it has been run.
+
+**Consequence, stated plainly.** The D-0081 FAIL verdict is **not withdrawn** —
+the 8 unsupported claims were read from real output. But it can no longer be
+read as *"this model is unsuitable for Persian financial generation"*, only as
+*"this model **with this harness** scored FAIL"*. See R30 and R31.
+
+`scripts/diagnose_zero_tokens.py` runs only the 3 zero-token cases through
+**both** prompt shapes — one variable, ~10 minutes — so the cause is proven or
+disproven before any multi-hour run is spent.
+
+### R10 is graded — the reading below is now qualified by D-0082 above
 
 R10 was the last threshold no automated check could decide. All 37 gradeable
 cases are now graded **by a human reader**, with a written reason per contested
 verdict. Every count below was independently recounted from the raw file.
+
+**Caveat added 2026-08-31:** every one of these answers was generated through
+the defective prompt format described above, at temperature 0.8 with an
+unrecorded random seed. The defects the human reader found are real; the
+*attribution* of them to the model is not yet established.
 
 | verdict | n | of 37 |
 |---|---|---|
@@ -644,7 +717,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,208 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,229 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 983 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -899,7 +972,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,208 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,229 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -948,7 +1021,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,208-assertion base is trustworthy.
+3,229-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

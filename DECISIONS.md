@@ -2856,3 +2856,106 @@ remains the user's call and requires explicit approval.
 `phase_4/measurements_recorded` stays **None**: the harness has not been re-run.
 Recording a human grading result there would misrepresent a hand-read of a
 contaminated run as a completed Phase 4 measurement.
+
+---
+
+## D-0082 — The evaluation harness was sending RAW TEXT COMPLETIONS to a chat
+## model; 4 zero-token cases were a PROMPT-FORMAT defect, not a token budget
+**Date:** 2026-08-31 · **Phase:** 4 (R10 re-run prep) · **Status:** Active · **Severity:** Critical
+
+The approved plan (table row 6) was to re-run the rag arm at a higher
+`--max-tokens`, on the assumption that the 6 `no_output` cases were budget
+casualties. Measuring the per-case tokens before spending the hour REFUTED that
+assumption, and the investigation then found something larger.
+
+**What the budget theory got right, and wrong.** Of the 6 `no_output` cases in
+the rag arm, only 3 hit the ceiling (`RAG-EN-001`, `RAG-EN-003`,
+`RAG-ABST-003`, all `thinking_truncated=True` at ~2031/2636/2510 reasoning
+tokens). The other 3 had `completion_tokens: 0` and `raw_output: ""`. No value
+of `--max-tokens` repairs a case that never emitted a token.
+
+**The timing identified the real cause.** All four zero-token cases across two
+arms show the same rate:
+
+| case | prompt_tokens | seconds | tok/s |
+|---|---|---|---|
+| rag::RAG-EN-005 | 430 | 10.355 | 41.53 |
+| rag::RAG-FA-002 | 202 | 4.862 | 41.55 |
+| rag::RAG-ABST-002 | 315 | 7.509 | 41.95 |
+| tools::FA-ABST-001 | 525 | 13.763 | 38.15 |
+
+That is prefill throughput with ZERO decode steps. Four independent cases
+agreeing to within 1% is one systematic defect, not four bad answers: the model
+emitted its end-of-turn token FIRST.
+
+**The defect.** `ModelRunner.generate` called `self.llm(prompt, ...)` — a raw
+text completion — with a prompt shaped `"SYSTEM...\n\nQuestion: ...\nAnswer:"`.
+Qwen3 is instruction-tuned on ChatML and was never trained on that shape; it was
+being asked to CONTINUE a document rather than answer a turn. VERIFIED: `grep`
+for `im_start|chat_format|create_chat_completion|apply_chat_template` across
+`scripts/` and `src/` returned nothing.
+
+**The project already had the right template and never used it.**
+`/tmp/qwen3_tokcfg.json` ships the real `chat_template`, and
+`tests/test_tools.py:301` renders it — to assert the *tool block* fits the
+context window. The harness never touched it. A resource that lives in `/tmp`
+and that the run does not depend on is a resource the run does not get, which
+is why `chatml_prompt()` is now a stdlib-only constant in `run_phase4.py`
+rather than a file read.
+
+VERIFIED byte-identical: jinja2 rendering of the shipped `chat_template` and
+`chatml_prompt()` produce the same string on 4 cases including a Persian
+question and the real multi-line `SYSTEM_RAG`. The suite asserts that equality
+whenever the tokenizer config is present, so divergence is a test failure.
+
+**A second, independent defect: the run was never reproducible.** VERIFIED
+against llama-cpp-python's API reference and `llama.h`: the library defaults are
+`temperature=0.8`, `top_p=0.95`, `top_k=40`, and
+`seed=LLAMA_DEFAULT_SEED = 0xFFFFFFFF` (random). The harness passed NONE of
+them. Every figure this project has recorded was one draw from a distribution
+with an unrecorded seed — and `evidence/phase4_merged.json` has no field saying
+so. Now: `temperature=0.0`, `seed=20260831`, `stop=(<|im_end|>,
+<|im_start|>user)`, and a `model.sampling` + `model.prompt_format` block written
+into every results file.
+
+**585 assertions could not see either defect.** MEASURED: switching the harness
+from raw completion to ChatML changed the phase-4 suite not at all — 585 passed,
+0 failed, before and after. That is the `grep -q "0 failed"` hazard class again:
+a suite that passes identically on both sides of a defect that silenced 4 of 52
+cases. 21 new assertions now fail if either fix is reverted; 11 targeted mutants
+were seeded and **11 killed**.
+
+**Two of my own guards were wrong, and testing caught both.**
+(1) `STOP_TOKENS` was built as `"%s user" % IM_START`, producing
+`"<|im_start|> user"` — a stop string that matches nothing. (2) The guard I
+wrote for it, `all(t == t.strip() ...)`, SURVIVED a mutant reintroducing that
+exact typo, because `strip()` removes only leading/trailing whitespace and the
+stray space is internal. The guard now asserts membership in the set of role
+headers the template actually emits. (3) In `diagnose_zero_tokens.py` the
+"old prompt also worked" branch was unreachable behind `len(fixed) >
+len(old_empty)`, so the one scenario in which the diagnosis is UNPROVEN would
+have been reported as "the template helps".
+
+**Consequence for D-0081, stated plainly.** The FAIL verdict is not withdrawn —
+the 8 unsupported claims the user found are real and were read from actual
+output. But it is now CONFOUNDED: it cannot be read as "this model is unsuitable
+for Persian financial generation", only as "this model **with this harness**
+scored FAIL". Every one of the 52 cases was generated through the defective
+prompt shape at temperature 0.8 with a random seed. R30 records this.
+
+**Why a 10-minute diagnostic instead of the approved 1.4-hour re-run.**
+`scripts/diagnose_zero_tokens.py` runs only the 3 zero-token cases, each
+through BOTH prompt shapes — one variable, same weights, same budget, same
+machine. If the old shape returns empty and ChatML answers, the cause is proven.
+Spending 1.4 h first would have re-run the same defective format and produced
+results that, being randomly sampled, are not comparable to anything.
+
+**Trade-off:** all prior latency and token figures are now unreliable as
+predictors — ChatML adds a few framing tokens, and greedy decoding changes
+lengths. The MEASURED 4.03 tok/s decode rate is still the best available basis
+for cost estimates, and is labelled as carried-over rather than re-measured.
+**Reversal:** none contemplated. Reverting either fix is now a test failure.
+
+`phase_4/measurements_recorded` stays **None**. No model run has been launched
+by me; the diagnostic is for the user to run under Route A, and it writes no
+file any grader reads.

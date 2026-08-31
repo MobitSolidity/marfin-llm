@@ -115,6 +115,83 @@ def rel(path):
 DEFAULT_MAX_TOKENS = 2048
 
 # ---------------------------------------------------------------------------
+# CHAT TEMPLATE.
+#
+# WHY THIS EXISTS AT ALL. Until 2026-08-31 this harness called the model as a
+# RAW TEXT COMPLETION -- `llm(prompt)` with a prompt shaped
+# "SYSTEM...\n\nQuestion: ...\nAnswer:". Qwen3 is an instruction-tuned chat
+# model. It was never fine-tuned on that shape, so it was being asked to
+# CONTINUE a document rather than to ANSWER a turn.
+#
+# MEASURED consequence, from the 2026-08-30 run (evidence/phase4_merged.json):
+# four cases returned completion_tokens=0 with raw_output="" -- the model
+# emitted its end-of-turn token as the FIRST token. The giveaway is the
+# timing, which is prefill-only with zero decode steps:
+#
+#   rag::RAG-EN-005     430 prompt tok / 10.355 s -> 41.53 tok/s
+#   rag::RAG-FA-002     202 prompt tok /  4.862 s -> 41.55 tok/s
+#   rag::RAG-ABST-002   315 prompt tok /  7.509 s -> 41.95 tok/s
+#   tools::FA-ABST-001  525 prompt tok / 13.763 s -> 38.15 tok/s
+#
+# Four independent cases agreeing to within 1% is not four bad answers, it is
+# one systematic defect. No value of --max-tokens can repair a case that never
+# emitted a token, which is why raising the budget was NOT the fix.
+#
+# WHY THE TEMPLATE IS SPELT OUT HERE rather than read from a file. The project
+# already had the real Qwen3 template on disk (/tmp/qwen3_tokcfg.json, rendered
+# by tests/test_tools.py:301) and it went unused by the harness for two weeks --
+# a resource in /tmp that the run does not depend on is a resource the run does
+# not get. This constant is stdlib-only, needs no jinja2 at run time, and
+# cannot go missing on the user's Windows machine.
+#
+# VERIFIED 2026-08-31: rendering via jinja2 from the real tokenizer_config
+# chat_template and rendering via chatml_prompt() below produce BYTE-IDENTICAL
+# output on four cases including a Persian question and a multi-line system
+# prompt. test_phase4_harness.py asserts that equivalence whenever the
+# tokenizer config is present, so a future divergence is a test failure rather
+# than a silent regression.
+IM_START = "<|im_start|>"
+IM_END = "<|im_end|>"
+
+
+def chatml_prompt(system, user):
+    """
+    Render one system + one user turn in Qwen3's ChatML format.
+
+    Ends with the assistant header and NO trailing content: that is what tells
+    an instruction-tuned model it is its turn to speak.
+    """
+    if not isinstance(system, str) or not isinstance(user, str):
+        raise TypeError("chatml_prompt expects str, got %s/%s"
+                        % (type(system).__name__, type(user).__name__))
+    return (IM_START + "system\n" + system + IM_END + "\n"
+            + IM_START + "user\n" + user + IM_END + "\n"
+            + IM_START + "assistant\n")
+
+
+# ---------------------------------------------------------------------------
+# SAMPLING.
+#
+# WHY THESE ARE SET EXPLICITLY. llama-cpp-python's defaults are
+# temperature=0.8, top_p=0.95, top_k=40, and seed=LLAMA_DEFAULT_SEED
+# (0xFFFFFFFF, i.e. RANDOM) -- VERIFIED 2026-08-31 against the library's own
+# API reference and llama.h. The harness set NONE of them, so every number this
+# project has ever recorded came from a temperature-0.8 sample with a random
+# seed: re-running the same case could not be expected to reproduce it, and no
+# two arms were strictly comparable.
+#
+# An evaluation harness whose results cannot be reproduced is not measuring the
+# model, it is sampling a distribution once and calling the draw a fact. Greedy
+# decoding with a fixed seed makes a re-run mean something.
+#
+# `stop` includes the end-of-turn token because in raw-completion mode a chat
+# model that finishes its turn will happily begin inventing the NEXT turn.
+GREEDY_TEMPERATURE = 0.0
+DEFAULT_SEED = 20260831
+STOP_TOKENS = (IM_END, IM_START + "user")
+
+
+# ---------------------------------------------------------------------------
 # Model wrapper.
 #
 # Every call to the model goes through here, so the fake used by the test suite
@@ -125,12 +202,39 @@ DEFAULT_MAX_TOKENS = 2048
 class ModelRunner(object):
     """Thin wrapper over llama_cpp.Llama that records timing per call."""
 
-    def __init__(self, llm, max_tokens=DEFAULT_MAX_TOKENS):
+    def __init__(self, llm, max_tokens=DEFAULT_MAX_TOKENS,
+                 temperature=GREEDY_TEMPERATURE, seed=DEFAULT_SEED):
         self.llm = llm
         self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.seed = seed
         self.calls = 0
         self.truncated_thinking = 0
         self.thinking_replies = 0
+        # WHY THIS IS DETECTED RATHER THAN ASSUMED: the test suite's FakeLlama
+        # has a fixed signature (prompt, max_tokens, echo). Passing sampling
+        # kwargs to it unconditionally would raise TypeError and take the whole
+        # suite down; silently swallowing that TypeError would be worse, because
+        # a real llama-cpp build that rejected a kwarg would then be scored as
+        # a model failure. So the capability is probed ONCE, here, and recorded.
+        self.sampling_supported = self._probe_sampling(llm)
+
+    @staticmethod
+    def _probe_sampling(llm):
+        """True if the callable accepts temperature/seed keyword arguments."""
+        try:
+            import inspect
+            target = llm.__call__ if hasattr(llm, "__call__") else llm
+            sig = inspect.signature(target)
+        except (TypeError, ValueError):
+            # A C-implemented callable with no introspectable signature: assume
+            # the real library, which does accept these.
+            return True
+        params = sig.parameters
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD
+               for p in params.values()):
+            return True
+        return "temperature" in params
 
     def generate(self, prompt, max_tokens=None):
         """
@@ -155,8 +259,16 @@ class ModelRunner(object):
         """
         self.calls += 1
         n = max_tokens or self.max_tokens
+        kw = {"max_tokens": n, "echo": False}
+        if self.sampling_supported:
+            # Greedy, seeded, and stopped at the end-of-turn token. See the
+            # SAMPLING block above for why none of these may be left to the
+            # library's defaults.
+            kw["temperature"] = self.temperature
+            kw["seed"] = self.seed
+            kw["stop"] = list(STOP_TOKENS)
         t0 = time.time()
-        out = self.llm(prompt, max_tokens=n, echo=False)
+        out = self.llm(prompt, **kw)
         elapsed = time.time() - t0
         try:
             text = out["choices"][0]["text"]
@@ -327,8 +439,16 @@ SYSTEM_RAG = SYSTEM_BASE + (
 )
 
 
+# The three builders below all end by handing their system text and their user
+# text to chatml_prompt. The literal "Question: " prefix is KEPT inside the
+# user turn: the scripted model in the test suite locates the question with
+# rsplit("Question:", 1) so that it branches on the question rather than on the
+# evidence, and removing the marker would silently break that -- the fake would
+# start matching text that came from the retrieved passages, which is the exact
+# defect its own docstring records having been caught once already.
+
 def build_plain_prompt(question):
-    return "%s\n\nQuestion: %s\nAnswer:" % (SYSTEM_BASE, question)
+    return chatml_prompt(SYSTEM_BASE, "Question: %s" % question)
 
 
 def build_tools_prompt(question, schemas):
@@ -338,17 +458,18 @@ def build_tools_prompt(question, schemas):
         req = ", ".join(fn.get("parameters", {}).get("required", []))
         lines.append("- %s(%s): %s" % (fn.get("name"), req,
                                        fn.get("description", "")))
-    return "%s%s\n\nQuestion: %s\nAnswer:" % (
-        SYSTEM_TOOLS, "\n".join(lines), question)
+    return chatml_prompt(SYSTEM_TOOLS + "\n".join(lines),
+                         "Question: %s" % question)
 
 
 def build_rag_prompt(question, passages):
     ev = []
     for i, ps in enumerate(passages, 1):
         ev.append("[%d] (%s) %s" % (i, ps.provenance.citation(), ps.text))
-    return "%s\n\nEvidence:\n%s\n\nQuestion: %s\nAnswer:" % (
-        SYSTEM_RAG, "\n".join(ev) if ev else "(no evidence retrieved)",
-        question)
+    return chatml_prompt(
+        SYSTEM_RAG,
+        "Evidence:\n%s\n\nQuestion: %s"
+        % ("\n".join(ev) if ev else "(no evidence retrieved)", question))
 
 
 # ---------------------------------------------------------------------------
@@ -1217,6 +1338,27 @@ def main(argv=None):
                   "threads": a.threads if not remote else None,
                   "load_seconds": load_s,
                   "max_tokens": a.max_tokens,
+                  # HOW THE TOKENS WERE CHOSEN, recorded because the run of
+                  # 2026-08-30 did not record it and therefore could not be
+                  # reproduced. Until 2026-08-31 the harness passed no sampling
+                  # arguments at all, inheriting llama-cpp's temperature=0.8,
+                  # top_p=0.95, top_k=40 and a RANDOM seed -- so every figure
+                  # that run produced was one draw from a distribution, and
+                  # `phase4_merged.json` has no field that says so. A results
+                  # file that cannot tell a reader whether a re-run should
+                  # reproduce it is not evidence.
+                  "sampling": {
+                      "temperature": getattr(runner, "temperature", None),
+                      "seed": getattr(runner, "seed", None),
+                      "stop": list(STOP_TOKENS),
+                      "greedy": (getattr(runner, "temperature", None) == 0.0),
+                      "applied": getattr(runner, "sampling_supported", None),
+                  },
+                  # WHICH prompt shape produced these numbers. Raw-completion
+                  # and ChatML results are NOT comparable: see the CHAT
+                  # TEMPLATE block for the four zero-token cases that the raw
+                  # shape produced.
+                  "prompt_format": "chatml",
                   # The tool-call cap is written into the payload so a capped
                   # run can never be mistaken for an uncapped one. It changes
                   # the tool_calls_attempted denominator, and a metric whose

@@ -1479,6 +1479,147 @@ check_true("an empty retrieval says so rather than pretending",
            "(D) a silent empty Evidence: block invites the model to fill it")
 
 
+# -- THE CHAT TEMPLATE ---------------------------------------------------
+#
+# WHY THESE ASSERTIONS EXIST. Until 2026-08-31 the harness sent raw text
+# completions ("SYSTEM...\n\nQuestion: ...\nAnswer:") to an instruction-tuned
+# chat model. MEASURED result in the 2026-08-30 run: four cases returned
+# completion_tokens=0 and raw_output="" -- the model emitted end-of-turn as its
+# FIRST token, at prefill speed with zero decode steps (41.53 / 41.55 / 41.95 /
+# 38.15 tok/s across four independent cases).
+#
+# MEASURED 2026-08-31, and the reason this section is not optional: switching
+# the harness from raw completion to ChatML changed NOTHING in this suite --
+# 585 passed, 0 failed, both before and after. 585 assertions could not see a
+# defect that silenced 4 of 52 cases. Every check below fails if the ChatML
+# framing is dropped.
+section("chat template")
+
+_ct = RP.chatml_prompt("SYS", "Q?")
+check_true("the rendered prompt opens with a system turn",
+           _ct.startswith("<|im_start|>system\n"),
+           "(D) an instruction-tuned model given a bare document continues it")
+check_true("...and ends with the ASSISTANT header and nothing after it",
+           _ct.endswith("<|im_start|>assistant\n"),
+           "(D) without the generation prompt the model has not been told it "
+           "is its turn to speak")
+check_true("...and closes the user turn before the assistant header",
+           "Q?<|im_end|>\n<|im_start|>assistant\n" in _ct, "(A)")
+
+for _name, _built in (("plain", RP.build_plain_prompt(_q)),
+                      ("tools", _p_tools),
+                      ("rag", _p_rag)):
+    check_true("the %s arm sends a CHAT prompt, not a raw completion" % _name,
+               _built.startswith("<|im_start|>system\n")
+               and _built.endswith("<|im_start|>assistant\n"),
+               "(D) this is the defect that produced 4 zero-token cases")
+    check_true("...and the %s arm still marks the question for the grader"
+               % _name, "Question:" in _built,
+               "(D) the scripted model finds the question by rsplit on this "
+               "marker; losing it makes the fake branch on the EVIDENCE")
+
+# The template is not paraphrased -- it is asserted EQUAL to the real one that
+# ships with the weights, whenever that file is available. A hand-written
+# template that merely looks right is how the original defect survived review.
+_tokcfg = "/tmp/qwen3_tokcfg.json"
+if os.path.exists(_tokcfg):
+    try:
+        from jinja2 import Template as _Jinja
+        _cfg = json.load(open(_tokcfg))
+        _real = _Jinja(_cfg["chat_template"]).render(
+            messages=[{"role": "system", "content": RP.SYSTEM_RAG},
+                      {"role": "user", "content": "\u0633\u0648\u062f "
+                                                  "\u062e\u0627\u0644\u0635?"}],
+            add_generation_prompt=True)
+        _mine = RP.chatml_prompt(RP.SYSTEM_RAG, "\u0633\u0648\u062f "
+                                                "\u062e\u0627\u0644\u0635?")
+        check_true("chatml_prompt is BYTE-IDENTICAL to the shipped Qwen3 "
+                   "template", _real == _mine,
+                   "(A) rendered via jinja2 from tokenizer_config.json")
+        check_true("...and the model's own eos token is the one we stop on",
+                   _cfg.get("eos_token") in RP.STOP_TOKENS, "(A)")
+    except ImportError:
+        pass
+
+
+# -- SAMPLING IS EXPLICIT AND REPRODUCIBLE -------------------------------
+#
+# VERIFIED 2026-08-31 against llama-cpp-python's API reference and llama.h:
+# the library defaults are temperature=0.8, top_p=0.95, top_k=40 and
+# seed=LLAMA_DEFAULT_SEED (0xFFFFFFFF = random). The harness set none of them,
+# so every figure recorded before this date was ONE DRAW from a distribution
+# with an unrecorded seed.
+section("sampling determinism")
+
+check_true("the harness decodes GREEDILY by default",
+           RP.GREEDY_TEMPERATURE == 0.0,
+           "(D) at temperature 0.8 a re-run cannot reproduce a result, so no "
+           "two arms are strictly comparable")
+check_true("...and pins a seed rather than inheriting a random one",
+           isinstance(RP.DEFAULT_SEED, int) and RP.DEFAULT_SEED >= 0,
+           "(D) llama.cpp's default seed is 0xFFFFFFFF, i.e. random")
+check_true("...and stops at the model's end-of-turn token",
+           "<|im_end|>" in RP.STOP_TOKENS,
+           "(D) a chat model in completion mode invents the NEXT turn")
+# WHY THIS ASSERTION IS SHAPED LIKE THIS. My first attempt was
+# `all(t == t.strip() for t in STOP_TOKENS)`, which SURVIVED a mutation that
+# reintroduced the exact typo it was written to catch: str.strip() removes only
+# LEADING and TRAILING whitespace, and '<|im_start|> user' has neither -- the
+# stray space is INTERNAL. So the guard asserts the real property instead: a
+# stop token must be a role header the template actually emits.
+check_true("...and each stop token is a string the template really emits",
+           all(t in ("<|im_end|>", "<|im_start|>user",
+                     "<|im_start|>system", "<|im_start|>assistant")
+               for t in RP.STOP_TOKENS),
+           "(D) '<|im_start|> user' with a stray space never matches anything, "
+           "so the stop is silently inert -- a guard that looks present and "
+           "does nothing")
+
+
+class _SamplingSpy(object):
+    """Records the kwargs the runner actually passes to the model."""
+
+    def __init__(self):
+        self.kw = None
+
+    def __call__(self, prompt, **kw):
+        self.kw = kw
+        return {"choices": [{"text": "ok"}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 1}}
+
+
+_spy = _SamplingSpy()
+_rs = RP.ModelRunner(_spy, max_tokens=64)
+check_true("a kwargs-accepting model is detected as sampling-capable",
+           _rs.sampling_supported is True, "(A)")
+_rs.generate("x")
+check_true("temperature actually REACHES the model",
+           _spy.kw.get("temperature") == 0.0,
+           "(D) a constant that is never passed is decoration")
+check_true("...and so does the seed",
+           _spy.kw.get("seed") == RP.DEFAULT_SEED, "(A)")
+check_true("...and so do the stop tokens",
+           "<|im_end|>" in (_spy.kw.get("stop") or []), "(A)")
+
+
+class _FixedSigModel(object):
+    """A model whose signature predates sampling kwargs (i.e. FakeLlama)."""
+
+    def __call__(self, prompt, max_tokens=256, echo=False):
+        return {"choices": [{"text": "ok"}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 1}}
+
+
+_rf = RP.ModelRunner(_FixedSigModel(), max_tokens=64)
+check_true("a fixed-signature model is detected as NOT sampling-capable",
+           _rf.sampling_supported is False,
+           "(D) passing unsupported kwargs would raise TypeError and be "
+           "scored as a model failure")
+_tf, _mf = _rf.generate("x")
+check_true("...and the harness still runs against it rather than crashing",
+           _tf == "ok", "(C)")
+
+
 # -- the safety assertion ------------------------------------------------
 _n = RP.assert_no_execution_capability()
 check_true("assert_no_execution_capability passes on the real registry",
