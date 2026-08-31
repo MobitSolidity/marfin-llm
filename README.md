@@ -868,10 +868,35 @@ tree, which had no test and no mutation battery. **No false-pass mode exists**:
 
 ### `tools/grade_persian.py` — R10 human grading
 
+**Both arguments are mandatory**; running the script bare prints an argparse
+usage error, which is the tool working, not a defect. Run it from the **repo
+root** so the relative paths below resolve:
+
+```bash
+# start / resume interactive grading
+python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json
+
+# progress report only, no prompts
+python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json --report
+
+# one arm at a time (recommended: 'rag' is the only arm with 0 fabrications)
+python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json --arm rag
 ```
-python3 tools/grade_persian.py --input phase4_merged.json --output grades.json
-python3 tools/grade_persian.py --input phase4_merged.json --output grades.json --report
+
+Windows PowerShell, from the repo root, is identical apart from `python`:
+
+```powershell
+python tools\grade_persian.py --input evidence\phase4_merged.json --output grades.json
 ```
+
+The evidence file lives at **`evidence/phase4_merged.json`** and is committed,
+because it was previously only an out-of-tree upload: the tool shipped in the
+repo while the one file it cannot run without did not, so a fresh clone or
+backup could not use it. *A tool is not usable until its input travels with it.*
+
+MEASURED end-to-end before documenting: 52 cases load (rag 10 / tools 21 /
+plain 21), 15 pre-marked `no_output`, **37 awaiting a human verdict**; grading
+two cases and quitting leaves 17 recorded / 35 remaining on resume.
 
 R10 (Persian generation quality) is the one Phase 4 threshold no automated check
 can decide. **This tool grades nothing.** It shows each case's question, rubric
