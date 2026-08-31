@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0085). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0086). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -24,6 +24,7 @@ paper/live trading controls.
 | `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
 | `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
 | `scripts/diagnose_zero_tokens.py` | **Cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. **Run once, on 2026-08-31: result INCONCLUSIVE, because a defect in this script graded token counts instead of answers, and a 512-token budget cut every reply off inside `<think>`.** Now judges on the visible answer, prints a READING in **every** mode including `--skip-old` (D-0084), and refuses to start above 20 projected minutes without `--yes`. **Run a second time at 3072 tokens on 2026-08-31: all three cases hit the ceiling inside an unterminated `<think>` block with NO visible answer (10,647 / 11,184 / 11,940 chars of reasoning) — a real finding that the model never finishes thinking, and evidence against the full re-run (D-0085).** Cost basis is now affine (34.1 s fixed + tokens/4.47), fitted to the MEASURED 512/2048/3072 budgets, after two flat tok/s figures were each refuted by the next run. See D-0082, D-0083, D-0084, D-0085. |
+| `scripts/diagnose_forced_answer.py` | **The forced-closed-`<think>` prefill test (D-0086). Built, dry-run, mutation-tested, NOT YET RUN.** Prefills the assistant turn with an already-closed empty reasoning block (`<think>\n\n</think>\n\n`) so the model's next token is the first token of its answer — the only remaining lever after D-0085 MEASURED that the model never finishes thinking at 512, 2048 or 3072 tokens, `/think`/`/nothink` are documented not to work on Qwen3.5, and the shipped template has no `enable_thinking` flag. **Refuses before spending any decode time** unless the prefill resolves to the dedicated `<think>`/`</think>` ids 151667/151668 — otherwise the model would never see a closed block while still printing plausible output. Default budget 512 (not 3072): if the block is pre-closed the reply should *be* the answer. Writes no file any grader reads; never touches `PROJECT_STATE.json`. ~7 min ESTIMATED for 3 generations. |
 | `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
@@ -34,7 +35,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,265 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,320 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -253,7 +254,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,265 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,320 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -567,6 +568,105 @@ shipped `projected_seconds()` reproduces all three MEASURED budgets within 5 %,
 that the fixed overhead is nonzero, and that effective tok/s rises with the
 budget as MEASURED. 9 mutants seeded, **9 killed, 0 survived.**
 
+### Option A: the forced-closed-`<think>` prefill (D-0086) — built, not yet run
+
+D-0085 left one lever. The model never finishes thinking at any budget tested, so
+raising the budget is refuted; `/think` and `/nothink` are documented not to work
+on Qwen3.5 (`phase4_lib.py:212`); and the shipped chat template has no
+`enable_thinking` flag (VERIFIED — searched the 2630-char template). What remains
+is to **prefill the assistant turn with an already-closed empty reasoning
+block**, putting the model at a position where, as far as it can tell, it has
+already finished deliberating:
+
+```
+<|im_start|>assistant
+<think>
+
+</think>
+
+```
+
+The user approved this on 2026-08-31. Per Route A the tooling is built and
+dry-run here; **the user runs it.** Nothing has been launched.
+
+**Everything checked before code was written**
+
+| premise | how | result |
+|---|---|---|
+| the template's generation branch emits exactly `<\|im_start\|>assistant\n` | read the template | VERIFIED |
+| our `chatml_prompt()` matches a jinja2 render of it | rendered both, compared | VERIFIED byte-identical |
+| no `enable_thinking` flag exists | substring search | VERIFIED absent |
+| `<think>` / `</think>` have dedicated ids | `added_tokens_decoder` | VERIFIED 151667 / 151668 |
+
+**A correction to an earlier note in this repo.** These were recorded as
+"dedicated SPECIAL tokens". They are dedicated **added** tokens: both entries
+carry `"special": false` and neither is in `additional_special_tokens`.
+`<|im_start|>` is a special token; `<think>` is in the same class as
+`<tool_call>`. The design is unaffected — what matters is that each is one id,
+not a spelling — but the overstatement is corrected wherever it appeared.
+
+**The silent failure this test could have had.** If llama-cpp tokenized the
+prefill as ordinary text spelling `"<think>"` rather than resolving it to those
+ids, the model would never see a closed reasoning block — and the run would
+*still print plausible answers*. So the script tokenizes the prefill first and
+**refuses before spending any decode time** unless both ids appear. MEASURED in
+the dry run: a spelled-out prefill exits 1 having performed **zero
+generations**.
+
+**What that gate still cannot prove, stated plainly.** It asks
+`tokenize(..., special=True)` — the permissive setting — so a *failure* is
+conclusive. A *pass* only shows the tokenizer can resolve the string when asked;
+it does not prove the completion call's own prompt path does the same (R38). The
+one observable signal is the prefill-minus-control prompt-token delta: **~6 means
+the ids were used, ~19 means it was spelled out as text.** `--with-control`
+prints it, and an impossible (≤ 0) or spelled-out (≥ 12) delta produces
+`READING: INVALID` and suppresses any success reading.
+
+**Four defects found by my own dry runs, before the tool was offered**
+
+| # | defect | why it mattered |
+|---|---|---|
+| 1 | `elif reopened:` sat above every answered-case branch | a run where 2 of 3 cases answered printed *"the prefill did NOT stop the deliberation"* and **nothing about the answers**. The MIXED branch was unreachable in exactly the case it was written for — the **fourth** time branch ordering has been load-bearing here |
+| 2 | prose truncated at the ceiling reported as `ANSWERED` | a reply that fills the whole budget and still has text is a sentence cut in half, not an answer |
+| 3 | the control arm was told *"the prefill did not stop it"* | the control has no prefill to fail; a think block there is the already-MEASURED baseline. The control looked like a refutation of the thing it is the baseline for |
+| 4 | an impossible prompt-token delta still read *"the prefill WORKS"* | the READING line is what gets quoted; an invalidating state noted only above it is not enough |
+
+Defect 2 also produced a reading that did not exist before: `PARTIAL`, for prose
+that ran out of room with no think block. **That is the one state in this script
+where a larger budget is the correct next step** — the tokens went into the
+answer, not into reasoning. Refusing a budget rise there by reflex from the other
+branches would have been wrong.
+
+**Four more found by the mutation battery — in the tests, not the script.** 25
+mutants, first pass: 21 killed, **4 survived**. Every survivor had one cause:
+the assertion checked **the order of lines in the source**, and a behavioural
+mutant does not move a line.
+
+| survivor | what it exposed |
+|---|---|
+| gate replaced by a hardcoded pass | nothing checked the gate is *consulted* |
+| impossible-delta flag forced `False` | nothing *produced* that state |
+| spelled-out-delta flag forced `False` | as above |
+| ceiling branch reworded to advise a bigger budget | the test grepped a sentence I wrote myself, so any rewording passed |
+
+**Standing lesson: grepping the sentence you wrote tests that you did not edit
+it, not that the advice is sound.** That is D-0085's flat-rate pin in a new
+disguise. The fix asserts the property — no budget-raising phrasing may appear
+anywhere in the pure-ceiling reading — paired with its complement, that the
+`PARTIAL` reading *must* advise one, so the ban cannot be satisfied by a script
+that never gives the right answer. After the fixes: **25 seeded, 25 killed, 0
+survived**, on the exact bytes that ship.
+
+**Cost, and what the run cannot settle.** 3 generations at 512 tokens ≈ **7
+minutes** ESTIMATED from the affine fit; the default is 512 rather than 3072
+because a pre-closed block means the reply should *be* the answer (the one case
+that ever answered normally used 266 tokens). The comparison is against
+measurements recorded in earlier sessions, so it is a **before/after, not a
+controlled A/B** — the script says so in its own output, and `--with-control`
+buys the strict version. And nothing here speaks to whether the answers are
+*correct*: only whether answers exist to be graded, which stays a separate human
+step (R10).
+
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
 R10 was the last threshold no automated check could decide. All 37 gradeable
@@ -874,7 +974,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,265 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,320 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 983 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -1047,8 +1147,10 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
   because the model never finishes thinking (D-0085, R35). An arm that cannot
   emit an answer cannot be leaned on. Row 7 of the work plan was the intended
   route to answering Q8; on current evidence it would spend ~10.4 h reproducing
-  that same outcome, so the **forced-closed-`<think>` test (one generation) comes
-  first**. See R35.
+  that same outcome, so the **forced-closed-`<think>` test comes first**. That
+  test now exists — `scripts/diagnose_forced_answer.py`, built and mutation-tested
+  on 2026-08-31 (D-0086), 3 generations at 512 tokens, ~7 min ESTIMATED, **not yet
+  run**. Until it reports, Q8 has no new evidence either way. See R35, R38.
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
   recall-first. MEASURED — mean subset 2,552 tokens (15.6% of 16K) versus 8,920
   for all 84 schemas; recall 24/24 across the eval and held-out sets.
@@ -1140,7 +1242,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,265 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,320 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1189,7 +1291,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,265-assertion base is trustworthy.
+3,320-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

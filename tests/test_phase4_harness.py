@@ -3832,6 +3832,490 @@ check_true("the scale-word gap does NOT swallow digits",
            "become 5,000,000 -- a 10^6 error invented by the grader itself, "
            "which is the exact error class this project exists to catch")
 
+
+# ---------------------------------------------------------------------------
+# The forced-closed-<think> prefill (D-0086).
+#
+# The model does not finish thinking at 512, 2048 or 3072 tokens (MEASURED
+# 2026-08-31), /think and /nothink are documented not to work on Qwen3.5, and
+# the shipped chat template has no enable_thinking flag. What remains is to
+# prefill the assistant turn with an already-closed empty reasoning block.
+#
+# These tests cover the two things that can silently invalidate that test:
+#   1. a prefill that is not a strict extension of the real prompt, and
+#   2. a reading that reports success while an invalidating state is present.
+# Both have been observed in this project, (2) four times now.
+# ---------------------------------------------------------------------------
+
+_fa_src = os.path.join(_ROOT, "scripts", "diagnose_forced_answer.py")
+check_true("scripts/diagnose_forced_answer.py exists",
+           os.path.exists(_fa_src),
+           "(A) the option-A tool is what the user was told they would get")
+_fa_text = open(_fa_src, encoding="utf-8").read()
+import diagnose_forced_answer as _FA  # noqa: E402
+
+# ---- the prompt itself ----------------------------------------------------
+_p_base = RP.chatml_prompt("SYS", "USR")
+_p_pre = RP.chatml_prompt_no_think("SYS", "USR")
+
+check_true("chatml_prompt_no_think extends chatml_prompt byte-for-byte",
+           _p_pre.startswith(_p_base),
+           "(D) if the prefill builder re-assembled the prompt instead of "
+           "extending it, any drift would change the prompt under test and "
+           "the comparison against the recorded no-prefill runs would be "
+           "against a different prompt")
+# check() compares NUMBERS with a tolerance; these are strings, so they need
+# check_true. Using check() here reported "non-numeric result" -- a real failure
+# of my own test code, caught by running it rather than by reading it.
+check_true("...and adds exactly the pre-closed block",
+           _p_pre[len(_p_base):] == RP.FORCED_CLOSED_THINK,
+           "(A) the suffix is the whole intervention")
+check_true("...which is '<think>\\n\\n</think>\\n\\n'",
+           RP.FORCED_CLOSED_THINK == "<think>\n\n</think>\n\n",
+           "(D) a block that is not CLOSED leaves strip_thinking() returning "
+           "an empty answer, which is the failure this test exists to escape")
+check_true("...leaving exactly one assistant header",
+           _p_pre.count("<|im_start|>assistant") == 1,
+           "(D) a second header would start a new turn and the model would "
+           "answer a prompt nobody wrote")
+check_true("the base prompt still ends with the bare assistant header",
+           _p_base.endswith("<|im_start|>assistant\n"),
+           "(D) VERIFIED against the shipped chat_template: its only "
+           "generation branch emits exactly this. If it stopped matching, the "
+           "prefill would be appended in the wrong place")
+check_true("the close tag follows the open tag in the prefill",
+           _p_pre.rindex(RP.THINK_CLOSE) > _p_pre.rindex(RP.THINK_OPEN),
+           "(D) reversed tags would read as an unterminated block")
+
+# The ids are what make this technique possible at all. They are asserted here
+# so that a tokenizer swap cannot silently turn the prefill into plain text.
+check("<think> is token id 151667 in the shipped tokenizer",
+      _FA.THINK_OPEN_ID, 151667, 0,
+      "(D) VERIFIED 2026-08-31 in added_tokens_decoder. If the prefill does "
+      "not resolve to a dedicated id the model never sees a closed block")
+check("</think> is token id 151668",
+      _FA.THINK_CLOSE_ID, 151668, 0,
+      "(D) as above; the close tag is the half that matters")
+check_true("the script does not claim these are SPECIAL tokens",
+           "special\": false" in _fa_text
+           or "\"special\": false" in _fa_text
+           or "not special" in _fa_text
+           or "dedicated ADDED tokens" in _fa_text,
+           "(D) MEASURED: both entries carry special=false, unlike "
+           "<|im_start|>. An earlier note of mine called them special; a "
+           "comment that overstates what was verified is how an unchecked "
+           "premise gets inherited as fact")
+
+# ---- the tokenization gate ------------------------------------------------
+check_true("the tokenization gate is checked BEFORE any generation",
+           _fa_text.index("check_prefill_tokenization(llm)")
+           < _fa_text.index("runner.generate("),
+           "(D) a gate that runs after the decode has already spent the hour "
+           "it was supposed to save")
+check_true("...and calls the tokenizer, rather than assuming a pass",
+           "llm.tokenize(" in _fa_text
+           and "(True, 'skipped')" not in _fa_text
+           and '(True, "skipped")' not in _fa_text,
+           "(D) MUTATION SURVIVOR, first battery: replacing the whole gate "
+           "call with a hardcoded (True, 'skipped') left every assertion "
+           "green, because they all checked SOURCE ORDER and none checked "
+           "that the gate is actually consulted. Source-order assertions "
+           "cannot see a behavioural change -- this is the textual half; the "
+           "behavioural half is the refusal test below")
+
+
+class _TokModel(object):
+    """Fake whose tokenize() behaviour is selectable, like the real risk."""
+
+    def __init__(self, kind, text="Net sales were $383,285 million [1].",
+                 ctok=20):
+        self.kind = kind
+        self.text = text
+        self.ctok = ctok
+
+    def tokenize(self, b, special=False):
+        if self.kind == "notok":
+            raise TypeError("tokenize() got an unexpected keyword 'special'")
+        if self.kind == "raises":
+            raise RuntimeError("model not loaded")
+        if self.kind == "spelled":
+            return [27, 82260, 29, 271, 522, 82260, 29, 271]
+        return [151667, 198, 198, 151668, 198, 198]
+
+    def __call__(self, prompt, max_tokens=256, echo=False, temperature=None,
+                 seed=None, stop=None):
+        return {"choices": [{"text": self.text}],
+                "usage": {"prompt_tokens": 400 + len(prompt) // 4,
+                          "completion_tokens": self.ctok}}
+
+
+_ok, _detail = _FA.check_prefill_tokenization(_TokModel("good"))
+check_true("the gate PASSES when both think ids are present",
+           _ok is True, "(A) the intended path must not refuse")
+_bad, _bd = _FA.check_prefill_tokenization(_TokModel("spelled"))
+check_true("the gate FAILS when the prefill is spelled out as text",
+           _bad is False,
+           "(D) this is the silent failure: the model would answer plausibly "
+           "while never having seen a closed reasoning block")
+check_true("...and says which ids it expected",
+           "151667" in _bd and "151668" in _bd,
+           "(A) a refusal the user cannot act on is a dead end")
+_none, _nd = _FA.check_prefill_tokenization(_TokModel("notok"))
+check_true("a build without tokenize(special=) is UNVERIFIED, not a failure",
+           _none is None,
+           "(D) reporting 'wrong tokenization' for 'cannot check' would send "
+           "the user to fix a prefill that may be perfectly correct")
+check_true("...and explains why the check could not run",
+           "special" in _nd,
+           "(A) UNVERIFIED must name its cause")
+_raise, _rd = _FA.check_prefill_tokenization(_TokModel("raises"))
+check_true("an unexpected tokenize() error is also UNVERIFIED, not a pass",
+           _raise is None,
+           "(D) swallowing the exception into a True would let a broken "
+           "tokenizer certify its own prefill")
+
+
+def _run_forced(model_obj, extra_argv):
+    """Run the SHIPPED forced-answer diagnostic, capturing stdout.
+
+    Drives the real module, for the same reason _run_diagnostic does: a test
+    that re-implemented the reading would pass while the script misreported.
+    """
+    fake = _types.ModuleType("llama_cpp")
+    fake.Llama = lambda **kw: model_obj
+    saved_mod = sys.modules.get("llama_cpp")
+    saved_argv = sys.argv
+    saved = sys.modules.pop("diagnose_forced_answer", None)
+    sys.modules["llama_cpp"] = fake
+    gguf = os.path.join(tempfile.mkdtemp(prefix="p4fa_"), "fake.gguf")
+    with open(gguf, "wb") as f:
+        f.write(b"x")
+    sys.argv = ["diagnose_forced_answer.py", "--model", gguf] + extra_argv
+    try:
+        mod = importlib.import_module("diagnose_forced_answer")
+        try:
+            _rv, printed = _capture(mod.main)
+        except SystemExit as e:
+            # A refusal is a legitimate outcome, and its text is the thing
+            # under test.
+            printed = getattr(e, "_captured", "") or str(e)
+        return printed
+    finally:
+        sys.argv = saved_argv
+        sys.modules.pop("diagnose_forced_answer", None)
+        if saved is not None:
+            sys.modules["diagnose_forced_answer"] = saved
+        if saved_mod is None:
+            sys.modules.pop("llama_cpp", None)
+        else:
+            sys.modules["llama_cpp"] = saved_mod
+
+
+class _FAModel(object):
+    """One fake per outcome the reading is supposed to distinguish."""
+
+    def __init__(self, kind):
+        self.kind = kind
+        self.calls = 0
+
+    def tokenize(self, b, special=False):
+        if self.kind == "spelled_prompt":
+            return [151667, 198, 198, 151668, 198, 198]
+        return [151667, 198, 198, 151668, 198, 198]
+
+    def __call__(self, prompt, max_tokens=256, echo=False, temperature=None,
+                 seed=None, stop=None):
+        self.calls += 1
+        n = self.calls
+        k = self.kind
+        if k == "works":
+            txt, ctok = "Net sales were $383,285 million [1].", 20
+        elif k == "reopen":
+            txt, ctok = "<think>\nlet me reconsider. " * 20, max_tokens
+        elif k == "ceiling":
+            # Budget gone, nothing visible, and crucially NO think tag.
+            txt, ctok = "   \n   " * 40, max_tokens
+        elif k == "trunc":
+            txt, ctok = ("Net sales were $383,285 million, and the segment "
+                         "breakdown shows that "), max_tokens
+        elif k == "mixed":
+            if n == 1:
+                txt, ctok = "It was $383,285 million [1].", 12
+            elif n == 2:
+                txt, ctok = "<think>\nhmm. " * 30, max_tokens
+            else:
+                txt, ctok = "It was about 96,995 million and the ", max_tokens
+        else:
+            raise AssertionError("unknown fake kind %r" % k)
+        ptok = 400 + len(prompt) // 4
+        return {"choices": [{"text": txt}],
+                "usage": {"prompt_tokens": ptok, "completion_tokens": ctok}}
+
+
+_ARGS = ["--max-tokens", "512"]
+
+class _CountingTokModel(_TokModel):
+    """Counts generations, so 'refused before any decode' is OBSERVABLE.
+
+    MUTATION SURVIVOR that forced this into existence: replacing the gate call
+    with a hardcoded pass survived the whole first battery, because every
+    assertion about the gate checked the ORDER OF LINES IN THE SOURCE. Line
+    order is exactly what a behavioural mutant leaves untouched. The only
+    assertion that can catch it is one that runs the script and counts how
+    many times the model was called.
+    """
+
+    def __init__(self, kind):
+        _TokModel.__init__(self, kind)
+        self.generations = 0
+
+    def __call__(self, prompt, **kw):
+        self.generations += 1
+        return _TokModel.__call__(self, prompt, **kw)
+
+
+_spelled_model = _CountingTokModel("spelled")
+_out_refuse = _run_forced(_spelled_model, ["--max-tokens", "512"])
+check("a spelled-out prefill costs ZERO generations",
+      _spelled_model.generations, 0, 0,
+      "(D) MUTATION SURVIVOR: the gate is the only thing standing between a "
+      "silently-invalid premise and an hour of the user's evening. If it is "
+      "bypassed the script still prints plausible answers, so the assertion "
+      "has to be that nothing was generated at all")
+check_true("...and it says REFUSING TO RUN",
+           "REFUSING TO RUN" in _out_refuse,
+           "(A) the refusal must be legible, not just an exit code")
+
+_good_model = _CountingTokModel("good")
+_out_allow = _run_forced(_good_model, ["--max-tokens", "512"])
+check("a correct prefill DOES generate, once per case",
+      _good_model.generations, len(_FA.ZERO_TOKEN_CASES), 0,
+      "(C) INVARIANT: the gate must not be so strict it refuses the intended "
+      "path. A test that only proves refusals would pass on a script that "
+      "refuses everything")
+
+_fa_works = _run_forced(_FAModel("works"), _ARGS)
+check_true("all-answered prints 'the prefill WORKS'",
+           "the prefill WORKS" in _fa_works,
+           "(A) the outcome the user is paying for must be legible")
+check_true("...and discloses that there was no control arm",
+           "LIMIT:" in _fa_works and "before/after" in _fa_works,
+           "(D) without this the run reads as a controlled A/B, which it is "
+           "not: the baseline comes from earlier sessions")
+check_true("...and still says it is a DIAGNOSTIC, not a measurement",
+           "NOT A MEASUREMENT" in _fa_works
+           or "measurements_recorded" in _fa_works,
+           "(A) phase_4/measurements_recorded must stay None")
+check_true("...and never claims the answers are CORRECT",
+           "ANSWERS ARE CORRECT" in _fa_works,
+           "(D) an answer existing and an answer being right are different "
+           "claims; grading is a separate, human step (R10)")
+
+_fa_reopen = _run_forced(_FAModel("reopen"), _ARGS)
+check_true("all-reopened prints 'did NOT stop the deliberation'",
+           "did NOT stop the deliberation" in _fa_reopen,
+           "(A) the most likely failure needs its own reading")
+check_true("...and does NOT recommend a bigger budget",
+           "NOT a bigger budget" in _fa_reopen,
+           "(D) raising the budget has now failed at 512, 2048 and 3072; "
+           "recommending it again would repeat the circular argument that "
+           "picked 3072 in the first place")
+
+_fa_ceiling = _run_forced(_FAModel("ceiling"), _ARGS)
+check_true("budget-consumed-with-no-tag prints 'the prefill did not help'",
+           "the prefill did not help" in _fa_ceiling,
+           "(D) DEFECT FOUND BY DRY RUN: the first fake for this case emitted "
+           "text containing '<think>', so it exercised the re-opened branch "
+           "and this branch was never run at all")
+check_true("...and warns against raising the budget",
+           "Do NOT respond by raising" in _fa_ceiling,
+           "(A) the standing lesson from D-0085")
+# MUTATION SURVIVOR: rewording the warning to "the budget is the obvious next
+# thing to try" kept the test green, because the assertion above greps for a
+# specific phrase and the mutant simply used a different one. Grepping the
+# sentence you wrote tests that you did not edit it; it does not test the
+# advice. So assert the PROPERTY: in this state, no budget-raising suggestion
+# may appear at all.
+_ceiling_read = _fa_ceiling[_fa_ceiling.index("READING:"):]
+check_true("...and suggests raising the budget NOWHERE in this reading",
+           not any(s in _ceiling_read.lower() for s in
+                   ("obvious next thing", "raise the budget",
+                    "raising the budget is", "bigger budget is",
+                    "larger budget is", "higher --max-tokens")),
+           "(D) MUTATION SURVIVOR: a budget rise has now failed at 512, 2048 "
+           "and 3072 (MEASURED). Advising it a fourth time from the one "
+           "branch that proves it does not work would repeat the circular "
+           "reasoning that chose 3072 in the first place (D-0085)")
+
+
+_fa_trunc = _run_forced(_FAModel("trunc"), _ARGS)
+check_true("prose truncated at the ceiling prints PARTIAL, not ANSWERED",
+           "PARTIAL" in _fa_trunc,
+           "(D) a reply that fills the whole budget and still has text is "
+           "truncated mid-sentence; counting it as an answer is the same "
+           "silent over-claim as the branch-order defect")
+check_true("...and this is the ONE case where a bigger budget is advised",
+           "larger budget is the correct next step" in _fa_trunc,
+           "(D) the tokens went into the answer, not into reasoning. "
+           "Refusing a budget rise here by reflex from the other branches "
+           "would be wrong")
+check_true("...and does not count truncated prose as a complete answer",
+           "COMPLETE ANSWER: 0 of 3" in _fa_trunc,
+           "(A) the summary and the reading must agree")
+# Paired with the ban asserted on the pure-ceiling reading above. Defined here
+# because _fa_trunc does not exist until this point.
+check_true("...and this is the ONE reading that may advise a budget rise",
+           "larger budget is the correct next step"
+           in _fa_trunc[_fa_trunc.index("READING:"):],
+           "(C) INVARIANT: the two ceiling states differ only in whether the "
+           "tokens went into reasoning or into the answer, and that "
+           "difference IS the recommendation. A test that banned budget "
+           "advice everywhere would pass on a script that could never give "
+           "the right answer here")
+
+_fa_mixed = _run_forced(_FAModel("mixed"), _ARGS)
+check_true("a partial result prints MIXED",
+           "MIXED" in _fa_mixed,
+           "(D) DEFECT FOUND BY DRY RUN: an over-eager `elif reopened:` sat "
+           "above every answered-case branch, so a 2-of-3-answered run "
+           "printed 'the prefill did NOT stop the deliberation' and nothing "
+           "about the answers. This branch was unreachable in exactly the "
+           "situation it was written for -- the fourth time branch ordering "
+           "in a verdict function has been load-bearing in this project")
+check_true("...and names the re-opened case specifically",
+           "re-opened a <think> block" in _fa_mixed,
+           "(D) 'some answered' is not a diagnosis: the right next step "
+           "differs completely depending on whether the rest re-opened a "
+           "think block or ran out of room mid-answer")
+check_true("...and names the truncated case separately",
+           "ran out of budget mid-answer" in _fa_mixed,
+           "(A) two different failures must not be reported as one")
+check_true("...and refuses to read partial success as a green light",
+           "not a green light" in _fa_mixed,
+           "(D) the whole point of the gate is that hours are not spent on "
+           "a technique that works for one case in three")
+
+# ---- the invalidating states must precede any success verdict -------------
+check_true("the INVALID delta reading is printed before the WORKS reading",
+           _fa_text.index("READING: INVALID. The prefill prompt is strictly")
+           < _fa_text.index("READING: the prefill WORKS"),
+           "(D) DEFECT FOUND BY DRY RUN: with an arithmetically impossible "
+           "prompt-token delta the script still printed 'the prefill WORKS'. "
+           "The READING line is what gets quoted, so an invalidating state "
+           "noted only above the summary is not enough")
+check_true("the spelled-out reading is also before the WORKS reading",
+           _fa_text.index("READING: INVALID. The pre-closed block appears")
+           < _fa_text.index("READING: the prefill WORKS"),
+           "(D) same defect class: if the block was spelled out as text the "
+           "model never saw a closed block, so an answer is not evidence")
+class _DeltaModel(object):
+    """A model whose reported prompt_tokens is chosen to break the delta.
+
+    MUTATION SURVIVORS that forced this into existence: setting
+    `delta_impossible = False` and `delta_spelled = False` both survived the
+    first battery. Every assertion about those states compared the POSITION of
+    two READING strings in the source, and a mutant that stops the flag ever
+    becoming true does not move a single line. The state has to be produced and
+    the output read.
+    """
+
+    def __init__(self, kind):
+        self.kind = kind
+
+    def tokenize(self, b, special=False):
+        return [151667, 198, 198, 151668, 198, 198]
+
+    def __call__(self, prompt, max_tokens=256, echo=False, temperature=None,
+                 seed=None, stop=None):
+        pre = prompt.endswith(RP.FORCED_CLOSED_THINK)
+        if self.kind == "impossible":
+            # Identical for both arms -> delta 0, which cannot happen if both
+            # arms were counted: the prefill prompt is strictly longer.
+            ptok = 400
+        else:
+            # ~1 token per character of the block -> spelled out as text.
+            ptok = 400 + (19 if pre else 0)
+        return {"choices": [{"text": "Net sales were $383,285 million [1]."}],
+                "usage": {"prompt_tokens": ptok, "completion_tokens": 15}}
+
+
+_out_imp = _run_forced(_DeltaModel("impossible"),
+                       ["--max-tokens", "512", "--with-control"])
+check_true("an impossible prompt-token delta makes the READING say INVALID",
+           "READING: INVALID" in _out_imp,
+           "(D) MUTATION SURVIVOR: with the flag forced to False the script "
+           "printed 'the prefill WORKS' over an arithmetically impossible "
+           "delta. The READING line is what gets quoted in a report, so an "
+           "invalidating state noted only in the summary above it is not "
+           "enough")
+check_true("...and does NOT also claim the prefill WORKS",
+           "the prefill WORKS" not in _out_imp,
+           "(D) two contradictory readings in one output is worse than "
+           "either alone: the reader picks the one they hoped for")
+
+_out_spell = _run_forced(_DeltaModel("spelled"),
+                         ["--max-tokens", "512", "--with-control"])
+check_true("a spelled-out-looking delta also makes the READING say INVALID",
+           "READING: INVALID" in _out_spell,
+           "(D) MUTATION SURVIVOR, same class. If the block cost ~19 prompt "
+           "tokens it was text, not the two ids -- so the model never saw a "
+           "closed reasoning block and the answers prove nothing about the "
+           "technique, however good they look")
+check_true("...and does NOT also claim the prefill WORKS",
+           "the prefill WORKS" not in _out_spell,
+           "(A) an invalid run has no successful reading")
+
+check_true("the UNVERIFIED reading is before the WORKS reading",
+           _fa_text.index("READING: UNVERIFIED")
+           < _fa_text.index("READING: the prefill WORKS"),
+           "(A) an unverified premise cannot support a conclusion")
+
+# ---- cost, and the refusal to spend it silently ---------------------------
+check_true("the default budget is 512, not 3072",
+           "default=512" in _fa_text,
+           "(D) a forced-closed block means the reply should BE the answer; "
+           "the one case that ever answered normally used 266 tokens. "
+           "Defaulting to 3072 would turn a 6-minute test into 36 minutes "
+           "for no reason")
+check_true("the script imports the affine cost model rather than restating it",
+           "from diagnose_zero_tokens import" in _fa_text
+           and "MEASURED_DECODE_TPS" not in _fa_text,
+           "(D) a second copy of a cost figure is how the first one survived "
+           "three refutations; D-0085")
+check_true("the projection is labelled ESTIMATED",
+           "[ESTIMATED from a " in _fa_text,
+           "(A) never present ESTIMATED as MEASURED")
+_fa_gate = _run_forced(_FAModel("works"), ["--max-tokens", "3072"])
+check_true("a projection over the threshold REFUSES to start",
+           "REFUSING TO START" in _fa_gate,
+           "(A) no model run without explicit approval of its cost")
+check_true("...and the refusal names the threshold",
+           "15-minute" in _fa_gate or "15 minute" in _fa_gate,
+           "(A) the user must be able to see what they are approving")
+check_true("...and --yes is offered as the way through",
+           "--yes" in _fa_gate,
+           "(A) the gate must be passable, not a wall")
+
+# ---- it must not touch anything a grader reads ----------------------------
+check_true("the forced-answer script writes nothing under evidence/",
+           "evidence/" not in _fa_text.replace(
+               "evidence/phase4_merged.json", ""),
+           "(A) diagnostics stay out of the evidence path")
+_fa_writes = [ln.strip() for ln in _fa_text.splitlines()
+              if "open(" in ln and '"w"' in ln]
+check_true("its only write is the optional --out file",
+           len(_fa_writes) == 1 and "a.out" in _fa_writes[0],
+           "(D) a diagnostic that writes a file a grader might pick up stops "
+           "being a diagnostic; found %r" % (_fa_writes,))
+check_true("...and that file is labelled NOT A MEASUREMENT",
+           "DIAGNOSTIC -- NOT A MEASUREMENT" in _fa_text,
+           "(A) the label travels with the data")
+check_true("it does not import or touch PROJECT_STATE.json",
+           "PROJECT_STATE" not in _fa_text.replace(
+               "PROJECT_STATE.json nor evidence", "").replace(
+               "modify PROJECT_STATE.json", ""),
+           "(A) phase_4/measurements_recorded must stay None")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

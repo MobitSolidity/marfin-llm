@@ -3255,3 +3255,117 @@ it. D-0082, D-0083, D-0084 and now D-0085 were each found this way.
 
 `phase_4/measurements_recorded` stays **None**. **Nothing has been launched, and
 nothing will be without explicit approval.**
+
+## D-0086 — Option A built: the forced-closed-`<think>` prefill, its validity gate, and four defects my own dry runs caught
+
+**Date.** 2026-08-31. **Status.** Tooling built, dry-run and mutation-tested.
+**Nothing launched.** `phase_4/measurements_recorded` is still `None`.
+
+**What the user approved.** «گزینه الف را تایید میکنیم» — option A of the three
+offered after D-0085: prefill the assistant turn with an already-closed empty
+reasoning block, so the model's next token is the first token of its answer.
+Chosen because D-0085 MEASURED that the model never finishes thinking at 512,
+2048 or 3072 tokens, `/think` and `/nothink` are documented not to work on
+Qwen3.5 (`phase4_lib.py:212`), and the shipped chat template has no
+`enable_thinking` flag. Cost: 3 generations at 512 tokens, ~7 minutes
+ESTIMATED — against ~10.4 h for the full re-run this is meant to inform.
+
+**What was VERIFIED before any code was written.**
+
+| premise | method | result |
+|---|---|---|
+| the template's generation branch emits exactly `<\|im_start\|>assistant\n` | read the 2630-char `chat_template` | VERIFIED |
+| our `chatml_prompt()` is byte-identical to a jinja2 render of it | rendered both, compared | VERIFIED, equal |
+| no `enable_thinking` / `think` / `no_think` flag exists | substring search | VERIFIED absent |
+| `<think>` / `</think>` have dedicated ids | `added_tokens_decoder` | VERIFIED 151667 / 151668 |
+
+**A CORRECTION TO MY OWN EARLIER NOTE.** I had recorded these as "dedicated
+SPECIAL tokens". They are dedicated **added** tokens: both entries carry
+`"special": false`, and neither appears in `additional_special_tokens`.
+`<|im_start|>` and `<|im_end|>` are the special ones; `<think>` sits in the same
+class as `<tool_call>`. The design does not change — what matters is that each
+is ONE id, not a spelling — but the comment claiming otherwise has been
+corrected in both `run_phase4.py` and `diagnose_forced_answer.py`. A comment
+that overstates what was verified is how an unchecked premise gets inherited as
+fact, which is the failure mode of D-0082 and D-0085 both.
+
+**The silent-failure risk, and the gate built for it.** If llama-cpp tokenizes
+the prefill as ordinary text spelling `"<think>"` instead of resolving it to
+those two ids, the model never sees a closed reasoning block — and the run still
+prints plausible answers. So the script tokenizes the prefill and REFUSES before
+spending any decode time unless both ids appear. MEASURED in the dry run: a
+spelled-out prefill exits 1 with **zero generations**.
+
+**What the gate cannot prove, stated rather than papered over.** It calls
+`tokenize(..., special=True)`, the permissive setting, so a *failure* is
+conclusive. A *pass* only shows the tokenizer CAN resolve the string when asked;
+it does not prove the completion call's own prompt path does the same. The one
+observable signal is the prefill-minus-control prompt-token delta: ~6 means the
+ids were used, ~19 means it was spelled out. That is why `--with-control` now
+prints the delta, and why an impossible or spelled-out delta invalidates the
+run.
+
+**FOUR DEFECTS FOUND BY MY OWN DRY RUNS, BEFORE THE SCRIPT WAS OFFERED.**
+
+1. **Branch ordering, the fourth instance in this project.** `elif reopened:`
+   sat above every answered-case branch, so a run where 2 of 3 cases answered
+   perfectly printed *"the prefill did NOT stop the deliberation, 2 of 3"* and
+   **nothing about the answers**. The MIXED branch was unreachable in exactly
+   the situation it was written for.
+2. **Truncated prose counted as an answer.** A reply that consumed the whole
+   budget and still had visible text was reported `ANSWERED`. At the ceiling
+   that is almost certainly a sentence cut in half. It now reports `TEXT AT
+   CEILING -- truncated, NOT a finished answer`, and a separate `PARTIAL`
+   reading exists because this is the **one** state where a larger budget is
+   the right response: the tokens went into the answer, not into reasoning.
+3. **The control arm was told the prefill had failed.** Both arms printed
+   *"RE-OPENED `<think>` -- the prefill did not stop it"*, but the control arm
+   has no prefill to fail; a think block there is the ordinary, already-MEASURED
+   baseline. The control looked like a refutation of the thing it is the
+   baseline for.
+4. **An invalidating state printed after a success verdict.** With an
+   arithmetically impossible prompt-token delta the reading still said *"the
+   prefill WORKS"*. The READING line is what gets quoted, so noting the problem
+   only in the summary above it is not enough. Both delta failures now produce
+   `READING: INVALID` and suppress the success reading.
+
+**THE MUTATION BATTERY FOUND FOUR MORE — IN MY TESTS, NOT THE SCRIPT.** 25
+mutants, first pass: 21 killed, **4 survived**. All four survivors shared one
+cause: the assertions checked **the order of lines in the source**, and a
+behavioural mutant does not move a line.
+
+| survivor | what it proved |
+|---|---|
+| gate replaced by a hardcoded pass | no test ever checked the gate is *consulted* |
+| impossible delta flag forced False | no test ever *produced* that state |
+| spelled-out delta flag forced False | as above |
+| ceiling branch reworded to advise a bigger budget | the test grepped my own sentence, so any rewording passed |
+
+The fourth is the most instructive and is now a standing lesson: **grepping the
+sentence you wrote tests that you did not edit it, not that the advice is
+sound.** Replaced with a property assertion — no budget-raising phrasing may
+appear anywhere in that reading — paired with its complement, that the PARTIAL
+reading *must* advise one, so the ban cannot be satisfied by a script that
+never gives the right answer.
+
+Also fixed in passing: two of my new assertions used `check()`, which compares
+numbers, on strings. They reported "non-numeric result". Caught by running the
+suite, not by reading it.
+
+**Verification.** 697 assertions in `tests/test_phase4_harness.py` (was 642);
+all ten reading branches dry-run against purpose-built fakes, each confirmed to
+reach its own branch; refusal paths confirmed to exit 1 with zero generations;
+the prefill confirmed a strict extension of the real rag prompt, derived from it
+rather than rebuilt beside it.
+
+**Standing lessons.**
+- A source-order assertion cannot see a behavioural change. If a state matters,
+  produce it and read the output.
+- Grepping your own wording tests the edit, not the property — the same lesson
+  as D-0085's flat-rate pin, in a new disguise.
+- An invalidating state must be reported by the line that gets quoted, not
+  merely somewhere above it. Four instances now.
+
+**What this does NOT establish.** Nothing about whether the prefill works: no
+model has been run. It also says nothing about answer *correctness* — only
+whether answers exist to be graded, which remains a separate human step (R10).

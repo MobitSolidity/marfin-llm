@@ -170,6 +170,75 @@ def chatml_prompt(system, user):
 
 
 # ---------------------------------------------------------------------------
+# FORCING THE REASONING BLOCK CLOSED.
+#
+# WHY THIS EXISTS. MEASURED 2026-08-31 on the user's i5-12400, three rag cases,
+# three budgets: at 512, 2048 and 3072 tokens the model produced NO visible
+# answer on any of them. Every generation spent its whole budget inside an
+# unterminated <think> block, emitting 6,094/7,908/7,532 characters of reasoning
+# at 2048 and 10,647/11,184/11,940 at 3072. The reasoning scales with whatever
+# budget it is given (~3.5 chars per token) and never closes its tag, so raising
+# --max-tokens is not a route to an answer. See D-0085.
+#
+# The model card documents that Qwen3.5's /think and /nothink soft switches are
+# NOT supported (recorded at phase4_lib.py:212), and the shipped chat_template
+# contains no `enable_thinking` flag -- VERIFIED by inspecting the real
+# tokenizer_config: the template's only generation branch emits
+# '<|im_start|>assistant\n' with nothing after it. So neither a prompt-level
+# switch nor a template flag is available.
+#
+# What IS available is prefilling the assistant turn. Appending an already-closed
+# empty reasoning block after the assistant header puts the model at a position
+# where, as far as it can tell, it has already finished deliberating -- so the
+# next token it produces is the first token of the answer. This is the standard
+# technique for Qwen-family reasoning models and needs no library support.
+#
+# WHY THE TOKENS MATTER, AND WHY THE CALLER MUST CHECK. `<think>` and `</think>`
+# have DEDICATED IDS in this tokenizer -- 151667 and 151668, VERIFIED
+# 2026-08-31 in added_tokens_decoder.
+#
+# Precision, because an earlier version of this comment overstated it: those
+# entries carry "special": false. They are dedicated ADDED tokens, not special
+# tokens; <|im_start|> and <|im_end|> are the special ones and are listed in
+# additional_special_tokens, while <think> sits in the same class as
+# <tool_call>. The distinction does not change the design -- what matters is
+# that each is ONE id, not a spelling.
+#
+# If llama-cpp tokenizes this prefix as literal text (several ordinary tokens
+# spelling "<think>") rather than as those two ids, the model does not see a
+# closed reasoning block at all and the experiment is INVALID -- while still
+# producing plausible-looking output. That failure is silent, so it must be
+# tested for rather than assumed; scripts/diagnose_forced_answer.py verifies
+# the ids before it accepts any result.
+THINK_OPEN = "<think>"
+THINK_CLOSE = "</think>"
+
+# The exact continuation appended after the assistant header. The blank line
+# inside the block and the blank line after it mirror what the model emits
+# itself when it closes a block normally ("<think>\n...\n</think>\n\n"), so the
+# prefill is a position the model has been trained to continue from rather than
+# a novel string.
+FORCED_CLOSED_THINK = THINK_OPEN + "\n\n" + THINK_CLOSE + "\n\n"
+
+
+def chatml_prompt_no_think(system, user):
+    """
+    Render one system + one user turn, with the reasoning block PRE-CLOSED.
+
+    Identical to chatml_prompt() up to and including the assistant header, then
+    an empty closed <think> block. The model's next token is therefore the first
+    token of its visible answer.
+
+    NOTE ON GRADING. A reply produced this way has no <think> tag left to strip,
+    because the tag is in the PROMPT and llama-cpp is called with echo=False.
+    strip_thinking() will see a bare answer and return it unchanged with
+    had_thinking=False -- which is correct, but means `had_thinking` must not be
+    read as "this model does not think" for prompts built by this function.
+    """
+    return chatml_prompt(system, user) + FORCED_CLOSED_THINK
+
+
+# ---------------------------------------------------------------------------
 # SAMPLING.
 #
 # WHY THESE ARE SET EXPLICITLY. llama-cpp-python's defaults are
