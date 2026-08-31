@@ -1620,6 +1620,243 @@ check_true("...and the harness still runs against it rather than crashing",
            _tf == "ok", "(C)")
 
 
+
+section("the diagnostic must judge on the ANSWER, not on the token count")
+
+# WHY THIS SECTION EXISTS -- MEASURED, from the user's own machine.
+#
+# scripts/diagnose_zero_tokens.py was run on the i5-12400 on 2026-08-31. All
+# SIX generations returned exactly tokens=512 (the --max-tokens ceiling) and
+# not one printed an answer preview, because the preview is guarded by
+# `if text.strip()`. The visible answer was therefore empty every time -- and
+# every one of them was labelled "PRODUCED OUTPUT", because the label, and the
+# entire summary, keyed on completion_tokens != 0.
+#
+# `completion_tokens > 0` is not the fact "answered". A reply that spends its
+# whole budget inside an unterminated <think> emits the MAXIMUM number of
+# tokens and says nothing. So a run that could not discriminate between the two
+# prompt shapes in either direction printed three lines reading as though it
+# had. That is the same hazard class as `grep -q "0 failed"`: a check whose
+# output does not depend on the thing it claims to check.
+#
+# These assertions drive the real script through a fake model that reproduces
+# that exact run, and require the verdict to say INCONCLUSIVE.
+
+import importlib  # noqa: E402
+import types as _types  # noqa: E402
+
+_diag_src = os.path.join(_ROOT, "scripts", "diagnose_zero_tokens.py")
+check_true("the diagnostic script exists to be tested at all",
+           os.path.exists(_diag_src),
+           "(C) a guard against a script that was renamed away from its test")
+
+
+class _CeilingModel(object):
+    """Reproduces the 2026-08-31 run: max tokens, unterminated <think>."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, prompt, **kw):
+        self.calls += 1
+        n = kw.get("max_tokens", 512)
+        return {"choices": [{"text": "<think>\n" + ("weighing. " * 100)}],
+                "usage": {"prompt_tokens": len(prompt) // 4,
+                          "completion_tokens": n}}
+
+
+class _AnswerModel(object):
+    """ChatML answers; the old raw shape burns the budget inside <think>."""
+
+    def __call__(self, prompt, **kw):
+        n = kw.get("max_tokens", 512)
+        if prompt.startswith("<|im_start|>system"):
+            t = "Total net sales were $394,328 million. [1]"
+            return {"choices": [{"text": t}],
+                    "usage": {"prompt_tokens": 4,
+                              "completion_tokens": len(t) // 4}}
+        return {"choices": [{"text": "<think>\n" + ("x " * 200)}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": n}}
+
+
+def _run_diagnostic(model_obj, extra_argv):
+    """Import and run the real diagnostic against `model_obj`, capturing stdout.
+
+    The module is loaded fresh each time and llama_cpp is faked, so this drives
+    the SHIPPED code path rather than a re-implementation of it. A test that
+    re-implemented the verdict logic would pass while the script stayed broken.
+    """
+    fake = _types.ModuleType("llama_cpp")
+    fake.Llama = lambda **kw: model_obj
+    saved_mod = sys.modules.get("llama_cpp")
+    saved_argv = sys.argv
+    saved_diag = sys.modules.pop("diagnose_zero_tokens", None)
+    sys.modules["llama_cpp"] = fake
+    gguf = os.path.join(tempfile.mkdtemp(prefix="p4diag_"), "fake.gguf")
+    with open(gguf, "wb") as f:
+        f.write(b"x")
+    sys.argv = (["diagnose_zero_tokens.py", "--model", gguf] + extra_argv)
+    try:
+        mod = importlib.import_module("diagnose_zero_tokens")
+        _rv, printed = _capture(mod.main)
+        return printed
+    finally:
+        sys.argv = saved_argv
+        sys.modules.pop("diagnose_zero_tokens", None)
+        if saved_diag is not None:
+            sys.modules["diagnose_zero_tokens"] = saved_diag
+        if saved_mod is None:
+            sys.modules.pop("llama_cpp", None)
+        else:
+            sys.modules["llama_cpp"] = saved_mod
+
+
+_out_ceiling = _run_diagnostic(_CeilingModel(),
+                               ["--max-tokens", "512", "--yes"])
+
+check_true("the 2026-08-31 run is reported as INCONCLUSIVE",
+           "INCONCLUSIVE" in _out_ceiling,
+           "(D) MEASURED: this exact model output was reported as 'the old "
+           "prompt ALSO produced output', which reads as a finding about the "
+           "prompt shape. It is not one -- neither side ever answered")
+check_true("...and no generation is called PRODUCED OUTPUT on tokens alone",
+           "PRODUCED OUTPUT" not in _out_ceiling,
+           "(D) the defective label, asserted absent by name so that "
+           "reintroducing it fails here")
+check_true("...and the visible-answer count is reported as 0 of 3",
+           "VISIBLE ANSWER  : 0 of 3" in _out_ceiling,
+           "(A) the count must be of answers, not of token-emitting calls")
+check_true("...and the budget-bound count is reported as 3 of 3",
+           "budget-bound    : 3 of 3" in _out_ceiling,
+           "(C) a reply stopped by the ceiling says nothing about the prompt, "
+           "so the ceiling must be counted and shown")
+check_true("...and each generation is marked AT CEILING",
+           _out_ceiling.count("[AT CEILING]") == 6,
+           "(A) 3 cases x 2 arms; got %d"
+           % _out_ceiling.count("[AT CEILING]"))
+check_true("...and the reason for the empty answer is printed, not omitted",
+           "unterminated <think>" in _out_ceiling,
+           "(D) the old version printed NOTHING for an empty answer, which is "
+           "how six empty replies looked identical to six good ones")
+# THIS ASSERTION EXISTS BECAUSE THE ONE ABOVE SURVIVED ITS MUTANT.
+#
+# MEASURED 2026-08-31: deleting the whole `else:` branch that prints the
+# reasoning slice for an answerless generation left the suite at 626 passed /
+# 0 failed. The guard above could not see it, because "unterminated <think>"
+# also appears in the VERDICT line -- so it was asserting the presence of a
+# string that a different line supplies. Same failure as the `t == t.strip()`
+# stop-token guard: an assertion aimed at the wrong surface.
+#
+# The property is "when there is no answer, the reader is told how much
+# reasoning was produced instead", so it is asserted on text only that branch
+# emits, once per answerless generation.
+check_true("...and every answerless generation reports its reasoning volume",
+           _out_ceiling.count("(no visible answer; reasoning") == 6,
+           "(D) MEASURED survivor: removing the reasoning-slice print left the "
+           "suite green. A run of six silent replies would then print six "
+           "verdict lines and no evidence of WHY, which is the state that made "
+           "the user's own run unreadable. Got %d of 6"
+           % _out_ceiling.count("(no visible answer; reasoning"))
+check_true("...and the run is explicitly said not to reproduce 2026-08-30",
+           "does NOT reproduce" in _out_ceiling
+           or "not reproduce" in _out_ceiling,
+           "(C) 512 tokens in 150 s is not the same event as 0 tokens in 5 s")
+
+_out_answer = _run_diagnostic(_AnswerModel(), ["--max-tokens", "512", "--yes"])
+check_true("a ChatML-answers / old-prompt-truncates run IS attributed",
+           "the template was the cause" in _out_answer,
+           "(D) DEFECT FOUND BY DRY RUN 2026-08-31: `old_empty` was also keyed "
+           "on completion_tokens, so the strongest evidence FOR the template "
+           "printed as 'the old prompt ALSO produced output'. Fixing one side "
+           "of a comparison and not the other leaves it broken")
+check_true("...and the old side is credited with 0 visible answers",
+           "OLD prompt, ANSWER  : 0 of 3" in _out_answer,
+           "(A) it emitted 512 tokens each time and said nothing")
+# The negative control for the reasoning-slice note: it must appear for the
+# answerless OLD arm and NOT for the ChatML arm that answered. A note printed
+# unconditionally would satisfy the assertion above while telling the reader
+# nothing.
+check_true("...and the reasoning note fires 3 times here, not 6",
+           _out_answer.count("(no visible answer; reasoning") == 3,
+           "(C) 3 answerless old-prompt generations, 3 answered ChatML ones. "
+           "Got %d" % _out_answer.count("(no visible answer; reasoning"))
+check_true("...and the ChatML answer text itself is printed",
+           "394,328" in _out_answer,
+           "(A) an answered generation must show its answer")
+
+# -- the cost gate ---------------------------------------------------------
+# A diagnostic justified by being cheap must refuse to become expensive
+# silently. The 512-token version was advertised as "~10 minutes" and cost the
+# user 15.4 minutes for a result that proved nothing.
+_diag_mod_path = _diag_src
+_diag_text = open(_diag_mod_path, encoding="utf-8").read()
+check_true("the diagnostic's cost basis is the newly MEASURED 3.32 tok/s",
+           "MEASURED_DECODE_TPS = 3.32" in _diag_text,
+           "(D) the 4.03 tok/s carried over from 2026-08-30 is 17.5% "
+           "optimistic against the machine that will run this. Quoting the "
+           "friendlier number understates every estimate")
+check_true("...and the projection is labelled ESTIMATED, not MEASURED",
+           "[ESTIMATED from a " in _diag_text,
+           "(C) a projection computed from a measured rate is still a "
+           "projection; the project's labelling rule admits no exceptions")
+
+_raised = []
+try:
+    _run_diagnostic(_CeilingModel(), ["--max-tokens", "3072"])
+except SystemExit as _e:
+    _raised.append(str(_e))
+check_true("a >20-minute projected run REFUSES to start without --yes",
+           len(_raised) == 1 and "REFUSING TO START" in _raised[0],
+           "(D) raising --max-tokens from 512 to 3072 multiplies the cost by "
+           "six. A gate the user never sees is not a gate. Got: %r"
+           % (_raised[:1],))
+check_true("...and the refusal names the projected cost, not just the limit",
+           bool(_raised) and "min)" in _raised[0],
+           "(C) reporting a fault without naming its size is itself a defect")
+check_true("...while the same run proceeds when --yes is given",
+           "INCONCLUSIVE" in _run_diagnostic(_CeilingModel(),
+                                             ["--max-tokens", "3072", "--yes"]),
+           "(C) the gate must be a confirmation, not a wall")
+check_true("the default budget is no longer the too-small 512",
+           RP.DEFAULT_MAX_TOKENS != 512
+           and 'default=3072' in _diag_text,
+           "(D) MEASURED: at 512 every one of six generations was cut off "
+           "inside <think>. The 2026-08-30 rag arm's truncated cases used "
+           "~2031/~2636/~2510 reasoning tokens, so 512 was never sufficient")
+# MY OWN GUARD WAS DEFECTIVE, AND RUNNING IT IS WHAT SHOWED THAT.
+#
+# The first version asserted `"phase4_merged" not in _diag_text.split("USAGE")
+# [-1]`. It FAILED immediately -- on the script's own line that PRINTS "does
+# not modify ... evidence/phase4_merged.json". A substring proxy cannot tell a
+# promise from a violation of it. Same class as the `t == t.strip()` stop-token
+# guard that survived its mutant on 2026-08-31: a check that looks at the wrong
+# surface passes or fails for the wrong reason.
+#
+# The real property is about WRITES, so it is now asserted about writes: every
+# `open(..., "w")` in the script must be the optional --out dump, and none may
+# name a file a grader reads.
+_writes = [ln.strip() for ln in _diag_text.splitlines()
+           if "open(" in ln and '"w"' in ln]
+check_true("the diagnostic performs exactly ONE file write",
+           len(_writes) == 1,
+           "(C) the property that lets this script run without approval is "
+           "that it cannot produce a graded artefact. Got %d writes: %r"
+           % (len(_writes), _writes))
+check_true("...and that write is the optional --out dump",
+           bool(_writes) and "a.out" in _writes[0],
+           "(A) got %r" % (_writes[:1],))
+check_true("...and no write targets a file a grader or threshold reads",
+           not any(bad in w for w in _writes
+                   for bad in ("phase4_merged", "PROJECT_STATE",
+                               "phase4_grades", "phase4_run")),
+           "(D) a diagnostic that can overwrite the evidence base is not a "
+           "diagnostic; it is an unapproved measurement")
+check_true("...and the --out payload still labels itself not-a-measurement",
+           "not_read_by_graders" in _diag_text
+           and "DIAGNOSTIC_NOT_A_MEASUREMENT" in _diag_text,
+           "(C) the label must survive every edit, because the file outlives "
+           "the memory of what produced it")
+
 # -- the safety assertion ------------------------------------------------
 _n = RP.assert_no_execution_capability()
 check_true("assert_no_execution_capability passes on the real registry",

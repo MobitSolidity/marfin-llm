@@ -2959,3 +2959,124 @@ for cost estimates, and is labelled as carried-over rather than re-measured.
 `phase_4/measurements_recorded` stays **None**. No model run has been launched
 by me; the diagnostic is for the user to run under Route A, and it writes no
 file any grader reads.
+
+## D-0083 — The 2026-08-31 diagnostic came back INCONCLUSIVE, and the reason is
+## a defect in the diagnostic itself: it graded token counts, not answers
+**Date:** 2026-08-31 · **Phase:** 4 (R10 re-run prep) · **Status:** Active · **Severity:** High
+
+D-0082 fixed two harness defects (raw-completion prompts to a ChatML model; no
+sampling parameters at all) and shipped `scripts/diagnose_zero_tokens.py` to
+test, in ~15 minutes rather than 1.4 hours, whether the prompt shape was the
+cause of the four zero-token cases. The user ran it on the i5-12400.
+
+**What the run MEASURED.** Both fixes are live on the user's machine:
+`sampling : temperature=0.0 seed=20260831 applied=True`. Load 2.5 s. Then:
+
+| case | arm | tokens | seconds | tok/s |
+|---|---|---|---|---|
+| RAG-EN-005 | chatml | 512 | 157.4 | 3.25 |
+| RAG-EN-005 | raw_completion | 512 | 157.9 | 3.24 |
+| RAG-FA-002 | chatml | 512 | 151.1 | 3.39 |
+| RAG-FA-002 | raw_completion | 512 | 151.0 | 3.39 |
+| RAG-ABST-002 | chatml | 512 | 154.0 | 3.33 |
+| RAG-ABST-002 | raw_completion | 512 | 153.2 | 3.34 |
+
+**FINDING 1 — the ChatML fix is NOT proven to be the cause.** The old
+raw-completion prompt did not return empty this time, so the 2026-08-30
+emptiness was not reproduced and cannot be attributed to the prompt shape. The
+script printed exactly that, and it could only print it because the branch
+ordering had been fixed the same day: my first version tested
+`len(fixed) > len(old_empty)` before `not old_empty`, which made this — the one
+scenario where the diagnosis is UNPROVEN — unreachable, and would have reported
+"the template helps". The fix remains correct on its own evidence (the shipped
+Qwen3 template is byte-identical to what `chatml_prompt()` renders); it is
+simply not established as THE cause here.
+
+**FINDING 2 — the run proves nothing in EITHER direction, and my script hid
+that.** All six generations returned exactly `tokens=512` — the `--max-tokens`
+ceiling — and not one printed an answer preview, because the preview is guarded
+by `if text.strip()`. So the visible answer was empty in all six: every
+generation spent its whole budget inside an unterminated `<think>` block, which
+`strip_thinking()` correctly reports as `answer=""`. Yet each was labelled
+`PRODUCED OUTPUT`, and `fixed`/`still`/`old_empty` were all computed from
+`completion_tokens`.
+
+`completion_tokens > 0` is not the fact "answered". A reply that never leaves
+its reasoning block emits the MAXIMUM number of tokens and says nothing. The
+label and the summary therefore reported a run that could not discriminate
+between the two prompt shapes as though it had discriminated. Same hazard class
+as `grep -q "0 failed"`: an output that does not depend on the thing it claims
+to measure.
+
+**FINDING 3 — the 512 default was foreseeably too small, from data already in
+the repo.** The 2026-08-30 rag arm's three truncated cases used ~2031, ~2636 and
+~2510 reasoning tokens. My justification — "a case that emits ANY token has
+already answered the question this script asks" — is false for a model that
+thinks by default, which `phase4_lib.py:212` already documented.
+
+**FINDING 4 — the decode rate carried over from 2026-08-30 was optimistic.**
+MEASURED now: 3.32 tok/s (3.24–3.39 over six generations, spread 4.5%), against
+the 4.03 tok/s used as the cost basis, i.e. 17.5% slower. All cost figures in
+the diagnostic now use 3.32. Load time was 2.5 s against the recorded 0.84 s,
+so per-invocation load is also understated by ~3x.
+
+**FINDING 5 — the 2026-08-31 run is NOT the 2026-08-30 event.** The original
+zero-token cases emitted 0 tokens in 4.9–10.4 s (prefill only, 41.5–42.0 tok/s
+of prompt). This run emitted 512 tokens in ~150 s. They are different failures,
+and the first was not reproduced. The leading remaining hypothesis is that the
+2026-08-30 run sampled at `temperature=0.8` with a random, UNRECORDED seed and
+drew an immediate end-of-turn token. That is now prevented by the determinism
+fix and is UNFALSIFIABLE retrospectively, because the seed was never written
+down. This is stated as a hypothesis, not a conclusion.
+
+**What was changed.**
+1. `diagnose_zero_tokens.py` now derives its per-generation verdict from THREE
+   facts — tokens, visible answer, `thinking_truncated` — and reports
+   `[AT CEILING]` whenever the budget bound the reply. `PRODUCED OUTPUT` is
+   gone.
+2. A new FIRST verdict branch reports INCONCLUSIVE when every generation on both
+   sides hit the ceiling without answering. Inconclusive is a result and must be
+   reported as one.
+3. The old-prompt side had the SAME defect: `old_empty` was keyed on
+   `completion_tokens`, so the scenario "ChatML answers, old prompt burns its
+   whole budget in `<think>`" — the strongest possible evidence FOR the template
+   — printed as "the old prompt ALSO produced output". Found by dry-running that
+   scenario AFTER fixing the ChatML side. Fixing one side of a comparison and
+   not the other leaves the comparison broken.
+4. Default `--max-tokens` 512 → 3072, chosen to exceed the largest MEASURED
+   reasoning block (~2636 tok) with room for an answer.
+5. A cost gate: the script prints its projection from the MEASURED 3.32 tok/s
+   BEFORE loading the weights, and refuses to start above 20 projected minutes
+   without `--yes`. Raising the budget six-fold silently turned a 15-minute
+   script into a 93-minute one; a diagnostic justified by being cheap must not
+   become expensive without saying so.
+6. Every claim of "~10 minutes" in the script's own documentation is replaced by
+   the corrected figures, with ESTIMATED and MEASURED both labelled.
+
+**Verification.** 23 new assertions (606 → 629) drive the SHIPPED script through
+a fake model that reproduces the user's run byte-for-byte and require the verdict
+to read INCONCLUSIVE; a second fake reproduces "ChatML answers / old prompt
+truncates" and requires it to read "the template was the cause". 11 mutants
+seeded, 11 killed — after the first pass found 1 survivor: deleting the
+reasoning-slice print left the suite green, because my guard asserted a string
+that the VERDICT line also supplies. A guard aimed at the wrong surface is the
+same defect as the `t == t.strip()` stop-token guard of D-0082, and both were
+found only by running a mutant.
+
+**Standing lesson.** Two of my own diagnostics have now been wrong in the same
+way: they measured a proxy (`completion_tokens`, `t.strip()`) instead of the
+property (an answer exists, the token is emitted by the template). A probe that
+cannot report "inconclusive" will report something else instead.
+
+**Consequence for the plan.** Table row 6 is closed as SUPERSEDED and its
+successor is unresolved: the cause of the four zero-token cases is still
+UNKNOWN. Two routes remain, and the choice is the user's — a 46–92 minute
+diagnostic at 3072 tokens, or table row 7 (the full chunked re-run, now
+~13.4 h at 3072 tokens and 3.32 tok/s, MEASURED basis). Nothing has been
+launched.
+
+**Reversal:** none contemplated. Reverting any of the six changes is now a test
+failure.
+
+`phase_4/measurements_recorded` stays **None**. The user's diagnostic run wrote
+no file any grader reads, and no threshold was evaluated.

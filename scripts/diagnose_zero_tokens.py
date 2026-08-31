@@ -33,10 +33,22 @@ prompt. That comparison is the entire point: a single passing run would show
 the model answering, but not that the template is why. Same weights, same
 budget, same machine, one variable.
 
-COST: ~10 minutes, not the 1.4 hours a full rag re-run costs. MEASURED basis:
-4.03 tok/s decode (mean of the 7 decode_tps values in the 2026-08-30 run), so
-a 300-token answer is ~75 s. Six generations plus model load is well under 15
-minutes even if every answer runs long.
+COST -- CORRECTED 2026-08-31 AFTER THE FIRST REAL RUN
+-----------------------------------------------------
+The first version claimed "~10 minutes" on a 512-token budget and a carried-
+over 4.03 tok/s. Both numbers were wrong in the same direction:
+
+  * MEASURED on the i5-12400: 3.32 tok/s, not 4.03 (17.5% slower).
+  * 512 tokens was not enough for ANY of the three cases to finish. All six
+    generations returned exactly 512 tokens with no visible answer -- each one
+    still inside its <think> block. The run cost 15.4 minutes and could not
+    discriminate between the two prompt shapes in either direction.
+
+The default budget is now 3072, chosen because the 2026-08-30 rag arm's
+truncated cases used ~2031, ~2636 and ~2510 reasoning tokens. At 3.32 tok/s
+that is ~15 min per generation: ~46 min with --skip-old, ~92 min for the full
+comparison. The script prints this projection before loading the weights and
+refuses to start above 20 projected minutes without --yes.
 
 WHAT IT DOES NOT DO
 -------------------
@@ -74,6 +86,16 @@ ZERO_TOKEN_CASES = (
     ("rag", "RAG-ABST-002"),
 )
 
+# MEASURED 2026-08-31 on the user's i5-12400: six generations of exactly 512
+# tokens took 157.4 / 157.9 / 151.1 / 151.0 / 154.0 / 153.2 s, i.e. 3.24-3.39
+# tok/s, mean 3.32. That REPLACES the 4.03 tok/s carried over from 2026-08-30
+# as the basis for every cost figure this script prints: it is 17.5% slower,
+# and quoting the older, friendlier number would understate every estimate.
+MEASURED_DECODE_TPS = 3.32
+
+# Above this projected wall-clock, the script refuses to start without --yes.
+LONG_RUN_MINUTES = 20
+
 
 def p(s=""):
     sys.stdout.write(str(s) + "\n")
@@ -103,19 +125,37 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  # from the project root, Windows PowerShell
-  python scripts\\diagnose_zero_tokens.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf
+  # ChatML side only, 3 generations, ~46 min PROJECTED at a MEASURED 3.32 tok/s
+  python scripts\\diagnose_zero_tokens.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --skip-old --yes
 
-  # test only the ChatML side (faster, but does not prove WHY)
-  python scripts\\diagnose_zero_tokens.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --skip-old
+  # full comparison, 6 generations, ~92 min PROJECTED
+  python scripts\\diagnose_zero_tokens.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --yes
+
+note:
+  --max-tokens defaults to 3072. The earlier default of 512 was MEASURED to be
+  too small: every reply was cut off inside its <think> block, so the run
+  proved nothing. Do not lower it without reading the COST section above.
 """)
     ap.add_argument("--model", required=True, help="path to the GGUF file")
     ap.add_argument("--ctx", type=int, default=16384)
     ap.add_argument("--threads", type=int, default=6)
-    # 512 is ample: a case that emits ANY token has already answered the
-    # question this script asks. The budget is deliberately small so that the
-    # diagnostic cannot quietly turn into an hours-long run.
-    ap.add_argument("--max-tokens", type=int, default=512)
+    # THE FIRST DEFAULT (512) WAS WRONG, AND THE USER'S RUN PROVED IT.
+    #
+    # The reasoning was: "a case that emits ANY token has already answered the
+    # question this script asks." That is false for a thinking model. MEASURED
+    # 2026-08-31 on the i5-12400: all six generations returned exactly 512
+    # tokens and NONE produced a visible answer -- every one was still inside
+    # its <think> block when the budget ran out. The 2026-08-30 run's rag arm
+    # shows why that was foreseeable: its truncated cases used ~2031, ~2636 and
+    # ~2510 reasoning tokens. 512 was never going to be enough.
+    #
+    # 3072 is chosen from that MEASURED distribution: it exceeds the largest
+    # observed reasoning block (~2636 tok) with room for an answer after it.
+    # COST at the newly MEASURED 3.32 tok/s: ~15.4 min per generation, so
+    # ~46 min for three cases with --skip-old, ~92 min for the full comparison.
+    # That is no longer a "10-minute" diagnostic and must not be described as
+    # one.
+    ap.add_argument("--max-tokens", type=int, default=3072)
     ap.add_argument("--corpus",
                     default=os.path.join(_ROOT, "evals", "rag_corpus_v1.jsonl"))
     ap.add_argument("--gold",
@@ -123,6 +163,11 @@ examples:
     ap.add_argument("--top-k", type=int, default=4)
     ap.add_argument("--skip-old", action="store_true",
                     help="do not run the old raw-completion prompt")
+    ap.add_argument("--yes", action="store_true",
+                    help="confirm a run whose PROJECTED cost exceeds "
+                         "%d minutes. Required, because raising --max-tokens "
+                         "silently turned a 15-minute script into a "
+                         "90-minute one." % LONG_RUN_MINUTES)
     ap.add_argument("--out", default=None,
                     help="optional path for a JSON copy of these results. "
                          "NOT read by any grader.")
@@ -148,6 +193,33 @@ examples:
     p("modify PROJECT_STATE.json or evidence/phase4_merged.json.")
     p("")
 
+    # ---- the cost gate ----------------------------------------------------
+    # A diagnostic whose whole justification is "it is cheap" must state its
+    # projected cost BEFORE loading the weights, and must refuse to run when
+    # that projection stops being cheap. The 512-token version was described
+    # as "~10 minutes"; it took 15.4 minutes of the user's evening and
+    # answered nothing. The projection is ESTIMATED from a MEASURED rate --
+    # both labels stated, neither dropped.
+    n_gen = len(ZERO_TOKEN_CASES) * (1 if a.skip_old else 2)
+    proj_min = n_gen * a.max_tokens / MEASURED_DECODE_TPS / 60.0
+    p("projected  : %d generations x %d tok at %.2f tok/s (MEASURED "
+      "2026-08-31)" % (n_gen, a.max_tokens, MEASURED_DECODE_TPS))
+    p("             = ~%.0f minutes of wall clock  [ESTIMATED from a "
+      "MEASURED rate]" % proj_min)
+    p("             this is an UPPER bound: a reply that finishes early costs")
+    p("             less. Nothing here is a recorded measurement.")
+    p("")
+    if proj_min > LONG_RUN_MINUTES and not a.yes:
+        raise SystemExit(
+            "REFUSING TO START: the projection above (~%.0f min) exceeds the "
+            "%d-minute\n"
+            "  threshold this script holds itself to. Re-run with --yes if "
+            "you accept\n"
+            "  that cost, or lower --max-tokens. (A smaller budget risks the "
+            "2026-08-31\n"
+            "  outcome: every reply cut off inside <think>, proving nothing.)"
+            % (proj_min, LONG_RUN_MINUTES))
+
     gold_rows = RP.load_jsonl(a.gold)
     by_id = {}
     for g in gold_rows:
@@ -159,6 +231,9 @@ examples:
                          % ", ".join(missing))
 
     index = RP.build_index(RP.load_jsonl(a.corpus))
+    # The budget the generations are bound by, kept in one name so the
+    # at-ceiling test cannot drift away from the value actually passed.
+    n_budget = a.max_tokens
 
     from llama_cpp import Llama
     t0 = time.time()
@@ -198,12 +273,53 @@ examples:
                 "thinking_truncated": m["thinking_truncated"],
                 "answer_preview": text[:300],
             }
-            verdict = ("EMPTY  <-- still no output"
-                       if m["completion_tokens"] == 0 else "PRODUCED OUTPUT")
-            p("  %-15s tokens=%-5d %-7.1fs  %s"
-              % (label, m["completion_tokens"], m["seconds"], verdict))
+            # DEFECT FOUND 2026-08-31 BY THE USER'S OWN RUN, MEASURED.
+            #
+            # This label used to read `"PRODUCED OUTPUT" if
+            # completion_tokens != 0`, and the whole summary was computed the
+            # same way. On the real i5-12400 run all SIX generations returned
+            # exactly tokens=512 -- the ceiling -- and not one of them printed
+            # an answer preview, because the preview is guarded by
+            # `if text.strip()`. So the visible answer was empty every time,
+            # and every one of them was labelled PRODUCED OUTPUT.
+            #
+            # `completion_tokens > 0` is NOT the same fact as "answered". A
+            # reply that spends its entire budget inside an unterminated
+            # <think> block emits the maximum number of tokens and says
+            # nothing: strip_thinking() correctly returns answer="" for it.
+            # Conflating the two turned a run that could not discriminate
+            # between the two prompt shapes into three lines reading as if it
+            # had. Same hazard class as a test that cannot fail.
+            #
+            # The label is therefore derived from THREE facts -- tokens,
+            # visible answer, and whether thinking was cut off -- and the
+            # ceiling is reported, because ctok == max_tokens means the budget
+            # bound the reply and the result says nothing about the prompt.
+            row[label]["hit_ceiling"] = (m["completion_tokens"] >= n_budget)
+            row[label]["answered"] = bool(text.strip())
+            if m["completion_tokens"] == 0:
+                verdict = "ZERO TOKENS  <-- reproduces the 2026-08-30 defect"
+            elif text.strip():
+                verdict = "ANSWERED (%d chars)" % len(text.strip())
+            elif m["thinking_truncated"]:
+                verdict = ("NO ANSWER -- unterminated <think>, budget "
+                           "exhausted")
+            else:
+                verdict = "NO ANSWER -- tokens emitted, nothing visible"
+            p("  %-15s tokens=%-5d %-7.1fs  %s%s"
+              % (label, m["completion_tokens"], m["seconds"], verdict,
+                 "  [AT CEILING]" if row[label]["hit_ceiling"] else ""))
             if text.strip():
                 p("      %s" % text.strip()[:200].replace("\n", " "))
+            else:
+                # Print a slice of the REASONING when there is no answer. The
+                # previous version printed nothing at all here, which is how a
+                # run with six empty answers looked like a run with six good
+                # ones.
+                raw = (m.get("raw_output") or "").strip()
+                p("      (no visible answer; reasoning %d chars) %s"
+                  % (m["reasoning_chars"],
+                     raw[:120].replace("\n", " ") if raw else ""))
 
         results.append(row)
         p("")
@@ -212,22 +328,71 @@ examples:
     p("=" * 70)
     p("SUMMARY  [MEASURED]")
     p("=" * 70)
-    fixed = [r for r in results
-             if r.get("chatml", {}).get("completion_tokens", 0) > 0]
-    still = [r for r in results
-             if r.get("chatml", {}).get("completion_tokens", 0) == 0]
-    p("with ChatML, produced output : %d of %d  %s"
-      % (len(fixed), len(results), [r["id"] for r in fixed]))
-    p("with ChatML, STILL empty     : %d of %d  %s"
-      % (len(still), len(results), [r["id"] for r in still]))
+    # Counted on the VISIBLE ANSWER, not on completion_tokens. See the defect
+    # note at the per-case print.
+    answered = [r for r in results if r.get("chatml", {}).get("answered")]
+    zero = [r for r in results
+            if r.get("chatml", {}).get("completion_tokens", 0) == 0]
+    ceiling = [r for r in results
+               if r.get("chatml", {}).get("hit_ceiling")
+               and not r.get("chatml", {}).get("answered")]
+    p("with ChatML, VISIBLE ANSWER  : %d of %d  %s"
+      % (len(answered), len(results), [r["id"] for r in answered]))
+    p("with ChatML, ZERO tokens     : %d of %d  %s"
+      % (len(zero), len(results), [r["id"] for r in zero]))
+    p("with ChatML, budget-bound    : %d of %d  %s"
+      % (len(ceiling), len(results), [r["id"] for r in ceiling]))
 
     if not a.skip_old:
+        # THE SAME DEFECT LIVES ON THIS SIDE TOO, AND A DRY-RUN CAUGHT IT.
+        #
+        # `old_empty` alone was keyed on completion_tokens, so the scenario
+        # "ChatML answered all three; the old prompt burned its entire budget
+        # inside <think> and said nothing" printed "the old prompt ALSO
+        # produced output" -- i.e. the strongest possible evidence FOR the
+        # template was reported as evidence that the run proves nothing.
+        # Found 2026-08-31 by dry-running that exact scenario against a fake
+        # model, AFTER fixing the ChatML side. Fixing one side of a comparison
+        # and not the other leaves the comparison broken.
         old_empty = [r["id"] for r in results
                      if r.get("raw_completion", {})
                           .get("completion_tokens", 0) == 0]
-        p("with the OLD prompt, empty   : %d of %d  %s"
+        old_answered = [r["id"] for r in results
+                        if r.get("raw_completion", {}).get("answered")]
+        old_ceiling = [r["id"] for r in results
+                       if r.get("raw_completion", {}).get("hit_ceiling")
+                       and not r.get("raw_completion", {}).get("answered")]
+        p("with the OLD prompt, ANSWER  : %d of %d  %s"
+          % (len(old_answered), len(results), old_answered))
+        p("with the OLD prompt, ZERO    : %d of %d  %s"
           % (len(old_empty), len(results), old_empty))
+        p("with the OLD prompt, bound   : %d of %d  %s"
+          % (len(old_ceiling), len(results), old_ceiling))
         p("")
+
+        # INCONCLUSIVE IS A RESULT, AND IT MUST BE REPORTED FIRST.
+        #
+        # When every generation on BOTH sides was stopped by the token budget
+        # and none of them produced a visible answer, the run compared nothing:
+        # both arms were cut off at the same artificial bound before either had
+        # a chance to finish. The 2026-08-31 run on the user's i5-12400 was
+        # exactly this case, and the previous version of this block described
+        # it as "the old prompt also produced output" -- true about tokens,
+        # misleading about the comparison. So this branch precedes all others.
+        both_all_bound = (len(ceiling) == len(results)
+                          and len(old_ceiling) == len(results))
+        if both_all_bound:
+            p("READING: INCONCLUSIVE. Every generation on BOTH sides hit the")
+            p("--max-tokens ceiling (%d) with no visible answer, i.e. each one"
+              % n_budget)
+            p("was still inside its <think> block when the budget ran out.")
+            p("This run therefore cannot discriminate between the two prompt")
+            p("shapes at all, in either direction. Re-run with a budget large")
+            p("enough to let a reply finish before drawing any conclusion.")
+            p("It also does NOT reproduce the 2026-08-30 zero-token cases,")
+            p("which emitted 0 tokens in ~5-10 s, not %d tokens in ~150 s."
+              % n_budget)
+            p("")
         # BRANCH ORDER IS LOAD-BEARING. My first version tested
         # `len(fixed) > len(old_empty)` before `not old_empty`, which made the
         # "old prompt also worked" case UNREACHABLE: with 3 fixed and 0 old
@@ -236,21 +401,32 @@ examples:
         # in the one scenario where the whole diagnosis is unproven. Caught by
         # dry-running all four scenarios against a fake model, 2026-08-31.
         # The reproducibility check therefore comes FIRST.
-        if not old_empty:
-            p("READING: the old prompt ALSO produced output this time, so this")
-            p("run does NOT reproduce the 2026-08-30 emptiness and cannot")
-            p("attribute it to the prompt shape. Most likely cause: that run's")
-            p("seed was random and unrecorded. The template fix is still")
-            p("correct, but it is not proven to be THE cause here.")
-        elif len(fixed) == len(results) and len(old_empty) == len(results):
+        elif len(answered) == len(results) and not old_answered:
             p("READING: the template was the cause. Same weights, same budget,")
-            p("same machine -- only the prompt shape differed.")
-        elif len(fixed) > len(old_empty):
+            p("same machine -- only the prompt shape differed, and only the")
+            p("ChatML side produced a VISIBLE answer. (The old side failed by")
+            p("%d zero-token and %d budget-bound generations.)"
+              % (len(old_empty), len(old_ceiling)))
+        elif len(old_answered) == len(results):
+            p("READING: the old prompt ALSO produced visible answers this")
+            p("time, so this run does NOT reproduce the 2026-08-30 emptiness")
+            p("and cannot attribute it to the prompt shape. Most likely cause:")
+            p("that run's seed was random and unrecorded. The template fix is")
+            p("still correct, but it is not proven to be THE cause here.")
+        elif len(answered) > len(old_answered):
             p("READING: the template helps but does not explain every case.")
-            p("The cases still empty need their own diagnosis.")
-        else:
+            p("ChatML answered %d of %d against the old prompt's %d. The cases"
+              % (len(answered), len(results), len(old_answered)))
+            p("with no visible answer need their own diagnosis.")
+        elif not answered:
             p("READING: the template did not fix these. Do NOT spend hours on")
             p("a re-run; the cause is still unidentified.")
+        else:
+            p("READING: MIXED and not attributable. ChatML answered %d of %d,"
+              % (len(answered), len(results)))
+            p("the old prompt %d of %d -- no clean separation. Treat this as"
+              % (len(old_answered), len(results)))
+            p("INCONCLUSIVE rather than as support for either shape.")
     p("")
     p("NOTE: this is a DIAGNOSTIC. No threshold has been evaluated and no")
     p("measurement has been recorded. phase_4/measurements_recorded is")
