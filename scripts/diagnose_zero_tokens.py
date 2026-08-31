@@ -257,6 +257,13 @@ note:
         p("-" * 70)
         p("%s  (%s, answerable=%s)" % (cid, gold.get("lang"),
                                        gold.get("answerable")))
+        # Say how long the silence will last. At 3072 tokens and a MEASURED
+        # 3.32 tok/s one generation is ~15 minutes with nothing printed, and a
+        # long silence with no stated duration is indistinguishable from a hang
+        # -- which invites the user to kill a run that is working.
+        p("  (up to ~%.0f min per generation at %.2f tok/s; no output until it "
+          "finishes)" % (a.max_tokens / MEASURED_DECODE_TPS / 60.0,
+                         MEASURED_DECODE_TPS))
 
         for label, prompt in (
                 ("chatml", RP.build_rag_prompt(gold["query"], passages)),
@@ -427,6 +434,50 @@ note:
             p("the old prompt %d of %d -- no clean separation. Treat this as"
               % (len(old_answered), len(results)))
             p("INCONCLUSIVE rather than as support for either shape.")
+    else:
+        # DEFECT FOUND 2026-08-31, BEFORE HANDING THE COMMAND OVER.
+        #
+        # All six READING branches lived inside `if not a.skip_old:`. So the
+        # ONE mode I was about to recommend -- --skip-old, the 46-minute run --
+        # was the only mode that printed no interpretation at all: a table of
+        # numbers and nothing telling the reader what they mean. That is
+        # precisely the state that made the user's 2026-08-31 run unreadable,
+        # reintroduced through a different door. Caught by dry-running the mode
+        # I was about to recommend, rather than the mode I had already tested.
+        #
+        # --skip-old cannot attribute a cause -- there is no comparison arm --
+        # so these readings say what the run DOES establish and refuse to
+        # overclaim.
+        if len(answered) == len(results):
+            p("READING: at this budget the model DOES produce a visible answer")
+            p("on all %d cases. That establishes the cases are answerable with"
+              % len(results))
+            p("enough tokens, and that the 2026-08-30 emptiness is not a")
+            p("permanent property of them. It does NOT identify the cause of")
+            p("that emptiness: with --skip-old there is no comparison arm, so")
+            p("no claim about the prompt shape can be made from this run.")
+        elif not answered and len(ceiling) == len(results):
+            p("READING: every generation hit the ceiling (%d tokens) with no"
+              % n_budget)
+            p("visible answer -- the model never finished thinking. This is a")
+            p("REAL finding and an important one: raising the budget further is")
+            p("unlikely to help, and a %d-case full re-run at this budget would"
+              % 52)
+            p("repeat this outcome %d times. Consider it evidence against"
+              % 52)
+            p("spending those hours, not evidence about the prompt shape.")
+        elif zero:
+            p("READING: %d of %d cases emitted ZERO tokens again, which DOES"
+              % (len(zero), len(results)))
+            p("reproduce the 2026-08-30 defect -- at a budget that rules out")
+            p("the token limit as the explanation. Re-run WITHOUT --skip-old to")
+            p("test the prompt shape against it.")
+        else:
+            p("READING: MIXED -- %d of %d answered, %d bound by the budget, %d"
+              % (len(answered), len(results), len(ceiling), len(zero)))
+            p("at zero tokens. No single cause is indicated. Do not draw a")
+            p("conclusion about the prompt shape from a run with no comparison")
+            p("arm; re-run without --skip-old if attribution is needed.")
     p("")
     p("NOTE: this is a DIAGNOSTIC. No threshold has been evaluated and no")
     p("measurement has been recorded. phase_4/measurements_recorded is")

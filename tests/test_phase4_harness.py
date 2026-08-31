@@ -1784,6 +1784,43 @@ check_true("...and the ChatML answer text itself is printed",
            "394,328" in _out_answer,
            "(A) an answered generation must show its answer")
 
+# -- --skip-old must INTERPRET its numbers too ------------------------------
+#
+# DEFECT FOUND 2026-08-31, while dry-running the mode I was about to recommend
+# to the user. All six READING branches lived inside `if not a.skip_old:`, so
+# --skip-old -- the cheaper 46-minute run, and the one I was recommending --
+# printed a table of numbers and NO interpretation whatsoever. That is exactly
+# the state that made the user's own run unreadable, reintroduced through a
+# different door. Testing the mode I had already tested would never have found
+# it.
+_skip_ceiling = _run_diagnostic(_CeilingModel(),
+                                ["--max-tokens", "3072", "--skip-old",
+                                 "--yes"])
+check_true("--skip-old still prints a READING, not just numbers",
+           "READING:" in _skip_ceiling,
+           "(D) MEASURED: it printed none. A diagnostic that reports figures "
+           "without saying what they mean has handed its hardest step back to "
+           "the reader")
+check_true("...and an all-ceiling skip-old run is read as a REAL finding",
+           "never finished thinking" in _skip_ceiling
+           and "evidence against" in _skip_ceiling,
+           "(C) if the model cannot finish at 3072 tokens, that argues against "
+           "spending 13 h on 52 cases -- the reading must say so")
+check_true("...and it does NOT claim anything about the prompt shape",
+           "the template was the cause" not in _skip_ceiling,
+           "(D) with no comparison arm there is no attribution available; a "
+           "reading that overclaims here is worse than no reading")
+
+_skip_answer = _run_diagnostic(_AnswerModel(),
+                               ["--max-tokens", "512", "--skip-old", "--yes"])
+check_true("an all-answered skip-old run reports what it DOES establish",
+           "does produce a visible answer" in _skip_answer.lower(),
+           "(A) the cases are answerable with enough tokens")
+check_true("...and explicitly refuses to attribute a cause",
+           "no comparison arm" in _skip_answer,
+           "(D) this is the reading most likely to be over-read as 'the fix "
+           "worked'. It must name its own limit")
+
 # -- the cost gate ---------------------------------------------------------
 # A diagnostic justified by being cheap must refuse to become expensive
 # silently. The 512-token version was advertised as "~10 minutes" and cost the

@@ -3080,3 +3080,55 @@ failure.
 
 `phase_4/measurements_recorded` stays **None**. The user's diagnostic run wrote
 no file any grader reads, and no threshold was evaluated.
+
+## D-0084 — The mode I was about to recommend printed NO interpretation at all
+**Date:** 2026-08-31 · **Phase:** 4 (R10 re-run prep) · **Status:** Active · **Severity:** High
+
+The user chose option (A): the larger-budget diagnostic with `--skip-old`, ~46
+minutes. Before handing over the command I dry-ran **that exact mode** rather
+than the mode I had already tested, and found that all six `READING:` branches
+lived inside `if not a.skip_old:`.
+
+So `--skip-old` — the cheaper run, and the one I was recommending — was the
+**only** mode that printed a table of numbers and no interpretation whatsoever.
+That is precisely the state that made the 2026-08-31 run unreadable (D-0083),
+reintroduced through a different door: the numbers were correct and the reader
+was left to infer their meaning. Under the fixed labels a `--skip-old` run at
+3072 tokens would have printed three `[AT CEILING]` lines and stopped, with no
+statement that this argues against the 13.4-hour full re-run.
+
+**FIXED.** An `else:` branch with four readings, none of which may attribute a
+cause — with no comparison arm, attribution is unavailable, and a reading that
+overclaims is worse than none:
+
+* all three answered → the cases ARE answerable with enough tokens, and the
+  2026-08-30 emptiness is not a permanent property of them; explicitly **not** a
+  finding about the prompt shape.
+* all three at the ceiling with no answer → a real and important finding: the
+  model never finishes thinking, so a 52-case run at this budget would repeat
+  the outcome 52 times. Evidence **against** spending those hours.
+* any zero-token case → the 2026-08-30 defect IS reproduced, at a budget that
+  rules out the token limit; re-run without `--skip-old` to test the shape.
+* mixed → no single cause indicated; do not conclude.
+
+Also added: a per-case line stating how long the silence will last (~15 min per
+generation at 3072 tokens and a MEASURED 3.32 tok/s). A long unexplained silence
+is indistinguishable from a hang, and invites the user to kill a working run.
+
+**Verification.** 634 assertions (from 629), ALL GREEN. Six new assertions drive
+the SHIPPED script in `--skip-old` mode and require a READING to be present, the
+all-ceiling case to be read as evidence against the full re-run, and the
+all-answered case to name its own limit ("no comparison arm"). 14 mutants
+seeded, **14 killed, 0 survived**, including three aimed at this fix: deleting
+the block, making the all-ceiling reading claim "the template was the cause",
+and deleting the all-answered reading's own caveat. The battery was re-run
+against the final source after a late edit, because a mutation result obtained
+on different bytes is not a result about the code that ships.
+
+**Standing lesson, third instance.** D-0082 shipped a guard that could not see
+internal whitespace; D-0083 shipped a verdict keyed on a proxy; this shipped six
+readings none of which could fire in the recommended mode. Every one was found by
+**exercising the exact path about to be used**, and none by reading the code.
+Testing the path I had already tested would have found none of them.
+
+`phase_4/measurements_recorded` stays **None**. Nothing has been launched.

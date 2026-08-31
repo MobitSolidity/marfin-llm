@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0083). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0084). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -23,7 +23,7 @@ paper/live trading controls.
 | `scripts/run_baseline.py` | Phase 2 baseline harness. **Superseded by `run_phase4.py`; 9 MEASURED defects, never executed.** Kept for the audit trail. |
 | `scripts/run_phase4.py` | **Phase 4 measurement harness — run this on the i5-12400.** Three arms (plain / +tools / +RAG), latency, peak RSS, one JSON file. |
 | `scripts/phase4_lib.py` | The gradeable core of the Phase 4 harness, separated so it can be verified without a model. |
-| `scripts/diagnose_zero_tokens.py` | **Cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. **Run once, on 2026-08-31: result INCONCLUSIVE, because a defect in this script graded token counts instead of answers, and a 512-token budget cut every reply off inside `<think>`.** Now judges on the visible answer, defaults to 3072 tokens, and refuses to start above 20 projected minutes without `--yes` (~46 min with `--skip-old`, ~92 min for the full comparison, at a MEASURED 3.32 tok/s). See D-0082 and D-0083. |
+| `scripts/diagnose_zero_tokens.py` | **Cause test, not a measurement.** Runs only the 3 zero-token cases, each through **both** the fixed ChatML prompt and the old raw-completion prompt — one variable, same weights, same budget. Writes no file any grader reads and never touches `PROJECT_STATE.json`. **Run once, on 2026-08-31: result INCONCLUSIVE, because a defect in this script graded token counts instead of answers, and a 512-token budget cut every reply off inside `<think>`.** Now judges on the visible answer, prints a READING in **every** mode including `--skip-old` (D-0084), defaults to 3072 tokens, and refuses to start above 20 projected minutes without `--yes` (~46 min with `--skip-old`, ~92 min for the full comparison, at a MEASURED 3.32 tok/s). See D-0082, D-0083, D-0084. |
 | `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
 | `src/calc/returns_risk.py` | Returns and risk (21 fns), stdlib only. |
@@ -34,7 +34,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,252 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,257 assertions across 18 suites, plus 983 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -253,7 +253,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,252 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,257 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -479,6 +479,20 @@ hypothesis — stated as a hypothesis — is that the 2026-08-30 run sampled at
 temperature 0.8 with a random, **unrecorded** seed and drew an immediate
 end-of-turn token. The determinism fix prevents recurrence but cannot prove
 causation, because the seed was never written down. See R32 and R33.
+
+**A third instance of the same class, found before the next run (D-0084).** The
+user chose the `--skip-old` diagnostic. Dry-running *that exact mode* — rather
+than the mode already tested — showed that all six `READING:` branches lived
+inside `if not a.skip_old:`. So the mode being recommended was the **only** one
+that printed a table of numbers and no interpretation: the state that made the
+previous run unreadable, reintroduced through a different door. Fixed with four
+`--skip-old` readings, none of which may attribute a cause (with no comparison
+arm, attribution is unavailable), including one that reads an all-ceiling
+outcome as evidence **against** spending 13.4 h on the full re-run. A per-case
+line now also states how long the ~15-minute silence will last, so a working run
+is not mistaken for a hang. **All three defects (D-0082, D-0083, D-0084) were
+found by exercising the path about to be used, and none by reading the code.**
+See R34.
 
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
@@ -787,7 +801,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,252 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,257 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 983 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -1049,7 +1063,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,252 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,257 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1098,7 +1112,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,252-assertion base is trustworthy.
+3,257-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 
