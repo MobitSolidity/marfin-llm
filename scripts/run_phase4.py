@@ -559,6 +559,19 @@ SYSTEM_RAG = SYSTEM_BASE + (
     "\n\nAnswer ONLY from the evidence passages provided below. If the "
     "evidence does not contain the answer, say that you do not have it. Do "
     "not use anything you remember about these companies."
+    # ADDED 2026-08-31 (D-0089a). Stating the unit in the evidence block is
+    # necessary but NOT sufficient: grade_rag_case reads the scale word out of
+    # the MODEL'S TEXT, so a model that silently drops "million" still scores a
+    # 10^6 error. MEASURED: the RAG-EN-005 reply graded False without the word
+    # and True with it. This sentence closes the loop between what the harness
+    # supplies and what the harness then demands.
+    #
+    # This is an instruction to REPEAT a unit the evidence declares, never to
+    # supply one it does not. A passage with no units_note renders no units
+    # clause, so there is nothing for the model to copy and it is not being
+    # invited to guess.
+    "\n\nWhen a passage declares the unit its figures are in, state that unit "
+    "with any figure you quote from it."
 )
 
 
@@ -586,9 +599,54 @@ def build_tools_prompt(question, schemas):
 
 
 def build_rag_prompt(question, passages):
+    """
+    Render retrieved passages as an Evidence block, INCLUDING their units.
+
+    DEFECT FOUND 2026-08-31, MEASURED (D-0089a). This function used to render
+    only `provenance.citation()` + `passage.text`. citation() emits source,
+    accession, date and URL, and has no units field -- so the rendered prompt
+    contained NO SCALE WORD AT ALL, for 7 of the 7 answerable RAG rows, even
+    though every financial row in the corpus carries units_note='million'.
+
+    The consequence was that the GRADER punished the model for the harness's
+    omission. RAG-EN-005 answered:
+
+        total net sales in fiscal 2022 were **394,328**
+
+    citing the right document and the right year -- the exact gold figure, from
+    a prompt that stated no unit -- and was graded value_ok=False against a
+    gold magnitude of 394328000000.0. MEASURED: the identical reply with the
+    word "million" present grades True. The model was asked for a number and
+    given no unit; it returned the number as written in the evidence, which is
+    the only defensible thing it could have done.
+
+    The signature this left in recorded evidence, and which was read for two
+    weeks as a model weakness: the ONLY answerable RAG case ever graded OK in
+    evidence/phase4_merged.json is RAG-EN-004, whose gold value is a CPI index
+    of 308.417 -- the one answerable row needing no scale word.
+
+    THE UNITS ARE NOT INVENTED HERE. A passage with units_note=None is rendered
+    with NO units clause at all, exactly as before, rather than being defaulted
+    to base units -- the same refusal src/rag/citations._evidence_magnitudes
+    documents, where a missing units_note is recorded as unscaled so the
+    verifier can refuse instead of assuming.
+
+    THE "Question: " MARKER IS STILL THE LAST THING BEFORE THE QUESTION. The
+    scripted model in the test suite locates the question with
+    rsplit("Question:", 1); the units clause is inside the evidence block, so
+    that contract is untouched.
+    """
     ev = []
     for i, ps in enumerate(passages, 1):
-        ev.append("[%d] (%s) %s" % (i, ps.provenance.citation(), ps.text))
+        units = getattr(ps, "units_note", None)
+        # An empty or whitespace-only note is treated as absent, not as a
+        # declared unit: rendering "figures in " would be worse than silence.
+        if units and str(units).strip():
+            ev.append("[%d] (%s) [figures in %s] %s"
+                      % (i, ps.provenance.citation(), str(units).strip(),
+                         ps.text))
+        else:
+            ev.append("[%d] (%s) %s" % (i, ps.provenance.citation(), ps.text))
     return chatml_prompt(
         SYSTEM_RAG,
         "Evidence:\n%s\n\nQuestion: %s"

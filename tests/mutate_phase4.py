@@ -97,9 +97,20 @@ MUTATIONS = [
     (LIB, "the Arabic decimal separator is treated as a thousands separator",
      '_DECIMAL_SEPARATORS = (".", "\\u066b")',
      '_DECIMAL_SEPARATORS = (".",)'),
+    # Retargeted 2026-08-31 (D-0089b): U+060C was added to the table, so the
+    # old anchor string no longer occurs and this mutant would have stopped
+    # APPLYING -- reported as skipped, not as killed. A mutant that silently
+    # fails to apply is worse than a deleted one, because the count still looks
+    # healthy.
     (LIB, "the Arabic thousands separator is dropped from the grouping set",
-     '_THOUSANDS_SEPARATORS = (",", "\\u066c", "\\u2009", "\\u00a0", "_")',
+     '_THOUSANDS_SEPARATORS = (",", "\\u066c", "\\u060c", "\\u2009", "\\u00a0", "_")',
      '_THOUSANDS_SEPARATORS = (",",)'),
+    # NEW 2026-08-31 (D-0089b): the character the MODEL actually writes. This
+    # mutant restores the exact pre-fix table, so it reproduces the defect
+    # D-0089b describes. If it survives, the fix is untested.
+    (LIB, "U+060C, the comma the model actually emits, is dropped again",
+     '_THOUSANDS_SEPARATORS = (",", "\\u066c", "\\u060c", "\\u2009", "\\u00a0", "_")',
+     '_THOUSANDS_SEPARATORS = (",", "\\u066c", "\\u2009", "\\u00a0", "_")'),
     # Retargeted 2026-08-15: this logic used to be duplicated in both
     # extractors and now lives once in _normalise_separators -- which is the
     # fix that killed the "_DECIMAL_SEPARATORS is dead" survivor.

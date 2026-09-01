@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0089). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0090). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -35,7 +35,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,347 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,365 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -254,7 +254,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,347 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,365 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -910,7 +910,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,347
+unique and non-no-op *before* the battery ran. Full regression: **3,365
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1012,6 +1012,88 @@ most damage — 52 false failures that would each look like the model's fault.
 **One operational lesson:** the diagnostic prints `text.strip()[:200]` and the
 run did not pass `--out`, so two of the three full replies are lost beyond 200
 characters and their grades are PROVISIONAL. Use `--out` next time.
+
+
+### D-0090: both grader defects fixed — and the blind spot was in five layers, not two
+
+The user chose option «الف»: fix the grader before spending anything on a
+re-run. Done, with **0 model runs**. `phase_4/measurements_recorded` is still
+`None`.
+
+**The separator blind spot was wider than D-0089 recorded.** Rather than fix
+the two modules D-0089b named, I fed the same two strings — the fixture's
+U+066C form and the model's U+060C form — to every module in the repo that
+parses a number. MEASURED, before the fix:
+
+| layer | U+066C (fixture) | U+060C (what the model writes) |
+|---|---|---|
+| `phase4_lib.extract_magnitudes` | `[383285000000.0]` | `[383.0, 285000000.0]` |
+| `rag.citations.extract_numbers` | `[383285000000.0]` | `[383.0, 285000000.0]` |
+| `rag.normalize.tokenize` | `['383285']` | `['383', '،', '285']` |
+| `rag.ingest._NUMBER_RE` | `['۳۸۳٬۲۸۵']` | `['۳۸۳', '۲۸۵']` |
+| `calc.persian_num.parse_number` | `383285.0` | **raises `ValueError`** |
+
+Two of those were not in D-0089's account. The retrieval one matters
+independently of grading: a Persian figure written the way the model writes it
+was **indexed as two unrelated numbers plus a punctuation token**, so a query
+for that figure could not retrieve the passage stating it — a silent retrieval
+failure sitting underneath the grading failure. `calc.persian_num` was left
+alone deliberately: it *refuses* the ambiguous input rather than guessing,
+which is correct for a calculator.
+
+**The fix is deliberately asymmetric.** U+066C exists only as a grouping mark;
+**U+060C is also ordinary Persian sentence punctuation.** So it was admitted
+only where a between-digits guard already exists (`_THOUSANDS_SEPARATORS`'s
+`(?<=\d)SEP(?=\d\d\d(?!\d))`, `tokenize`'s guarded strip, and `citations`'
+number pattern where the class sits after a required leading digit). It was
+**not** added to `normalize._FOLD`, and a comment now says why: `_FOLD` is
+applied character-by-character with no lookaround, so an entry there would
+delete the punctuation case too and fuse Persian sentences. MEASURED after the
+fix: `'در سال 1402، درآمد 500 بود'`, `'درآمد، سود، و زیان'` and `'1402،15'` are
+all unchanged, while `'۳۸۳،۲۸۵ میلیون'` now reads `383285000000.0`.
+
+**R45 (LOW), recorded rather than hidden:** `"5،200"` — two numbers with no
+space after the comma — now reads as `5200`. Genuinely ambiguous in Persian.
+MEASURED bound: the pattern occurs **3 times** in `evidence/phase4_merged.json`
+and all 3 are the same model reply, where it *is* a thousands separator. Also
+MEASURED: **248 of 264** U+060C characters in that file are in model output
+fields — it is a model habit, which is exactly why fixtures never exercised it
+(R43).
+
+**Defect 1 was fixed in the prompt, and the comparison was left alone.**
+`build_rag_prompt` now renders `[figures in <units_note>]`; answerable rows
+whose prompt names a scale word went from **0 of 7** to **6 of 6 that have
+units**. The seventh, `RAG-EN-004`, is the CPI index — its passage declares no
+units and its prompt correctly still states none, asserted so the fix cannot
+later be "improved" into inventing one. `SYSTEM_RAG` also now asks the model to
+repeat a declared unit, because stating it in the evidence is necessary but not
+sufficient: `grade_rag_case` reads the scale word out of the *model's* text.
+**`value_matches` was NOT loosened** — a figure quoted with no unit genuinely
+is not an absolute magnitude, and softening that would turn every 10⁶ error
+into a pass.
+
+**The D-0081 consequence, measured rather than assumed.** I had warned the user
+that fixing the grader changes what D-0081's human **FAIL** verdict means.
+Having measured it, I corrected myself: **it does not overturn it.** All 10
+recorded rag rows re-graded, **0 flipped** — defect 1 is a *prompt* fix and
+cannot change a recorded reply; defect 2 *did* change RAG-FA-001's parse
+(`[2023, 383, 285]` → `[2023, 383285]`, the manufactured 285,000,000 gone) but
+not its verdict, because the reply still states no unit. Only **1 of 10**
+recorded replies stated a unit at all — consistent with a prompt that never
+supplied one.
+
+**The mutation battery was retargeted, because the fix moved its anchor.**
+`mutate_phase4.py` pinned `_THOUSANDS_SEPARATORS` by exact string; adding
+U+060C would have made that mutant stop *applying* — reported as skipped, not
+killed, with the count still looking healthy. Anchor retargeted, plus a new
+mutant that restores the pre-fix table. Result: **220 killed, 0 survived, 9
+skipped** — and each of the 9 was verified to pre-date this change by counting
+its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
+2→2 or 0→0). **0 skips are mine.**
+
+All **5** pinned-defect assertions were inverted in the same commit as the fix;
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,365
+assertions, 18 suites, 0 failed, 0 skipped.**
 
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
@@ -1320,7 +1402,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,347 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,365 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -1560,6 +1642,22 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
   being recorded as MODEL_FAILURE. Until those are fixed, "lean on RAG" cannot
   be evaluated on grading evidence, because the grading evidence is wrong.
   See R35, R38, R40, R43, R44.
+
+  > **UPDATED 2026-08-31 (D-0090): both defects are now FIXED, at zero run
+  > cost, and the consequence is smaller than was feared.** I had warned that
+  > fixing the grader would change what D-0081's human **FAIL** verdict means.
+  > Having measured it: **it does not overturn it.** All 10 recorded rag rows
+  > were re-graded under the fixed grader and **0 flipped**. The reason is
+  > structural — defect 1 is a **prompt** fix, so it cannot change how an
+  > already-recorded reply is read; defect 2 is a **grader** fix, and it did
+  > change RAG-FA-001's parse (the manufactured 285,000,000 is gone), but not
+  > its verdict, because that reply still states no unit. **D-0081's FAIL
+  > stands as recorded.** What the fix changes is what a FUTURE run would
+  > measure — which is exactly why item 7 was blocked behind it (R44).
+  >
+  > So Q8 is still not decided, but the blocker has moved: it is no longer
+  > "the grading evidence is wrong", it is "there is no post-fix run yet".
+  > Item 7 (~22–32 min ESTIMATED) is now unblocked and awaiting approval.
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
   recall-first. MEASURED (re-measured 2026-08-31, D-0088) — mean subset **3,114
   tokens (19.0% of 16K)** over the 21 eval rows versus **9,122** for all 84
@@ -1659,7 +1757,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,347 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,365 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1708,7 +1806,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,347-assertion base is trustworthy.
+3,365-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

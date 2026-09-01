@@ -3902,3 +3902,158 @@ grader would reproduce the same false failures at 52-case scale.
 when an unfixed grader does the most damage.
 **Reversal:** if the other 49 cases turn out to deliberate at length, the cost
 estimate reverts toward the old one; the two defects stand regardless.
+
+
+## D-0090 — both grader defects fixed, and the blind spot was wider than D-0089 recorded
+
+**Date:** 2026-08-31
+**Requested by:** the user, choosing option «الف» — fix the grader first, at zero run cost.
+**Status:** DONE. No model was run. `phase_4/measurements_recorded` is still `None`.
+
+### What was asked
+
+Option A, verbatim as the user approved it:
+
+> «**الف) اول نمره‌دهنده را تعمیر کنیم** (۰ هزینهٔ اجرا) — واحد را به پرامپت اضافه کنیم و U+060C را به جدول جداکننده‌ها. بعد قلم ۷ با ~۲۲–۳۲ دقیقه.»
+
+### The blind spot was in FIVE layers, not the two D-0089 named
+
+D-0089b recorded two affected modules. Before editing anything I fed the same
+two strings — the fixture's U+066C form and the model's U+060C form — to every
+module in the repo that parses a number. MEASURED, before the fix:
+
+| layer | U+066C (fixture) | U+060C (model) |
+|---|---|---|
+| `scripts/phase4_lib` `extract_magnitudes` | `[383285000000.0]` | `[383.0, 285000000.0]` |
+| `src/rag/citations` `extract_numbers` | `[383285000000.0]` | `[383.0, 285000000.0]` |
+| `src/rag/normalize` `tokenize` | `['383285']` | `['383', '،', '285']` |
+| `src/rag/ingest` `_NUMBER_RE` | `['۳۸۳٬۲۸۵']` | `['۳۸۳', '۲۸۵']` |
+| `src/calc/persian_num` `parse_number` | `383285.0` | **raises** `ValueError` |
+
+Two of these were not in D-0089's account. The retrieval layer is the more
+interesting one: a Persian figure written the way the model writes it was
+INDEXED as two unrelated numbers plus a punctuation token, so a query for that
+figure could not retrieve the passage stating it. That is a silent retrieval
+failure sitting underneath the grading failure.
+
+`src/calc/persian_num` was left alone deliberately: it REFUSES the ambiguous
+input rather than guessing, which is the correct behaviour for a calculator and
+the convention `phase4_lib`'s own comment cites.
+
+### The fix is not symmetric across layers, and that is deliberate
+
+U+066C exists only as a digit-grouping mark. **U+060C is also ordinary Persian
+sentence punctuation.** So it was admitted only where a between-digits guard
+already exists:
+
+- `phase4_lib._THOUSANDS_SEPARATORS` — the strip rule is
+  `(?<=\d)SEP(?=\d\d\d(?!\d))`, so punctuation is untouched.
+- `rag.normalize.tokenize` — guarded `(?<=\d)[,\u060c](?=\d)`.
+- `rag.citations._NUM_RE` — the class sits in the repeated tail after a
+  required leading `\d`, so it can only match between digits by construction.
+- `rag.normalize._FOLD` — **deliberately NOT changed**, and a comment now says
+  why: `_FOLD` is applied character-by-character with no lookaround, so an
+  entry there would delete the punctuation case too and fuse Persian sentences.
+
+MEASURED after the fix — the punctuation cases are unharmed:
+
+```
+'در سال 1402، درآمد 500 بود' -> [1402.0, 500.0]   (space after comma)
+'درآمد، سود، و زیان'          -> []                (no digits)
+'1402،15'                    -> [1402.0, 15.0]    (not three digits)
+'۳۸۳،۲۸۵ میلیون'             -> [383285000000.0]  FIXED
+'۳۸۳٬۲۸۵ میلیون'             -> [383285000000.0]  unchanged
+'17٫85'                      -> [17.85]           decimal intact
+```
+
+### R45 (NEW, LOW) — the residual ambiguity, recorded rather than hidden
+
+`"5،200"` — two numbers listed with no space after the comma — now reads as
+`5200`. This is genuinely ambiguous in Persian and nothing in the text resolves
+it. It is recorded, not concealed. MEASURED bound on its reach: the pattern
+`digit U+060C exactly-three-digits` occurs **3 times** in
+`evidence/phase4_merged.json`, and all 3 are the SAME model reply, in which the
+character IS a thousands separator. On every occurrence in recorded data the
+change is a fix and never a corruption.
+
+Also MEASURED: of 264 U+060C characters in that file, **248 are in model
+`output`/`raw_output` fields** and 16 in fixture fields. The character is a
+model habit, which is precisely why fixtures never exercised it (R43).
+
+### Defect 1 was fixed in the PROMPT, and value_matches was left alone
+
+`build_rag_prompt` now renders `[figures in <units_note>]` alongside the
+citation. MEASURED: answerable rows whose prompt names a scale word went from
+**0 of 7** to **6 of 6 that have units**. The seventh, `RAG-EN-004`, is the CPI
+index; its passage declares `units_note=None` and its prompt correctly still
+states no unit — asserted, so the fix cannot later be "improved" into inventing
+one. Empty/whitespace `units_note` is treated as absent for the same reason.
+
+A second change was necessary and is easy to miss: stating the unit in the
+evidence is **not sufficient**, because `grade_rag_case` reads the scale word
+out of the MODEL'S text. `SYSTEM_RAG` now says: *"When a passage declares the
+unit its figures are in, state that unit with any figure you quote from it."*
+That is an instruction to REPEAT a declared unit, never to supply a missing one.
+
+**`value_matches` was NOT loosened, and that is the point.** A reply quoting a
+figure in millions while stating no unit genuinely is not a match for an
+absolute magnitude — the grader was never wrong about that. What was wrong was
+demanding a unit the harness had withheld. Softening the comparison would have
+turned every 10^6 error into a pass, which is the exact failure
+`src/rag/citations` exists to prevent.
+
+### THE D-0081 CONSEQUENCE: MEASURED, AND SMALLER THAN I WARNED
+
+I told the user option A would change what D-0081's human **FAIL** verdict
+means. Having measured it, I must correct myself: **it does not overturn it.**
+
+Re-graded all 10 recorded rag rows under the fixed grader: **0 of 10 flipped.**
+The reason is structural, not luck:
+
+- Defect 2 (U+060C) is a **grader** fix — it changes how a recorded reply is
+  READ, so it *can* flip a recorded row. MEASURED, it did change RAG-FA-001:
+  `[2023.0, 383.0, 285.0]` → `[2023.0, 383285.0]`. The manufactured
+  285,000,000 is **gone**. The verdict did not flip because the reply still
+  states no unit.
+- Defect 1 (missing units) is a **prompt** fix. It changes what the model is
+  TOLD, not how its old words are read. By construction it cannot change a
+  recorded result — only a re-run.
+
+So the failure MODE changed while the verdict did not. **D-0081's FAIL stands
+as recorded, and the user does not have to decide whether to re-open it.** What
+the fix changes is what a FUTURE run would measure, which is exactly why item 7
+was blocked behind it (R44).
+
+Also MEASURED, and worth stating: only **1 of 10** recorded replies stated a
+unit at all — consistent with a prompt that never supplied one.
+
+### The mutation battery was updated, because the fix moved its anchor
+
+`tests/mutate_phase4.py` pinned `_THOUSANDS_SEPARATORS` by exact string. Adding
+U+060C would have made that mutant stop APPLYING — reported as skipped, not as
+killed. A mutant that silently fails to apply is worse than a deleted one,
+because the count still looks healthy. The anchor was retargeted and a NEW
+mutant added that restores the pre-fix table, reproducing D-0089b exactly.
+
+Result: **220 killed, 0 survived, 9 skipped.** All 9 skips were verified to
+PRE-DATE this change by counting each mutant's anchor in the pre-edit file and
+the current file: 51 anchors are 1→1, and every skipped one is 2→2 or 0→0.
+**0 skips are mine.** The 9 pre-existing skips are a separate, inherited
+problem and are not claimed as fixed here.
+
+### A wrong path of my own, caught by an implausible result
+
+My first re-grade printed `recorded value_ok=None` for all ten rows. That is
+not what the file says — `value_ok` is a TOP-LEVEL field on each row, and I had
+read `row["grade"]["value_ok"]`, a key that does not exist. A uniform `None`
+across ten rows was too tidy to be real. Corrected and re-run before reporting.
+
+### Verification
+
+- Full regression: **3,365 assertions, 18 suites, 0 failed, 0 skipped**
+  (was 3,347; +18, all in the D-0089 block, 721 → 739).
+- All **5** pinned-defect assertions inverted in the same commit as the fix.
+  `INVERT WHEN FIXED` markers remaining: **0**. `DEFECT PINNED` remaining: **0**.
+  A pinned-defect assertion that outlives its defect is a test that forbids the fix.
+- 13 new assertions cover the punctuation cases, the non-invention of units,
+  the CPI exception, and the three extra layers.

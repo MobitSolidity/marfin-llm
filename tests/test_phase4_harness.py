@@ -4590,7 +4590,7 @@ check_true("it does not import or touch PROJECT_STATE.json",
 # replies with grade_rag_case and got MODEL_FAILURE: 2. Both failures were the
 # grader's. See D-0089.
 # ===========================================================================
-section("D-0089: grader defects, pinned as present")
+section("D-0089: grader defects, FIXED and pinned as fixed")
 
 # ---- DEFECT 1: the RAG prompt renders no units, the grader requires them ----
 #
@@ -4599,6 +4599,8 @@ section("D-0089: grader defects, pinned as present")
 _d89_corpus = RP.load_jsonl(os.path.join(_ROOT, "evals", "rag_corpus_v1.jsonl"))
 _d89_gold = RP.load_jsonl(os.path.join(_ROOT, "evals", "rag_gold_v1.jsonl"))
 _d89_index = RP.build_index(_d89_corpus)
+from rag import citations as _C89          # noqa: E402
+from rag import normalize as _N89          # noqa: E402
 _d89_by_id = {}
 for _g in _d89_gold:
     _d89_by_id[_g["id"]] = _g
@@ -4611,11 +4613,53 @@ check_true("the retrieved passage DOES declare its units",
 
 _d89_prompt = RP.build_rag_prompt(_d89_row["query"], _d89_hits)
 _SCALE_WORDS_EN = ("million", "billion", "thousand", "trillion")
-check_true("DEFECT PINNED: ...and the prompt then drops them entirely",
-           not any(w in _d89_prompt.lower() for w in _SCALE_WORDS_EN),
-           "(D) D-0089 defect 1, STILL PRESENT: build_rag_prompt renders "
-           "provenance.citation() + text, and citation() has no units field. "
-           "INVERT THIS ASSERTION WHEN FIXED.")
+check_true("FIXED: ...and the prompt now carries them",
+           any(w in _d89_prompt.lower() for w in _SCALE_WORDS_EN),
+           "(D) D-0089a, FIXED 2026-08-31: build_rag_prompt rendered only "
+           "provenance.citation() + text, and citation() has no units field, "
+           "so the prompt named no unit for 7 of 7 answerable rows. INVERTED "
+           "in the same commit as the fix.")
+check_true("...and the units clause names the unit the corpus declared",
+           "[figures in million]" in _d89_prompt,
+           "(A) the unit is COPIED from units_note, never inferred")
+
+
+# A passage that declares NO units must still render NO units clause: the fix
+# had to state units it was given, not invent units it was not. This is the
+# same refusal src/rag/citations documents for a missing units_note.
+class _D89Bare(object):
+    __slots__ = ("provenance", "text", "units_note")
+
+    def __init__(self, provenance, text, units_note):
+        self.provenance = provenance
+        self.text = text
+        self.units_note = units_note
+
+
+for _u in (None, "", "   "):
+    check_true("a passage with units_note=%r renders no units clause" % (_u,),
+               "[figures in" not in RP.build_rag_prompt(
+                   "q", [_D89Bare(_d89_hits[0].provenance, "Revenue | 100",
+                                  _u)]),
+               "(D) inventing a unit would be a worse defect than omitting "
+               "one: it would make an unscaled figure grade as scaled")
+
+check_true("the RAG system prompt asks the model to carry the unit through",
+           "state that unit" in RP.SYSTEM_RAG,
+           "(D) stating the unit in the evidence is necessary but NOT "
+           "sufficient -- grade_rag_case reads the scale word out of the "
+           "MODEL'S text, so a model that drops it still scores a 10^6 error")
+
+# The RAG-EN-004 exception, asserted so the fix is not 'improved' into
+# inventing units for it: its gold value is a CPI index, its passage declares
+# no units, and it must stay that way.
+_d89_004 = _d89_by_id["RAG-EN-004"]
+_d89_004_hits = list(_d89_index.search(_d89_004["query"], top_k=3).hits)
+check_true("the CPI row declares no units, and its prompt states none",
+           all(h.units_note is None for h in _d89_004_hits)
+           and "[figures in" not in RP.build_rag_prompt(_d89_004["query"],
+                                                        _d89_004_hits),
+           "(A) 308.417 is an index, not an amount in millions")
 
 # And the consequence, on the model's own words rather than a constructed
 # string: 394,328 IS the gold figure, from the right document, with the right
@@ -4626,10 +4670,17 @@ _d89_reply = ("Based on the evidence provided, Apple's total net sales in "
               "2022-10-28.")
 _d89_mag = _d89_row["gold_magnitude"]
 _d89_tol = max(abs(_d89_mag) * 1e-6, 0.5)
-check_true("DEFECT PINNED: a correct answer fails for the missing unit",
+# THIS ASSERTION IS DELIBERATELY UNCHANGED IN SUBSTANCE, AND THAT IS THE
+# POINT. The fix was to the PROMPT and to the system instruction, NOT to
+# value_matches. A reply that quotes a figure in millions while stating no unit
+# is still, correctly, not a match for an absolute magnitude -- the grader was
+# never wrong about that. What was wrong was asking the model for a unit the
+# harness had withheld. Softening value_matches instead would have made every
+# 10^6 error pass, which is the failure src/rag/citations exists to prevent.
+check_true("the grader STILL refuses a figure quoted with no unit",
            not L.value_matches(_d89_mag, _d89_reply, _d89_tol, scaled=True),
-           "(D) D-0089 defect 1: MEASURED on the reply the model actually "
-           "produced 2026-08-31. INVERT WHEN FIXED.")
+           "(D) D-0089a was fixed in the PROMPT, not here. Loosening this "
+           "would turn every 10^6 error into a pass.")
 check_true("...and the SAME answer passes once the unit is present",
            L.value_matches(_d89_mag,
                            _d89_reply.replace("**394,328**",
@@ -4658,18 +4709,78 @@ _D89_U060C = "\u06f3\u06f8\u06f3\u060c\u06f2\u06f8\u06f5 \u0645\u06cc\u0644\u06c
 check("the fixture's separator U+066C parses as one magnitude",
       L.extract_magnitudes(_D89_U066C)[0], 383285000000.0, 1.0,
       "(A) 383,285 million, correct")
-check_true("DEFECT PINNED: the model's separator U+060C splits the number",
-           len(L.extract_magnitudes(_D89_U060C)) == 2,
-           "(D) D-0089 defect 2, STILL PRESENT: U+060C is in neither "
-           "_THOUSANDS_SEPARATORS nor _DECIMAL_SEPARATORS. INVERT WHEN FIXED.")
-check_true("...and the scale word attaches to the WRONG fragment",
-           L.extract_magnitudes(_D89_U060C)[1] == 285000000.0,
-           "(D) worse than losing the number: 285,000,000 is manufactured. "
-           "A magnitude that was never written is worse than none.")
-check_true("U+060C is absent from BOTH separator tables",
-           "\u060c" not in L._THOUSANDS_SEPARATORS
+check_true("FIXED: the model's separator U+060C parses as ONE magnitude",
+           len(L.extract_magnitudes(_D89_U060C)) == 1,
+           "(D) D-0089b, FIXED 2026-08-31: U+060C was in neither "
+           "_THOUSANDS_SEPARATORS nor _DECIMAL_SEPARATORS, so this split into "
+           "two. INVERTED in the same commit as the fix.")
+check("...and it equals the fixture's U+066C reading exactly",
+      L.extract_magnitudes(_D89_U060C)[0],
+      L.extract_magnitudes(_D89_U066C)[0], 0.0,
+      "(C) the two spellings of the same figure must not disagree")
+check_true("...so the manufactured 285,000,000 is GONE",
+           285000000.0 not in L.extract_magnitudes(_D89_U060C),
+           "(D) the old parse attached 'million' to the second fragment and "
+           "produced a magnitude the model never wrote -- worse than none, "
+           "because it can match something")
+check_true("U+060C is now present in the THOUSANDS table, and only there",
+           "\u060c" in L._THOUSANDS_SEPARATORS
            and "\u060c" not in L._DECIMAL_SEPARATORS,
-           "(A) naming the cause, so a fix has one place to go")
+           "(C) as a DECIMAL separator it would move the point 10^3 -- the "
+           "exact error the U+066B/U+066C comment warns about")
+
+# U+060C IS ALSO ORDINARY PERSIAN SENTENCE PUNCTUATION, unlike every other
+# entry in that table. These assertions are the price of admitting it: the
+# between-digits guard must keep punctuation out of the numeric path.
+check_true("a comma followed by a SPACE is still punctuation",
+           L.extract_magnitudes(
+               "\u062f\u0631 \u0633\u0627\u0644 1402\u060c "
+               "\u062f\u0631\u0622\u0645\u062f 500") == [1402.0, 500.0],
+           "(D) if the fix ate this, every Persian sentence would fuse its "
+           "numbers -- a far larger defect than the one being fixed")
+check_true("prose with no digits is untouched",
+           L.extract_magnitudes(
+               "\u062f\u0631\u0622\u0645\u062f\u060c \u0633\u0648\u062f"
+               "\u060c \u0648 \u0632\u06cc\u0627\u0646") == [],
+           "(A) no digits, so nothing to group")
+check_true("a group that is NOT exactly three digits is not joined",
+           L.extract_magnitudes("1402\u060c15") == [1402.0, 15.0],
+           "(C) the guard requires exactly three following digits")
+check_true("U+066B stays a DECIMAL separator after the change",
+           L.extract_numbers("17\u066b85") == [17.85],
+           "(C) the 10^3 error, re-checked because the table moved")
+check_true("the two separator tables still do not overlap",
+           not (set(L._DECIMAL_SEPARATORS) & set(L._THOUSANDS_SEPARATORS)),
+           "(A) a character in both tables has undefined meaning")
+
+# THE SAME BLIND SPOT EXISTED IN THREE MORE LAYERS, found by probing every
+# module that parses a number instead of trusting the two D-0089b named.
+check_true("src/rag/citations no longer manufactures a magnitude either",
+           [c.magnitude for c in _C89.extract_numbers(_D89_U060C)]
+           == [383285000000.0],
+           "(D) the claim VERIFIER invented 285,000,000 -- for a module whose "
+           "purpose is refusing unsupported numbers, that is the worst "
+           "available failure")
+check_true("...and the English path is unchanged by that edit",
+           [c.magnitude for c in _C89.extract_numbers("109,417 million")]
+           == [109417000000.0],
+           "(A) admitting U+060C must not disturb the comma")
+check_true("...and percentages are still skipped, not scaled",
+           _C89.extract_numbers("grew 12%") == [],
+           "(C) a derived percentage is not a magnitude")
+check_true("retrieval indexes a U+060C figure as ONE token",
+           _N89.tokenize(_D89_U060C.split()[0]) == ["383285"],
+           "(D) indexed as ['383','\u060c','285'] before the fix, so a query "
+           "for the figure could not retrieve the passage stating it")
+check_true("...and Persian sentence punctuation still splits tokens",
+           len(_N89.tokenize("\u062f\u0631\u0622\u0645\u062f\u060c "
+                             "\u0633\u0648\u062f")) == 2,
+           "(D) a _FOLD entry would have fused these; the fix is guarded to "
+           "fire only between digits")
+check_true("U+060C is deliberately NOT in the character fold table",
+           "\u060c" not in _N89._FOLD,
+           "(D) _FOLD is applied character-by-character with no lookaround, "
+           "so an entry there would delete the punctuation case too")
 # The suite ALREADY knew this character -- for mask_years, which handles it
 # correctly. Asserted against mask_years' real behaviour rather than against
 # this file's own source text, so it states a capability, not a string match.

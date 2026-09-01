@@ -45,8 +45,42 @@ _ASCII_DIGITS = "0123456789"
 # three orders of magnitude. src/calc/persian_num.py already refuses ambiguous
 # input; this module follows the same convention rather than inventing a
 # second one.
+#
+# U+060C ARABIC COMMA -- ADDED 2026-08-31, D-0089b, FIXING A MEASURED DEFECT.
+#
+# The table below held U+066C, which is what the FIXTURE author typed, and not
+# U+060C, which is what the MODEL actually writes. MEASURED on the reply
+# recorded in evidence/phase4_merged.json for RAG-FA-001:
+#
+#     extract_magnitudes('۳۸۳٬۲۸۵ میلیون')  -> [383285000000.0]      U+066C
+#     extract_magnitudes('۳۸۳،۲۸۵ میلیون')  -> [383.0, 285000000.0]  U+060C
+#
+# Worse than losing the number: the scale word attached to the SECOND fragment,
+# MANUFACTURING 285,000,000 that the model never wrote. A magnitude that was
+# never written is a worse failure than no magnitude at all, because it can
+# match something.
+#
+# U+060C IS NOT LIKE THE OTHER ENTRIES AND THAT MATTERS. U+066C exists only as
+# a digit-grouping mark, so stripping it is unconditionally safe. U+060C is
+# ALSO ordinary Persian sentence punctuation ("درآمد، سود، و زیان"). What makes
+# it safe to add here is the guard in _normalise_separators, which strips a
+# grouping mark only between a digit and EXACTLY three following digits --
+# MEASURED, this leaves punctuation alone:
+#
+#     'در سال 1402، درآمد 500 بود' -> unchanged   (space after the comma)
+#     'درآمد، سود، و زیان'          -> unchanged   (no digits at all)
+#     '1402،15'                    -> unchanged   (not three digits)
+#     '۳۸۳،۲۸۵ میلیون'             -> 383285      (fixed)
+#
+# The residual ambiguity is recorded as R45 and NOT hidden: a bare list of two
+# numbers written with no space after the comma, "5،200", now reads as 5200. It
+# is genuinely ambiguous in Persian and no rule resolves it from the text
+# alone. MEASURED: the pattern `digit U+060C exactly-three-digits` occurs 3
+# times in evidence/phase4_merged.json, and all 3 are the SAME model reply, in
+# which the character IS a thousands separator -- so on every occurrence in
+# recorded data this change is a fix and never a corruption.
 _DECIMAL_SEPARATORS = (".", "\u066b")
-_THOUSANDS_SEPARATORS = (",", "\u066c", "\u2009", "\u00a0", "_")
+_THOUSANDS_SEPARATORS = (",", "\u066c", "\u060c", "\u2009", "\u00a0", "_")
 
 _ARABIC_SCRIPT = re.compile(r"[\u0600-\u06ff]")
 _LATIN_SCRIPT = re.compile(r"[A-Za-z]")

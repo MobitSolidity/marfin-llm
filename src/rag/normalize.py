@@ -49,7 +49,25 @@ _FOLD = {
     "\u200e": " ",        # LTR mark
     "\u066c": "",         # arabic thousands separator
     "\u066b": ".",        # arabic decimal separator
+    # U+060C ARABIC COMMA is deliberately ABSENT from this table -- see the
+    # note added 2026-08-31 (D-0089b) at the foot of this dict's comment block.
 }
+
+# WHY U+060C IS NOT FOLDED HERE, THOUGH IT IS THE COMMA THE MODEL WRITES.
+#
+# D-0089b (2026-08-31, MEASURED) found that the model emits U+060C where the
+# fixture uses U+066C, and that the grader's separator table did not know it.
+# The grader was fixed. This table was NOT, and the difference is deliberate.
+#
+# _FOLD is applied CHARACTER-BY-CHARACTER with no lookaround, so an entry here
+# would delete every U+060C in the corpus, including the ones that are ordinary
+# sentence punctuation. `tokenize()` already handles the grouping case with a
+# guarded rule that only fires BETWEEN digits, which is where the equivalent
+# fix belongs and where it was applied.
+#
+# Folding it unconditionally would silently merge two different Persian
+# sentences' tokens ("درآمد، سود" -> "درآمدسود"), which is a retrieval defect
+# rather than an arithmetic one, and therefore much harder to see.
 
 # Arabic/Persian-Indic digits.
 for _i in range(10):
@@ -84,7 +102,18 @@ def tokenize(text: str) -> List[str]:
     folded = fold(text or "")
     # Drop thousands separators BETWEEN digits only, so "109,417" -> "109417"
     # while "revenue, cost" still splits into two tokens.
-    folded = re.sub(r"(?<=\d),(?=\d)", "", folded)
+    #
+    # U+060C ARABIC COMMA added 2026-08-31 (D-0089b). MEASURED before the fix:
+    #     tokenize('۳۸۳،۲۸۵') -> ['383', '،', '285']
+    # i.e. a Persian figure the MODEL wrote indexed as two unrelated numbers
+    # plus a punctuation token, so a query for that figure could not retrieve
+    # the passage stating it. The fixture's U+066C form was folded correctly by
+    # _FOLD, which is exactly why this went unnoticed: the only Persian numbers
+    # ever indexed came from fixtures.
+    #
+    # This is guarded by BETWEEN-DIGITS, unlike a _FOLD entry, so Persian
+    # sentence punctuation is untouched.
+    folded = re.sub(r"(?<=\d)[,\u060c](?=\d)", "", folded)
     return _TOKEN_RE.findall(folded)
 
 

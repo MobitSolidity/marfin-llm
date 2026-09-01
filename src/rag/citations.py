@@ -36,7 +36,22 @@ from rag.normalize import fold, tokenize
 # This is NOT the rounding allowance -- see _tolerance_for().
 REL_TOL = 1e-9
 
-_NUM_RE = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
+# U+060C ARABIC COMMA admitted 2026-08-31 (D-0089b), and U+066C is NOT needed
+# here because rag.normalize.fold() already deletes it before this regex runs.
+#
+# MEASURED before the fix, on the reply recorded for RAG-FA-001:
+#     extract_numbers('۳۸۳،۲۸۵ میلیون')
+#         -> [ClaimNumber('383' -> 383), ClaimNumber('285' -> 2.85e+08)]
+# The claim verifier therefore checked a MANUFACTURED 285,000,000 against the
+# evidence instead of the 383,285 million the model actually claimed. For a
+# module whose whole purpose is refusing unsupported numbers, inventing one is
+# the worst available failure.
+#
+# This character class is INSIDE the number pattern rather than a strip pass,
+# so it can only ever match between digits by construction: the leading `\d` is
+# required and the class sits in the repeated tail. Persian sentence
+# punctuation cannot be consumed.
+_NUM_RE = re.compile(r"[-+]?\d[\d,\u060c]*(?:\.\d+)?")
 
 # Scale words that may follow a number inside a CLAIM ("109.4 billion").
 _CLAIM_SCALE_RE = re.compile(
@@ -80,7 +95,11 @@ def extract_numbers(text: str) -> List[ClaimNumber]:
                 "\u066a"):
             continue
         try:
-            value = float(raw.replace(",", ""))
+            # U+060C stripped alongside "," (D-0089b): the pattern now admits
+            # it, so failing to strip it here would turn every Persian grouped
+            # figure into a ValueError and drop the claim SILENTLY -- trading a
+            # wrong number for a missing one.
+            value = float(raw.replace(",", "").replace("\u060c", ""))
         except ValueError:
             continue
         sm = _CLAIM_SCALE_RE.match(tail.lstrip())
