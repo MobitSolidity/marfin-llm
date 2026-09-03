@@ -1363,20 +1363,34 @@ check_raises("an unrecognised model payload is refused, not graded",
 # It is still the value any future caller that omits the argument would get,
 # and 768 is the exact budget that lost 20 of 52 answers inside an unfinished
 # <think> block. Two defaults that can silently disagree are two facts.
-check("the shared budget constant is 2048",
-      RP.DEFAULT_MAX_TOKENS, 2048, 0,
-      "(D) raised from 768 on the user's approval 2026-08-20")
+# LOWERED 2048 -> 512 on 2026-09-01 (D-0091). The 2048 measurement below is
+# NOT retracted: it was correct for a harness that shipped no prefill, where
+# the budget funded runaway reasoning instead of an answer. With the prefill
+# wired into all three builders the reasoning block arrives already CLOSED, so
+# the budget now funds the answer -- MEASURED at 56 / 108 / 57 tokens, none
+# budget-bound. If the prefill were ever unwired, 512 would be far too small,
+# which is why the assertion above pins the prefill and this one the budget.
+check("the shared budget constant is the MEASURED 512",
+      RP.DEFAULT_MAX_TOKENS, 512, 0,
+      "(D) was 2048, sized for the pre-prefill defect (MEASURED at 768: 25 of "
+      "52 calls hit the ceiling, 20 with thinking_truncated=True). 512 is "
+      "4.7x the longest prefilled answer ever measured, 108 tokens.")
 check_true("...and ModelRunner's default IS that constant, not a copy of it",
            RP.ModelRunner(FakeLlama(_responder_mixed)).max_tokens
            == RP.DEFAULT_MAX_TOKENS,
            "(D) two literals that must agree is a drift waiting to happen. "
            "This pins them to EACH OTHER rather than each to a number, so a "
            "future edit cannot move one and leave the other behind")
-check_true("...and the constant is ABOVE the measured ceiling",
-           RP.DEFAULT_MAX_TOKENS > 768,
-           "(D) MEASURED at 768: 25 of 52 calls hit the ceiling and 20 of "
-           "those had thinking_truncated=True. The low-budget warning only "
-           "fires under 512, so a regression to 768 would announce nothing")
+check_true("...and the constant is ABOVE the longest prefilled answer",
+           RP.DEFAULT_MAX_TOKENS > 108,
+           "(D) 108 tokens, RAG-FA-002, MEASURED 2026-08-31 on the user's "
+           "i5-12400. The 768-era ceiling (25 of 52 calls, 20 truncated) "
+           "measured a DIFFERENT quantity -- the budget being burned inside "
+           "an unterminated <think> block, not an answer's length.")
+check_true("...and it is not below the warning threshold either",
+           RP.DEFAULT_MAX_TOKENS >= 512,
+           "(D) the runner's low-budget warning fires under 512, so a default "
+           "beneath it would be a silent regression")
 
 # -- the fabrication TOTAL, as an extractable rule -------------------------
 # main() summed this inline, and the mutation battery proved the None handling
@@ -1509,10 +1523,22 @@ check_true("...and closes the user turn before the assistant header",
 for _name, _built in (("plain", RP.build_plain_prompt(_q)),
                       ("tools", _p_tools),
                       ("rag", _p_rag)):
+    # UPDATED 2026-09-01 (D-0091). The original form required the prompt to
+    # END at the assistant header. That was right when nothing followed it, and
+    # it is now WRONG: all three arms append the pre-closed <think> block, so
+    # the header is still present but is no longer last. The chat-vs-completion
+    # property this assertion exists to protect is unchanged and still checked.
     check_true("the %s arm sends a CHAT prompt, not a raw completion" % _name,
                _built.startswith("<|im_start|>system\n")
-               and _built.endswith("<|im_start|>assistant\n"),
+               and "<|im_start|>assistant\n" in _built,
                "(D) this is the defect that produced 4 zero-token cases")
+    check_true("...and the %s arm's header is followed ONLY by the prefill"
+               % _name,
+               _built.split("<|im_start|>assistant\n")[-1]
+               == RP.FORCED_CLOSED_THINK,
+               "(D) D-0091: anything else between the header and the model's "
+               "first token is text the model did not write but is billed "
+               "for, and would silently change what is under test")
     check_true("...and the %s arm still marks the question for the grader"
                % _name, "Question:" in _built,
                "(D) the scripted model finds the question by rsplit on this "
@@ -2003,12 +2029,23 @@ check_true("...while the same run proceeds when --yes is given",
            "INCONCLUSIVE" in _run_diagnostic(_CeilingModel(),
                                              ["--max-tokens", "3072", "--yes"]),
            "(C) the gate must be a confirmation, not a wall")
-check_true("the default budget is no longer the too-small 512",
-           RP.DEFAULT_MAX_TOKENS != 512
-           and 'default=3072' in _diag_text,
-           "(D) MEASURED: at 512 every one of six generations was cut off "
-           "inside <think>. The 2026-08-30 rag arm's truncated cases used "
-           "~2031/~2636/~2510 reasoning tokens, so 512 was never sufficient")
+# REWRITTEN 2026-09-01 (D-0091), AND THE OLD MEASUREMENT IS THE REASON WHY.
+# This asserted that 512 must NOT be the default, because at 512 all six
+# generations were cut off inside <think> and the truncated rag cases used
+# ~2031/~2636/~2510 reasoning tokens. Every one of those numbers describes a
+# NON-PREFILLED generation. The prefill removes the reasoning block from the
+# budget entirely, so the same 512 that was hopeless before is now 4.7x the
+# longest answer measured. What still must hold is the DIAGNOSTIC's own
+# default, which deliberately stays high because it probes reasoning length.
+check_true("the diagnostic still defaults high, since it probes reasoning",
+           'default=3072' in _diag_text,
+           "(D) the diagnostic measures how long an UNPREFILLED reasoning "
+           "block runs; giving it the runner's answer-sized budget would "
+           "measure the budget instead of the model")
+check_true("...while the RUNNER's default is answer-sized, not think-sized",
+           RP.DEFAULT_MAX_TOKENS == 512,
+           "(D) the two scripts budget for different objects: the runner for "
+           "an answer after a closed <think>, the diagnostic for an open one")
 # MY OWN GUARD WAS DEFECTIVE, AND RUNNING IT IS WHAT SHOWED THAT.
 #
 # The first version asserted `"phase4_merged" not in _diag_text.split("USAGE")
@@ -2705,17 +2742,18 @@ _rc2, _report2 = _capture(RP.main, ["--model", _fakemodel,
 check("a run with no --max-tokens still completes", _rc2, 0, 0, "(A)")
 with open(_outfile2, encoding="utf-8") as _f:
     _payload2 = json.load(_f)
-check("...and the DEFAULT token budget is 2048, not 768 or 256",
-      _payload2["model"]["max_tokens"], 2048, 0,
-      "(D) MEASURED at 768: 25 of 52 calls hit the ceiling and 20 of those "
-      "had thinking_truncated=True, so the answer was never emitted. 256 is "
-      "worse still. Raised to 2048 on the user's approval 2026-08-20")
-check_true("...and the DEFAULT budget is not BELOW the measured ceiling",
-           _payload2["model"]["max_tokens"] > 768,
-           "(D) got %r; a default at or under 768 reproduces the exact "
-           "budget failure this run was raised to escape, and the low-budget "
-           "warning only fires under 512 so nothing would announce it"
-           % (_payload2["model"]["max_tokens"],))
+check("...and the DEFAULT token budget is the MEASURED 512",
+      _payload2["model"]["max_tokens"], 512, 0,
+      "(D) was 2048 for the pre-prefill harness (MEASURED at 768: 25 of 52 "
+      "calls hit the ceiling, 20 with thinking_truncated=True). The prefill "
+      "takes the reasoning block out of the budget -- D-0091.")
+check_true("...and the RECORDED budget IS the shared constant, not a copy",
+           _payload2["model"]["max_tokens"] == RP.DEFAULT_MAX_TOKENS,
+           "(D) got %r against RP.DEFAULT_MAX_TOKENS=%r. Pinned to EACH OTHER "
+           "rather than each to a literal, so a future edit cannot move one "
+           "and leave the other behind -- the exact drift the 2026-08-20 "
+           "mutation exposed"
+           % (_payload2["model"]["max_tokens"], RP.DEFAULT_MAX_TOKENS))
 check_true("...and the tool-call cap is RECORDED in the payload",
            _payload2["model"].get("tool_call_cap") == L.TOOL_CALL_CAP,
            "(D) got %r against L.TOOL_CALL_CAP=%r; a capped run whose cap is "
@@ -4789,6 +4827,76 @@ check("mask_years DOES handle U+060C, so the knowledge existed",
                    "\u0633\u0648\u062f").count("1402"), 0, 0,
       "(D) the year was masked, so U+060C was parsed there -- taught to one "
       "function and never to the numeric path")
+
+# ===========================================================================
+# D-0091: THE CURE WAS WRITTEN, TESTED, AND NOT CONNECTED.
+#
+# MEASURED 2026-09-01, while costing item 7: chatml_prompt_no_think() existed,
+# was asserted by this file, and was CALLED BY NOTHING outside it. All three
+# arms called chatml_prompt(), so every production prompt ended
+# '<|im_start|>assistant\n' with NO prefill, while the diagnostic that worked
+# on the user's machine ended '...assistant\n<think>\n\n</think>\n\n'.
+#
+# Running item 7 in that state would have re-measured D-0085 at 52-case scale
+# and left D-0089a untested, because a model that emits no visible answer has
+# no opportunity to repeat the units the prompt now supplies.
+#
+# WHY THE EXISTING ASSERTIONS MISSED IT: they test the HELPER. The helper was
+# never wrong. The wiring was. So these assertions test the PRODUCTION
+# BUILDERS' output instead -- R43 recurring in a third subsystem.
+# ===========================================================================
+section("D-0091: the prefill is wired into the production builders")
+
+_d91_plain = RP.build_plain_prompt("Q?")
+_d91_tools = RP.build_tools_prompt("Q?", [{"function": {
+    "name": "pe_ratio", "description": "Price / EPS",
+    "parameters": {"required": ["price", "eps"]}}}])
+_d91_corpus = RP.load_jsonl(os.path.join(_ROOT, "evals",
+                                         "rag_corpus_v1.jsonl"))
+_d91_rag = RP.build_rag_prompt(
+    "Q?", list(RP.build_index(_d91_corpus).search("Apple net sales",
+                                                  top_k=2).hits))
+
+for _name, _p in (("plain", _d91_plain), ("tools", _d91_tools),
+                  ("rag", _d91_rag)):
+    check_true("the %s arm's prompt ENDS with the closed think block" % _name,
+               _p.endswith(RP.FORCED_CLOSED_THINK),
+               "(D) D-0091: this arm called chatml_prompt() and shipped no "
+               "prefill, so the model opened a <think> block it never closed "
+               "and burned the whole budget inside it -- MEASURED at 512, "
+               "2048 and 3072 tokens with ZERO visible answers")
+    check_true("...and the %s arm leaves the block CLOSED, not open" % _name,
+               _p.count(RP.THINK_OPEN) == _p.count(RP.THINK_CLOSE) == 1,
+               "(C) an unbalanced prefill is worse than none: it invites the "
+               "model to continue reasoning instead of answering")
+
+# The connection itself, stated as a property rather than a string match: every
+# production builder must agree with the prefill helper on the same input.
+check_true("every arm's prompt is chatml_prompt_no_think of its own content",
+           _d91_plain == RP.chatml_prompt_no_think(
+               RP.SYSTEM_BASE, "Question: Q?"),
+           "(D) asserted against the HELPER on the SAME input, so a future "
+           "edit that re-implements the prefill inline instead of calling the "
+           "shared function is caught too")
+
+# The budget, which only makes sense once the prefill is wired.
+check("the completion budget is the MEASURED 512, not the runaway-think 2048",
+      RP.DEFAULT_MAX_TOKENS, 512, 0,
+      "(D) 2048 was sized for a defect that no longer occurs -- it funded "
+      "runaway reasoning, not answers. 512 is 4.7x the longest prefilled "
+      "answer ever measured (108 tokens).")
+check_true("...and it still exceeds the longest MEASURED prefilled answer",
+           RP.DEFAULT_MAX_TOKENS > 108,
+           "(A) 108 tokens, RAG-FA-002, 2026-08-31, on the user's i5-12400")
+
+# THE NEGATIVE CONTROL. The no-prefill rendering must still be reachable and
+# still be DIFFERENT, so the comparison against the recorded no-prefill runs
+# remains possible and this fix stays falsifiable.
+check_true("the un-prefilled rendering is still available for comparison",
+           not RP.chatml_prompt(RP.SYSTEM_BASE, "Question: Q?").endswith(
+               RP.FORCED_CLOSED_THINK),
+           "(C) if both renderings became identical, nothing would be under "
+           "test and the recorded runs could not be compared against")
 
 print("")
 _cleanup_temp_dirs()

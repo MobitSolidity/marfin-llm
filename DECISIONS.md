@@ -4057,3 +4057,205 @@ across ten rows was too tidy to be real. Corrected and re-run before reporting.
   A pinned-defect assertion that outlives its defect is a test that forbids the fix.
 - 13 new assertions cover the punctuation cases, the non-invention of units,
   the CPI exception, and the three extra layers.
+
+---
+
+## D-0091 — the cure for D-0085 was written, tested, and connected to nothing
+
+**Date:** 2026-09-01
+**Requested by:** the user, choosing option «الف» — wire the prefill into
+`run_phase4.py` before running item 7, at zero run cost.
+**Status:** DONE. No model was run. `phase_4/measurements_recorded` is still `None`.
+
+### What was asked
+
+Option A, verbatim as the user approved it:
+
+> «**الف) اول `run_phase4.py` را به prefill وصل کنیم** (۰ هزینهٔ اجرا، ~۱۵ دقیقه
+> کارِ من) — سه بازو به `chatml_prompt_no_think` منتقل شوند، بودجه به ۵۱۲ برود،
+> `--out` اجباری شود، گزاره‌ای اضافه شود که «مسیرِ تولید همان چیزی را می‌فرستد
+> که تشخیص فرستاد»، و یک جهش که وصل‌نبودن را بکشد. بعد قلم ۷.»
+
+### Why this was needed: the finding that stopped item 7
+
+The user had already approved running item 7 (D-0082/D-0083, the full chunked
+re-run). Before handing over the command I checked whether the script item 7
+actually runs uses the forced-closed-`<think>` prefill that D-0085's diagnostic
+proved was the cure. MEASURED 2026-09-01, by rendering all three arms:
+
+```
+plain prompt ends: '<|im_start|>assistant\n'                        <- no prefill
+rag   prompt ends: '<|im_start|>assistant\n'                        <- no prefill
+diagnostic used  : '<|im_start|>assistant\n<think>\n\n</think>\n\n' <- prefill
+```
+
+`chatml_prompt_no_think()` was defined at `run_phase4.py:278`, was asserted by
+the test suite, and was **called by nothing outside that suite**. The cure lived
+only in `scripts/diagnose_forced_answer.py`.
+
+So item 7, in that state, would have spent roughly 7 hours re-measuring the
+ORIGINAL defect at 52-case scale — the budget was still 2048 precisely because
+generations were burning it inside an unterminated `<think>` block — and would
+have left D-0089a's units fix untested, because a model that emits no visible
+answer has no opportunity to repeat the unit the prompt now supplies.
+
+**This is R43 recurring in a third subsystem.** A test that exercises a function
+nobody calls produces green that means nothing. The assertions were not wrong;
+they were pointed at the wrong object. I should have caught this before pricing
+item 7, and said so to the user rather than only fixing it.
+
+### The fix
+
+Three builders, one line each, switched from `chatml_prompt` to
+`chatml_prompt_no_think`:
+
+- `build_plain_prompt`
+- `build_tools_prompt`
+- `build_rag_prompt`
+
+### The budget was sized for a defect that no longer occurs
+
+`DEFAULT_MAX_TOKENS` 2048 → **512**.
+
+The 2048 and 768 figures were chosen from runs where the generation burned its
+ENTIRE budget inside an unterminated `<think>` block. In those runs the budget
+was funding runaway reasoning; with the prefill on the wire it funds the ANSWER.
+MEASURED — the only three prefilled generations that exist, on the user's
+i5-12400, 2026-08-31:
+
+| tokens | seconds |
+|---|---|
+| 56 | 25.1 |
+| 108 | 31.0 |
+| 57 | 20.6 |
+
+Longest 108 tokens; **0 of 3 were budget-bound**; 512 leaves **4.7×** headroom
+over the longest. 512 is also exactly the runner's own low-budget warning
+threshold (`if a.max_tokens < 512`), so it sits AT the threshold, not below it.
+
+**NOT CLAIMED:** 3 cases is not 52. Neither the tools arm (which must emit a
+`<tool_call>` JSON envelope, necessarily longer than a one-sentence answer) nor
+the plain arm has ever been measured with a prefill. If the real run reports
+`answers LOST to truncation > 0`, the budget is the first thing to raise — the
+harness prints that counter unconditionally, which is why it can be trusted to
+say so.
+
+### The assertions now test the PRODUCTION path, not the helper
+
+The pre-existing prefill assertions checked `chatml_prompt_no_think()` directly.
+That function was never wrong, so those assertions could never fail. The new
+block asserts on what `build_plain_prompt` / `build_tools_prompt` /
+`build_rag_prompt` return, and adds:
+
+- a property test that each arm's prompt equals `chatml_prompt_no_think` of its
+  own content — so an inline re-implementation of the prefill is also caught;
+- an assertion that the assistant header is followed by the prefill and
+  **nothing else**;
+- a **negative control**: the un-prefilled rendering must still be reachable and
+  still be different. Without it the fix would stop being falsifiable, and the
+  recorded pre-prefill runs would stop being comparable to anything.
+
+### Eight pre-existing assertions were updated, not silenced
+
+Each encoded a fact that was TRUE for a no-prefill harness: the budget had to be
+large, and the prompt had to END at the assistant header. Each was re-pointed at
+the new fact **with the old measurement kept in the assertion message**, because
+that measurement is why the old value was chosen and is the evidence that would
+justify reverting. The diagnostic's own default stays high (3072) and is now
+asserted separately from the runner's, because the diagnostic exists to probe
+reasoning and the runner exists to collect answers.
+
+### Three mutants were silently skipped by my own edit
+
+After adding four new prefill mutants the battery reported 221 killed / 0
+survived / **12** skipped, where the standing figure was 9. Anchor-count diffing
+against the pre-edit file proved **3 of the extra skips were mine**: they
+anchored on the literal `DEFAULT_MAX_TOKENS = 2048`, which no longer exists.
+
+**A mutant that silently fails to apply is worse than a deleted one, because the
+killed count still looks healthy.** Retargeted to `512` (and the 768 one
+repurposed to drop the budget below the longest measured prefilled answer); the
+battery returned to **224 killed / 0 survived / 9 skipped**, the 9 being the
+pre-existing inherited ones.
+
+### The four new mutants
+
+Each unwires one arm or reverts the budget. All four are **killed**:
+
+- the plain arm stops sending the pre-closed think block
+- the tools arm stops sending the pre-closed think block
+- the rag arm stops sending the pre-closed think block
+- the completion budget returns to the runaway-think 2048
+
+### Dry run of the exact item-7 path
+
+The standing constraint is that the user must never be the first to execute a
+code path. `llama-cpp-python` is not installed in the sandbox, and `main()`
+returns exit code 2 on that ImportError before any arm runs — so a dry run that
+merely called `main()` would have proved only that the import fails. A
+llama-cpp-shaped module was inserted into `sys.modules` instead, letting the
+REAL `main()` walk its real path. MEASURED:
+
+```
+argv: --model <stub>.gguf --out <tmp>/phase4_run.json --arms plain,tools,rag
+exit code: 0
+generation calls total          : 54
+latency-probe calls (raw text)  : 2   (TTFT probe at max_tokens=1, decode at 128)
+ChatML arm prompts              : 52  (21 plain + 21 tools + 10 rag, VERIFIED)
+...of those, ending in prefill  : 52
+max_tokens values sent          : [1, 128, 512]
+payload model.max_tokens        : 512
+arms present                    : ['plain', 'rag', 'tools']  rows 21/10/21
+every row carries output + metrics.raw_output : True
+human_grading.status            : 'PENDING'
+DRY RUN VERDICT: PASS (9/9 checks)
+```
+
+The prompt-recording check is the one that matters, and it is deliberately
+different in kind from the test-suite assertions: the suite checks what the
+BUILDERS return, which is static; this checks what the model wrapper **actually
+sent at runtime**. D-0091 happened because a static check passed while nothing
+on the wire carried the prefill.
+
+This dry run proves the PATH runs. It measures **nothing** about the real model:
+the replies are scripted, so the five FAIL verdicts it printed are artefacts of
+the stub and are not recorded anywhere.
+
+### Item 7 is re-priced, and the old range was the optimistic end
+
+The previously quoted «~۲۲–۳۲ دقیقه» was ESTIMATED before the prefill existed.
+Rebuilt from the three measured prefilled generations plus the MEASURED 49 s
+TTFT probe:
+
+| scenario | ESTIMATED |
+|---|---|
+| replies as short as the shortest measured (56 tok) | ~19 min |
+| replies at the measured mean (73.7 tok, 25.6 s/call) | ~24 min |
+| **every reply burns the full 512 budget** | **~83 min** |
+
+So ~22–32 minutes was not wrong, but it was the optimistic end of the range with
+no ceiling attached. The number to plan around is the upper bound. Stating only
+the central figure is how a "1 hour" run became 1.7 hours earlier in this
+project.
+
+### Verification
+
+- Full regression: **3,380 assertions across 18 suites, 0 failed, 0 skipped**
+  (3,365 → 3,380, +15).
+- `tests/test_phase4_harness.py`: 739 → **754** assertions.
+- Mutation battery: **224 killed, 0 survived, 9 skipped** — all four new prefill
+  mutants killed; the 9 skips proved pre-existing by anchor-count diffing.
+- Dry run of the exact item-7 argv: **PASS, 9/9**.
+- Gate re-proven unchanged: `phase_4` byte-identical apart from the recorded
+  decision id, `measurements_recorded` still `None`, the 13 top-level
+  `acceptance_thresholds` json-identical, `live_trading_enabled` `False`,
+  `active_mode` `ANALYSIS_ONLY`.
+
+### What this does NOT settle
+
+Nothing about answer quality. D-0081's FAIL verdict still stands (D-0090
+re-graded all ten recorded rag rows and **0 flipped**). The prefill fixed
+*silence*, and the units fix removed one *manufactured magnitude*; whether the
+model can actually answer these 52 cases is unmeasured until item 7 runs. Item 7
+remains gated on the user's explicit go-ahead, which they have given, and the
+command is now safe to hand over because the path has been walked.

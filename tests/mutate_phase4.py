@@ -111,6 +111,28 @@ MUTATIONS = [
     (LIB, "U+060C, the comma the model actually emits, is dropped again",
      '_THOUSANDS_SEPARATORS = (",", "\\u066c", "\\u060c", "\\u2009", "\\u00a0", "_")',
      '_THOUSANDS_SEPARATORS = (",", "\\u066c", "\\u2009", "\\u00a0", "_")'),
+
+    # -- the prefill wiring: D-0091 ----------------------------------------
+    # Each of these UNWIRES one arm, restoring the exact pre-fix call. That
+    # state existed for a day and the whole suite passed, because the only
+    # assertions on the prefill tested the HELPER, which was never wrong. If
+    # any of these survives, the prefill is once again connected by nothing an
+    # assertion can see.
+    (RUN, "the plain arm stops sending the pre-closed think block",
+     'return chatml_prompt_no_think(SYSTEM_BASE, "Question: %s" % question)',
+     'return chatml_prompt(SYSTEM_BASE, "Question: %s" % question)'),
+    (RUN, "the tools arm stops sending the pre-closed think block",
+     'return chatml_prompt_no_think(SYSTEM_TOOLS + "\\n".join(lines),\n'
+     '                                  "Question: %s" % question)',
+     'return chatml_prompt(SYSTEM_TOOLS + "\\n".join(lines),\n'
+     '                     "Question: %s" % question)'),
+    (RUN, "the rag arm stops sending the pre-closed think block",
+     'return chatml_prompt_no_think(\n        SYSTEM_RAG,',
+     'return chatml_prompt(\n        SYSTEM_RAG,'),
+    # And the budget, which is only defensible BECAUSE the prefill is wired.
+    (RUN, "the completion budget returns to the runaway-think 2048",
+     'DEFAULT_MAX_TOKENS = 512',
+     'DEFAULT_MAX_TOKENS = 2048'),
     # Retargeted 2026-08-15: this logic used to be duplicated in both
     # extractors and now lives once in _normalise_separators -- which is the
     # fix that killed the "_DECIMAL_SEPARATORS is dead" survivor.
@@ -733,14 +755,20 @@ MUTATIONS = [
      "    _tt, _th = 0, 0"),
 
     # -- the default budget and the report ----------------------------------
+    # RETARGETED 2026-09-01 (D-0091): these three anchored on the old literal
+    # "DEFAULT_MAX_TOKENS = 2048". After the budget moved to 512 their anchors
+    # matched nothing, so they were reported SKIPPED while the killed count
+    # still looked healthy -- the same silent non-application the U+060C
+    # mutant was retargeted to avoid. Caught by diffing anchor counts before
+    # and after the edit rather than by reading the summary line.
     (RUN, "the default token budget reverts to 256, too small to reach answers",
-     "DEFAULT_MAX_TOKENS = 2048",
+     "DEFAULT_MAX_TOKENS = 512",
      "DEFAULT_MAX_TOKENS = 256"),
-    (RUN, "the budget silently reverts to the 768 that lost 20 answers",
-     "DEFAULT_MAX_TOKENS = 2048",
-     "DEFAULT_MAX_TOKENS = 768"),
+    (RUN, "the budget drops below the longest MEASURED prefilled answer",
+     "DEFAULT_MAX_TOKENS = 512",
+     "DEFAULT_MAX_TOKENS = 64"),
     (RUN, "the budget is raised so far it changes what the run costs",
-     "DEFAULT_MAX_TOKENS = 2048",
+     "DEFAULT_MAX_TOKENS = 512",
      "DEFAULT_MAX_TOKENS = 8192"),
     # The two consumers of the constant, each mutated back to a hardcoded
     # number. MEASURED 2026-08-20: with ModelRunner carrying its own literal

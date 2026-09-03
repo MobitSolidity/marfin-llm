@@ -112,7 +112,34 @@ def rel(path):
 # future caller that omits the argument would silently receive. Two copies of
 # a number that must agree is a drift waiting to happen; one constant makes the
 # disagreement impossible rather than merely detectable.
-DEFAULT_MAX_TOKENS = 2048
+#
+# LOWERED 2048 -> 512 on 2026-09-01 (D-0091), AND THE REASON IS NOT "TO SAVE
+# TIME". 2048 was sized for a defect that no longer occurs. Every measurement
+# above describes runs in which the generation burned its ENTIRE budget inside
+# an unterminated <think> block, so the budget was not funding an answer -- it
+# was funding runaway reasoning. With the prefill now wired into all three
+# builders, the reasoning block arrives already closed and the budget funds the
+# ANSWER, which is a much smaller object.
+#
+# MEASURED, on the user's i5-12400, 2026-08-31, the only three prefilled
+# generations that exist:
+#
+#     RAG-EN-005      56 tokens   25.1 s
+#     RAG-FA-002     108 tokens   31.0 s
+#     RAG-ABST-002    57 tokens   20.6 s
+#
+# The longest was 108 tokens, and none was budget-bound (0 of 3). 512 leaves
+# 4.7x headroom over the longest answer ever actually observed from this model
+# in this mode.
+#
+# WHAT THIS DOES NOT CLAIM. Three cases are not 52. These are all RAG-arm or
+# abstention cases; the tools arm has to emit a <tool_call> envelope and the
+# plain arm is unconstrained by evidence, and NEITHER has been measured with a
+# prefill. If a case needs more than 512 it will be recorded as budget-bound
+# rather than silently truncated -- which is the signal to raise this, and the
+# reason the runner counts budget-bound cases at all. 512 is a MEASURED
+# starting point with headroom, not a proven ceiling.
+DEFAULT_MAX_TOKENS = 512
 
 # ---------------------------------------------------------------------------
 # CHAT TEMPLATE.
@@ -583,8 +610,34 @@ SYSTEM_RAG = SYSTEM_BASE + (
 # start matching text that came from the retrieved passages, which is the exact
 # defect its own docstring records having been caught once already.
 
+# ALL THREE BUILDERS USE chatml_prompt_no_think, NOT chatml_prompt.
+#
+# DEFECT FOUND 2026-09-01, MEASURED, BEFORE COSTING ITEM 7 (D-0091). Until this
+# change, chatml_prompt_no_think() was defined at line 278, asserted by the
+# test suite, and CALLED BY NOTHING outside that suite. All three arms called
+# chatml_prompt(), so every production prompt ended:
+#
+#     '<|im_start|>assistant\n'                        <- no prefill
+#
+# while the diagnostic that actually WORKED on the user's machine ended:
+#
+#     '<|im_start|>assistant\n<think>\n\n</think>\n\n'  <- prefill
+#
+# So the cure for D-0085 was written, tested, and never connected to the code
+# path that needed it. Running item 7 in that state would have re-measured the
+# ORIGINAL defect at 52-case scale: this model's own template opens a <think>
+# block by default, spends the entire budget inside it, and emits no visible
+# answer -- MEASURED at 512, 2048 and 3072 tokens. It would also have left
+# D-0089a untested, because a model that produces no visible answer has no
+# opportunity to repeat the units the prompt now supplies.
+#
+# THIS IS R43 RECURRING IN A THIRD SUBSYSTEM. A test that exercises a function
+# nobody calls produces green that means nothing. The assertion added alongside
+# this change therefore checks the PRODUCTION BUILDERS' output, not the helper's
+# -- a test of the helper was exactly what failed to catch this.
+
 def build_plain_prompt(question):
-    return chatml_prompt(SYSTEM_BASE, "Question: %s" % question)
+    return chatml_prompt_no_think(SYSTEM_BASE, "Question: %s" % question)
 
 
 def build_tools_prompt(question, schemas):
@@ -594,8 +647,8 @@ def build_tools_prompt(question, schemas):
         req = ", ".join(fn.get("parameters", {}).get("required", []))
         lines.append("- %s(%s): %s" % (fn.get("name"), req,
                                        fn.get("description", "")))
-    return chatml_prompt(SYSTEM_TOOLS + "\n".join(lines),
-                         "Question: %s" % question)
+    return chatml_prompt_no_think(SYSTEM_TOOLS + "\n".join(lines),
+                                  "Question: %s" % question)
 
 
 def build_rag_prompt(question, passages):
@@ -647,7 +700,7 @@ def build_rag_prompt(question, passages):
                          ps.text))
         else:
             ev.append("[%d] (%s) %s" % (i, ps.provenance.citation(), ps.text))
-    return chatml_prompt(
+    return chatml_prompt_no_think(
         SYSTEM_RAG,
         "Evidence:\n%s\n\nQuestion: %s"
         % ("\n".join(ev) if ev else "(no evidence retrieved)", question))

@@ -201,7 +201,8 @@
       "status": "OPEN -- fix requires approval",
       "summary": "RAG-FA-001 answered the correct figure in Persian and was graded MODEL_FAILURE. MEASURED: _THOUSANDS_SEPARATORS contains U+066C ARABIC THOUSANDS SEPARATOR, which is what the CORPUS FIXTURE uses; the MODEL writes U+060C ARABIC COMMA, which is in NEITHER table. extract_magnitudes('383<U+066C>285 million') -> [383285000000.0]; with U+060C -> [383.0, 285000000.0]. Worse than losing the number: the scale word attached to the second fragment, MANUFACTURING 285,000,000 that was never written. src/rag/citations.extract_numbers shares the blind spot. test_phase4_harness.py already says 'U+060C is the comma the Persian arm actually emits' -- for mask_years. The knowledge existed in one function and never reached the numeric path."
     },
-    "D-0090"
+    "D-0090",
+    "D-0091"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -353,7 +354,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0090",
+  "decisions_logged": "D-0001..D-0091",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -405,9 +406,17 @@
       "severity": "MEDIUM",
       "title": "A cheap re-run is when an unfixed grader does the most damage",
       "detail": "Item 7 re-priced from ~10.4 h to ~22-32 min ESTIMATED makes the re-run routine. Run under the current grader it would reproduce D-0089a/b's false failures at 52-case scale and look like 52 independent model failures.",
-      "mitigation": "Both grader defects must be fixed and re-verified BEFORE item 7. Recorded as a blocking finding, not a nice-to-have."
+      "mitigation": "Both grader defects must be fixed and re-verified BEFORE item 7. Recorded as a blocking finding, not a nice-to-have.",
+      "status_2026_09_01": "BLOCKER CLEARED. Both grader defects fixed (D-0090) and the prefill wired (D-0091). Item 7 may now run. The risk TEXT stands as written: a cheap re-run is still when an unfixed component does the most damage, which is why the prefill was checked BEFORE spending the re-run."
     },
-    "R45"
+    "R45",
+    {
+      "id": "R46",
+      "severity": "HIGH",
+      "title": "A fix that is written and tested but wired to nothing looks identical to a fix that shipped",
+      "detail": "MEASURED 2026-09-01 (D-0091): chatml_prompt_no_think() -- the cure for D-0085's total silence -- was defined, asserted by the suite, and called by nothing outside that suite. All three arms of run_phase4.py still called chatml_prompt(). The suite was green because it tested the HELPER, and the helper was never wrong. Had item 7 run in that state it would have spent ~7 hours re-measuring the original defect and left D-0089a's units fix untested, because a model that emits no visible answer cannot repeat a unit the prompt supplies. Third instance of the R43 class (D-0088, D-0089, this).",
+      "mitigation": "A fix must be asserted at the PRODUCTION call site, not on the helper: the D-0091 block asserts on build_plain_prompt / build_tools_prompt / build_rag_prompt output, adds a property test that each equals the helper applied to its own content (so an inline re-implementation is also caught), keeps a negative control so the fix stays falsifiable, and is backed by 3 mutants that unwire one arm each. Separately, the dry run RECORDS the prompts the model wrapper actually sent, which is a runtime check and is different in kind from the suite's static one. Residual: the same class can recur in any subsystem where the helper and its caller are tested separately."
+    }
   ],
   "awaiting_approval_for": null,
   "phase_2": {
@@ -1207,7 +1216,22 @@
       "that no case re-opens a <think> block (MEASURED 0 of 3, i.e. 3 of 52)",
       "that 52 is still the right case count"
     ],
-    "direction_of_error": "any assumption being false moves the number UP"
+    "direction_of_error": "any assumption being false moves the number UP",
+    "revised_2026_09_01_after_prefill_wired": {
+      "label": "ESTIMATED from a MEASURED 3-point fit plus a MEASURED TTFT probe",
+      "arm_generation_calls": 52,
+      "arm_calls_basis": "21 bilingual_eval_v1 + 21 same cases in the tools arm + 10 rag_gold_v1 (VERIFIED by wc -l)",
+      "probe_overhead_seconds": 83,
+      "probe_overhead_basis": "MEASURED 49 s TTFT at ~2048 prompt tokens + the 128-token decode probe from the refit",
+      "lower_bound_minutes": 19.2,
+      "lower_bound_basis": "every reply as short as the shortest MEASURED prefilled answer (56 tok, 20.6 s)",
+      "central_minutes": 23.5,
+      "central_basis": "every reply at the MEASURED mean (73.7 tok, 25.6 s/call)",
+      "upper_bound_minutes": 83.2,
+      "upper_bound_basis": "every reply burns the full 512 budget (14.0 + 512/6.37 = 94.4 s/call)",
+      "correction": "the previously quoted ~22-32 min was not wrong but it was the OPTIMISTIC end with no ceiling attached. The number to plan around is the upper bound. Quoting only a central figure is how a '1 hour' run became 1.7 hours earlier in this project.",
+      "early_warning": "the harness prints 'answers LOST to truncation' unconditionally; if it is > 0 the budget is the first thing to raise, and that is visible in the first chunk."
+    }
   },
   "grader_fix": {
     "decision": "D-0090",
@@ -1257,5 +1281,112 @@
       "mutation_skips_caused_by_this_change": 0,
       "mutation_skips_pre_existing": 9
     }
+  },
+  "prefill_wiring": {
+    "decision": "D-0091",
+    "date": "2026-09-01",
+    "requested_by": "the user, choosing option «الف»: wire the prefill into run_phase4.py before running item 7",
+    "model_runs": 0,
+    "defect": {
+      "title": "the cure for D-0085 was written, tested, and called by nothing outside the test suite",
+      "measured_2026_09_01": {
+        "plain_prompt_ended": "<|im_start|>assistant\\n",
+        "tools_prompt_ended": "<|im_start|>assistant\\n",
+        "rag_prompt_ended": "<|im_start|>assistant\\n",
+        "diagnostic_prompt_ended": "<|im_start|>assistant\\n<think>\\n\\n</think>\\n\\n"
+      },
+      "helper_defined_at": "scripts/run_phase4.py:278 chatml_prompt_no_think",
+      "callers_outside_tests_before_fix": 0,
+      "cost_avoided_by_checking_first_hours": 7.11,
+      "risk_class": "R43 recurring in a third subsystem: a test that exercises a function nobody calls produces green that means nothing",
+      "self_criticism": "I priced item 7 without checking that the production path used the fix. The check cost minutes; not doing it would have cost ~7 hours of the user's machine time."
+    },
+    "fix": {
+      "builders_switched_to_chatml_prompt_no_think": [
+        "build_plain_prompt",
+        "build_tools_prompt",
+        "build_rag_prompt"
+      ],
+      "default_max_tokens_before": 2048,
+      "default_max_tokens_after": 512,
+      "budget_basis": "the only 3 prefilled generations that exist (MEASURED 2026-08-31, i5-12400): 56 tok/25.1 s, 108 tok/31.0 s, 57 tok/20.6 s; longest 108; 0 of 3 budget-bound; 512 leaves 4.7x headroom and sits AT the runner's own low-budget warning threshold",
+      "budget_not_claimed": [
+        "3 cases is not 52",
+        "the tools arm has never been measured with a prefill and must emit a <tool_call> JSON envelope, necessarily longer",
+        "the plain arm has never been measured with a prefill at all"
+      ],
+      "out_flag_already_defaults": "evals/results/phase4_run.json -- replies are persisted, so none can be lost to console truncation as 2 of 3 were on 2026-08-31"
+    },
+    "assertions": {
+      "new_block": "D-0091: the prefill is wired into the production builders",
+      "tests_the_production_builders_not_the_helper": true,
+      "why": "the pre-existing prefill assertions checked chatml_prompt_no_think directly, which was never wrong, so they could never fail",
+      "property_test_each_arm_equals_helper_of_own_content": true,
+      "negative_control_unprefilled_rendering_still_reachable": true,
+      "pre_existing_assertions_updated_not_deleted": 8,
+      "old_measurements_preserved_in_messages": true
+    },
+    "mutants": {
+      "added": 4,
+      "added_names": [
+        "the plain arm stops sending the pre-closed think block",
+        "the tools arm stops sending the pre-closed think block",
+        "the rag arm stops sending the pre-closed think block",
+        "the completion budget returns to the runaway-think 2048"
+      ],
+      "added_all_killed": true,
+      "silently_skipped_by_my_own_edit": 3,
+      "silently_skipped_cause": "3 budget mutants anchored on the literal 'DEFAULT_MAX_TOKENS = 2048', which no longer exists; a mutant that fails to apply is reported as KILLED",
+      "retargeted_to_512": 3,
+      "skips_after_retarget": 9,
+      "skips_pre_existing": 9,
+      "skips_caused_by_this_change": 0
+    },
+    "dry_run": {
+      "why": "the user must never be the first to execute a code path",
+      "how": "llama-cpp-python is absent in the sandbox and main() returns 2 on that ImportError before any arm runs, so a llama-cpp-shaped module was inserted into sys.modules and the REAL main() walked its real path",
+      "argv": "--model <stub>.gguf --out <tmp>/phase4_run.json --arms plain,tools,rag",
+      "exit_code": 0,
+      "generation_calls_total": 54,
+      "latency_probe_calls": 2,
+      "chatml_arm_prompts": 52,
+      "arm_prompts_ending_in_prefill": 52,
+      "max_tokens_values_sent": [
+        1,
+        128,
+        512
+      ],
+      "payload_model_max_tokens": 512,
+      "arms_present": [
+        "plain",
+        "rag",
+        "tools"
+      ],
+      "rows": {
+        "plain": 21,
+        "tools": 21,
+        "rag": 10
+      },
+      "rows_carry_output_and_raw_output": true,
+      "human_grading_status": "PENDING",
+      "checks_passed": "9/9",
+      "verdict": "PASS",
+      "what_it_proves": "the PATH runs and the prefill is on the wire AT RUNTIME, which is different in kind from the suite's static check of what the builders return",
+      "what_it_does_not_prove": "nothing about answer quality, speed or RAM; the replies are scripted and the threshold verdicts it printed are stub artefacts and are recorded nowhere"
+    },
+    "verification": {
+      "regression_assertions": 3380,
+      "regression_assertions_before": 3365,
+      "suites": 18,
+      "failed": 0,
+      "skipped": 0,
+      "harness_suite_assertions": 754,
+      "harness_suite_assertions_before": 739,
+      "mutation_phase4_killed": 224,
+      "mutation_phase4_survived": 0,
+      "mutation_phase4_skipped": 9,
+      "dry_run_of_exact_item7_argv": "PASS 9/9"
+    },
+    "what_this_does_not_settle": "nothing about answer quality. D-0081's FAIL still stands (D-0090 re-graded all 10 recorded rag rows, 0 flipped). The prefill fixed SILENCE; whether the model can answer these 52 cases is unmeasured until item 7 runs."
   }
 }

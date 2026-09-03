@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0090). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0091). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
 | `docs/phase-reports/` | Per-phase review reports. |
@@ -35,7 +35,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,365 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,380 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -254,7 +254,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,365 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,380 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -545,7 +545,8 @@ generation, not hours. See R35.
 > answered at a 512-token budget**, using 14 % of it, with 0 re-opened think
 > blocks. And “Nothing has been launched” no longer holds — the user launched
 > it. Row 7's price falls with it, from ~10.4 h to **~22–32 min
-> [ESTIMATED]**, so “evidence against spending those hours” is also void:
+> [ESTIMATED]** (re-priced again 2026-09-01, D-0091: ~19 / ~24 / **~83 min**
+> for the short / mean / full-budget cases), so “evidence against spending those hours” is also void:
 > the hours are no longer the cost. Q8 option (b) is back in contention. What
 > the run did NOT settle is whether the answers are *correct* — and grading
 > them exposed two defects in the grader itself. See D-0089.
@@ -910,7 +911,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,365
+unique and non-no-op *before* the battery ran. Full regression: **3,380
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -948,7 +949,13 @@ unterminated block, so `n_tokens` meant *the budget*. Prefilled replies finish,
 so `n_tokens` becomes the answer's length. MEASURED: the old model over-predicts
 this run by **5.81×**. Re-fitted on the three points: `14.0 + n_tokens/6.37`
 (residuals +2.3 / 0.0 / −2.4 s). For 52 cases that is **~22–32 minutes
-[ESTIMATED]** against the recorded **10.4 h** — a ~28× reduction. The old
+[ESTIMATED]** against the recorded **10.4 h** — a ~28× reduction.
+**CORRECTED 2026-09-01 (D-0091): that range is the OPTIMISTIC end.** Rebuilt
+with the MEASURED 49 s TTFT probe included, the bounds are ~19 min (every
+reply as short as the shortest measured) / ~24 min (at the measured mean) /
+**~83 min if every reply burns the full 512 budget**. The upper bound is the
+number to plan around; quoting only a central figure is how a “1 hour” run
+became 1.7 hours earlier in this project. The old
 figures reproduce exactly (10.42 / 7.11 h), so the comparison is arithmetic.
 Three assumptions are *not* measured and are listed in `item7_cost`; any of them
 being false moves the number **up**.
@@ -1012,6 +1019,10 @@ most damage — 52 false failures that would each look like the model's fault.
 **One operational lesson:** the diagnostic prints `text.strip()[:200]` and the
 run did not pass `--out`, so two of the three full replies are lost beyond 200
 characters and their grades are PROVISIONAL. Use `--out` next time.
+**CLOSED 2026-09-01 (D-0091):** `run_phase4.py`'s `--out` already defaults to
+`evals/results/phase4_run.json`, and the dry run confirmed every row is written
+with both `output` and `metrics.raw_output`, so item 7 cannot lose a reply this
+way. The 200-character cut is specific to `diagnose_forced_answer.py`.
 
 
 ### D-0090: both grader defects fixed — and the blind spot was in five layers, not two
@@ -1092,8 +1103,131 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,365
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,380
 assertions, 18 suites, 0 failed, 0 skipped.**
+
+### D-0091: the cure was written, tested, and connected to nothing
+
+The user approved running item 7. Before handing over the command I checked one
+thing: does the script item 7 actually runs use the forced-closed-`<think>`
+prefill that D-0089's diagnostic proved was the cure? **It did not.** MEASURED
+2026-09-01, by rendering all three arms:
+
+```
+plain prompt ends: '<|im_start|>assistant\n'                        <- no prefill
+rag   prompt ends: '<|im_start|>assistant\n'                        <- no prefill
+diagnostic used  : '<|im_start|>assistant\n<think>\n\n</think>\n\n' <- prefill
+```
+
+`chatml_prompt_no_think()` was defined at `run_phase4.py:278`, was asserted by
+the test suite, and was **called by nothing outside that suite.** The cure lived
+only in `scripts/diagnose_forced_answer.py`.
+
+**So I refused to hand over the command and said why.** Run in that state, item
+7 would have spent roughly **7 hours** re-measuring the original defect at
+52-case scale — the budget was still 2048 precisely because generations were
+burning it inside an unterminated `<think>` block — and would have left
+D-0089a's units fix untested, because a model that emits no visible answer has
+no opportunity to repeat the unit the prompt now supplies.
+
+This is **R43 recurring in a third subsystem** (R46): a test that exercises a
+function nobody calls produces green that means nothing. The assertions were not
+wrong; they were pointed at the wrong object. I should have caught it before
+pricing item 7.
+
+**The fix.** Three builders, one line each — `build_plain_prompt`,
+`build_tools_prompt`, `build_rag_prompt` — now call `chatml_prompt_no_think`.
+
+**The budget was sized for a defect that no longer occurs.**
+`DEFAULT_MAX_TOKENS` 2048 → **512**. The 2048 and 768 figures came from runs
+where the generation burned its ENTIRE budget inside an unterminated `<think>`
+block: the budget was funding runaway reasoning, not answers. MEASURED — the
+only three prefilled generations that exist, on the user's i5-12400, 2026-08-31
+— 56 tok/25.1 s, 108 tok/31.0 s, 57 tok/20.6 s. Longest 108; **0 of 3 were
+budget-bound**; 512 leaves **4.7×** headroom and sits exactly AT the runner's own
+low-budget warning threshold (`if a.max_tokens < 512`), not below it.
+
+**NOT CLAIMED:** 3 cases is not 52, the tools arm must emit a `<tool_call>` JSON
+envelope (necessarily longer than a one-sentence answer) and has never been
+measured with a prefill, and the plain arm has never been measured with one at
+all. The harness prints `answers LOST to truncation` unconditionally; if that is
+above 0, the budget is the first thing to raise.
+
+**The assertions now test the production path, not the helper.** The pre-existing
+prefill assertions checked `chatml_prompt_no_think()` directly — a function that
+was never wrong, so they could never fail. The new block asserts on what the
+three builders return, plus a property test that each equals
+`chatml_prompt_no_think` of its own content (so an inline re-implementation is
+caught too), an assertion that the assistant header is followed by the prefill
+and nothing else, and a **negative control**: the un-prefilled rendering must
+still be reachable and still be different, so the fix stays falsifiable and the
+recorded pre-prefill runs stay comparable to something.
+
+**Eight pre-existing assertions were updated, not silenced.** Each encoded a fact
+that was true for a no-prefill harness — that the budget had to be large, that
+the prompt had to end at the assistant header. Each was re-pointed at the new
+fact **with the old measurement kept in the message**, because that measurement
+is why the old value was chosen and is the evidence that would justify
+reverting. The diagnostic's own default stays high (3072) and is now asserted
+separately from the runner's: the diagnostic probes reasoning, the runner
+collects answers.
+
+**Three mutants were silently skipped by my own edit.** After adding four new
+prefill mutants the battery reported 221 killed / 0 survived / **12** skipped,
+against a standing figure of 9. Anchor-count diffing proved **3 of the extra
+skips were mine** — they anchored on the literal `DEFAULT_MAX_TOKENS = 2048`,
+which no longer exists. A mutant that silently fails to apply is worse than a
+deleted one, because the killed count still looks healthy. Retargeted to `512`;
+the battery returned to **224 killed, 0 survived, 9 skipped** — the 9 being the
+inherited ones. All four new mutants (unwire each arm, revert the budget) are
+**killed**.
+
+**The exact item-7 path was dry-run first.** `llama-cpp-python` is absent in the
+sandbox and `main()` returns exit code 2 on that ImportError before any arm runs,
+so a dry run that merely called `main()` would have proved only that the import
+fails. A llama-cpp-shaped module was inserted into `sys.modules` instead, letting
+the REAL `main()` walk its real path. MEASURED:
+
+```
+argv: --model <stub>.gguf --out <tmp>/phase4_run.json --arms plain,tools,rag
+exit code: 0
+generation calls total          : 54
+latency-probe calls (raw text)  : 2   (TTFT at max_tokens=1, decode at 128)
+ChatML arm prompts              : 52  (21 plain + 21 tools + 10 rag, VERIFIED)
+...of those, ending in prefill  : 52
+max_tokens values sent          : [1, 128, 512]
+payload model.max_tokens        : 512
+arms present                    : ['plain', 'rag', 'tools']  rows 21/10/21
+every row carries output + metrics.raw_output : True
+human_grading.status            : 'PENDING'
+DRY RUN VERDICT: PASS (9/9 checks)
+```
+
+The prompt-recording check is the one that matters, and it is deliberately
+different in kind from the suite's: the suite checks what the BUILDERS return,
+which is static; this records what the model wrapper **actually sent at
+runtime**. D-0091 happened because a static check passed while nothing on the
+wire carried the prefill. The dry run proves the PATH runs and measures
+**nothing** about the real model — the replies are scripted, so the FAIL verdicts
+it printed are stub artefacts and are recorded nowhere.
+
+**Item 7 is re-priced, and the old range was the optimistic end.** «~22–32 min»
+was ESTIMATED before the prefill existed. Rebuilt from the three measured
+prefilled generations plus the MEASURED 49 s TTFT probe:
+
+| scenario | ESTIMATED |
+|---|---|
+| every reply as short as the shortest measured (56 tok) | ~19 min |
+| every reply at the measured mean (73.7 tok, 25.6 s/call) | ~24 min |
+| **every reply burns the full 512 budget** | **~83 min** |
+
+So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
+attached, and **the number to plan around is the upper bound.** Quoting only a
+central figure is how a "1 hour" run became 1.7 hours earlier in this project.
+
+Full regression: **3,380 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+**224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
+`None`, and **0 model runs** were launched.
 
 ### R10 is graded — the reading below is now qualified by D-0082 above
 
@@ -1402,7 +1536,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,365 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,380 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -1658,6 +1792,15 @@ python3 scripts/measure_tokenizer_efficiency.py --dir /tmp/tok
   > So Q8 is still not decided, but the blocker has moved: it is no longer
   > "the grading evidence is wrong", it is "there is no post-fix run yet".
   > Item 7 (~22–32 min ESTIMATED) is now unblocked and awaiting approval.
+  >
+  > **UPDATED 2026-09-01 (D-0091).** “Unblocked” was premature: the harness
+  > was still not using the prefill — all three arms called
+  > `chatml_prompt()`, and `chatml_prompt_no_think()` was called by nothing
+  > outside the test suite. That is now fixed, the budget is 512, and the
+  > exact item-7 argv has been dry-run end to end (PASS, 9/9). The price is
+  > **~19 / ~24 / ~83 min [ESTIMATED]** for the short / mean / full-budget
+  > cases. Item 7 is genuinely runnable now and the user has approved it;
+  > nothing has been launched.
 - **Q9** — **RESOLVED** (D-0026): a deterministic bilingual family router,
   recall-first. MEASURED (re-measured 2026-08-31, D-0088) — mean subset **3,114
   tokens (19.0% of 16K)** over the 21 eval rows versus **9,122** for all 84
@@ -1757,7 +1900,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,365 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,380 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1806,7 +1949,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,365-assertion base is trustworthy.
+3,380-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 
