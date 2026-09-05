@@ -4259,3 +4259,352 @@ re-graded all ten recorded rag rows and **0 flipped**). The prefill fixed
 model can actually answer these 52 cases is unmeasured until item 7 runs. Item 7
 remains gated on the user's explicit go-ahead, which they have given, and the
 command is now safe to hand over because the path has been walked.
+
+
+## D-0092 — the citation grader was grading markers and Persian years as money
+
+**Date:** 2026-09-05 · **Status:** FIXED, and the fix is deliberately partial
+**Trigger:** the user's real 52-case item-7 run (2026-09-03), uploaded 2026-09-05
+
+### What the numbers said, and what was actually true
+
+The merged run reported, MEASURED:
+
+    citation_correctness_pct    25.0
+    unsupported_claim_rate_pct  75.0
+
+Read at face value, that is a model that cannot ground a figure. It is not what
+happened. **8 of the 12 graded claims were checked against a number that is not
+a financial magnitude at all:**
+
+| case | "claimed" value | what it really was |
+|---|---|---|
+| RAG-EN-001 | `2.0` (×3 passages) | the citation marker `[2]` |
+| RAG-EN-005 | `1.0` (×3) | the marker `[1]` |
+| RAG-ABST-001 | `2.0` (×3), `3.0` (×3) | markers `[2]`, `[3]` |
+| RAG-ABST-003 | `1.0`, `1402.0` | marker `[1]`, the Jalali year ۱۴۰۲ |
+| RAG-FA-001 | `2023.0` | the Gregorian year ۲۰۲۳ |
+| RAG-FA-002 | `2023.0` | the year ۲۰۲۳ |
+
+A representative detail, recorded verbatim in the evidence file:
+
+    claimed 2 does not appear in the evidence; nearest is 1.69148e+11
+    (ratio 1.1824e-11 -- a power-of-ten ratio means a scale error)
+
+The grader compared the bracket `[2]` against a filing row of 169 billion and
+called it a scale error. Meanwhile **the answers were correct**: RAG-EN-001 said
+`$383,285 million`, RAG-FA-001 said `۳۸۳,۲۸۵ میلیون`, both right.
+
+This matters beyond one metric. `verify_claim` **returns on the first number it
+cannot locate**, and in a cited financial sentence the first number is almost
+always a marker or a year — so one artefact decided the entire case.
+
+### Two independent causes. Neither alone was sufficient.
+
+1. **`src/rag/citations.py` performed no masking whatsoever.**
+   `grep -n "mask_years|_YEAR_RE|<YEAR>" src/rag/citations.py` → **0 hits**,
+   while `scripts/phase4_lib.mask_years` had existed for weeks and was already
+   used by `split_claims`.
+
+2. **The year pattern matched ASCII digits only.** MEASURED probe of the old
+   `mask_years`:
+
+   ```
+   'total net sales in fiscal 2023 were 383,285 million'
+       -> '... fiscal <YEAR> were ...'                    works
+   'درآمد خالص کل اپل در سال مالی ۲۰۲۳ برابر با ۳۸۳,۲۸۵ میلیون'
+       -> UNCHANGED                                       Persian year survives
+   'در سال مالی ۱۴۰۲ برابر با ۳۸۳,۲۸۵ میلیون ریال'
+       -> UNCHANGED
+   'This figure is found in Evidence [2], which states ... | 383,285'
+       -> UNCHANGED                                       marker survives
+   ```
+
+**This is R43 recurring for the FOURTH time**: a regex written against text the
+fixture author typed, never against the text the model actually emits.
+`extract_numbers` folds digits before matching; `mask_years` ran on unfolded
+text. The two layers disagreed about what a digit is, and the disagreement was
+silent.
+
+### The fix, and where it had to live
+
+`mask_non_quantities` now lives in **`src/rag/normalize.py`** and masks both
+citation markers and year-like integers in **any** of the three digit scripts.
+`phase4_lib.mask_years` delegates to it; `verify_claim` calls it on the claim.
+
+**Why `normalize.py` and not `phase4_lib.py`:** `phase4_lib` imports *from*
+`rag.ingest`, so `citations.py` cannot import `phase4_lib` without a cycle.
+Copying the regex was the alternative and is exactly the mistake
+`normalize.py`'s own docstring was written to prevent — two copies of a
+normalization rule drift, and the drift is invisible. It landed in the one
+module both sides already depend on.
+
+**Why the claim side only.** `extract_numbers` also serves the **evidence**
+side via `_evidence_magnitudes`. Evidence legitimately contains figures shaped
+like years — a CPI index, a share count, a rial price — and masking those would
+delete a magnitude the model is entitled to cite, turning a SUPPORTED claim
+into a CONTRADICTED one. So the masking is applied by `verify_claim` to its
+*claim* argument, and `extract_numbers` stays unmasked.
+
+### A mistake I made, and how it was caught
+
+My first year pattern wrote the **fixed** digits as ASCII literals
+(`"20[d][d]"`) and only the varying tail as a multi-script class. `۲۰۲۳` still
+went unmasked, because its `2` and `0` are U+06F2 and U+06F0. **The probe
+reported the Persian cases coming back UNCHANGED — the fix fixed nothing.**
+Every digit position had to be script-agnostic, not just the ones that vary.
+`_dig()` exists for that, and a mutant now pins it.
+
+### The risk of over-masking was MEASURED, not assumed
+
+Masking can destroy a real measurement as easily as it can repair one.
+
+- **Bracketed magnitudes.** Real filings write `[1,234]` as a table cell and
+  `[500]` as an accounting negative. The marker pattern is bounded to **1–2
+  digits**, so both are refused. MEASURED: across all 39 rows of
+  `rag_corpus_v1` + `rag_gold_v1` + `bilingual_eval_v1`, bracketed runs of 1–2
+  digits: **0**. Across the user's 52 real outputs: 6 contain one, and every one
+  is a citation marker.
+- **Year-shaped values.** I first assumed the window was 1000–2199. MEASURED it
+  is **1200–1499 and 1800–2199**: 1000, 1100 and 1500–1799 are *not* masked.
+  That matters because `EN-NUM-001` and `FA-NUM-001` both have
+  `expected_value=1000.0` — outside the window, and additionally safe because
+  `value_matches` never calls this function at all (`value_matches` call sites
+  in `run_phase4.py`: **0**).
+
+### MEASURED effect, model NOT re-run
+
+Re-grading the ten recorded rag answers with the new grader, using the runner's
+own `build_index` so the evidence is what the model actually saw:
+
+| case | before | after |
+|---|---|---|
+| RAG-FA-001 | CONTRADICTED | **SUPPORTED** |
+| RAG-FA-002 | CONTRADICTED | **SUPPORTED** |
+| RAG-ABST-003 | CONTRADICTED | **SUPPORTED** |
+| others | unchanged | unchanged |
+
+`citation_correctness` over checked claims: **0.0 → 42.86**. Implausibly small
+claimed values: **8 → 6**, and the 6 remaining are a different defect (below).
+
+### WHAT THIS DOES NOT FIX, DELIBERATELY
+
+Three claims remain CONTRADICTED, and **none is a marker or a year**. All three
+are the model *quoting an evidence row verbatim*:
+
+    'This figure is found in Evidence [2], which states:
+     "[figures in million] Total net sales | 383,285".'
+
+The scale word sits **before** the number, inside a bracketed section header,
+and `_CLAIM_SCALE_RE` only inspects the tail *after* a number — so the quoted
+row reads as a bare `383,285` against a million-scaled passage, i.e. the 10^6
+error. Six residual small values also remain, all **date components**:
+`June 30,` → 30, `July 27,` → 27, `(2023-11-03)` → −11 and −3.
+
+**Not patched.** Widening the grader to accept a *leading* scale word would also
+make it accept the real 10^6 error — the one thing this module exists to catch.
+Over-fitting a grader to its own corpus is how a FAIL becomes a PASS, and this
+project's central finding is a FAIL. Recorded as **R47** for the user's
+decision, not repaired here.
+
+### Assertions and mutants
+
+27 new assertions (`test_phase4_harness` 754 → 781), including the
+false-positive side at equal strength, and a **negative control**: a fabricated
+`999,999 million` must still be CONTRADICTED, and the bare-figure 10^6 error
+must still be caught. If either ever passes, the fix has become a whitewash and
+every `citation_correctness` number after it is worthless.
+
+`src/rag/normalize.py` became a mutation target (`NORM`), because the rule that
+decides whether a Persian year is graded as an eleven-figure revenue now lives
+outside both files the battery previously covered. Five mutants anchored on the
+deleted `_YEAR_RE.sub` line were **retargeted** rather than left to skip: a
+skipped mutant still leaves the killed count looking healthy, which is worse
+than a deleted one — the same trap this battery hit on 2026-09-01.
+
+### The anti-vacuity guard earned its place immediately
+
+The four `verify_claim` assertions sit inside `if _ps is not None`. My fixture
+passed `trust_level="A"`; `Provenance` enforces a closed vocabulary and refused
+it. Without the guard assertion, those four would have silently vanished while
+the suite stayed green — the same failure shape as a mutant whose anchor no
+longer exists. The guard failed, loudly, and named the reason.
+
+
+## D-0093 — the API path existed, and sent the prompt in a form no provider could use
+
+**Date:** 2026-09-05 · **Status:** FIXED · **Trigger:** request 55(b),
+«در تست های بعدی را با قابلیت استفاده از api قرار بده»
+
+### What was already there, MEASURED before building anything
+
+The user asked for API capability in subsequent tests. Rather than build, I
+measured. Most of it existed:
+
+- **14 providers** registered, three with a documented free tier: **groq,
+  google (Gemini), cerebras**.
+- Flags `--provider`, `--model-id`, `--base-url`, `--allow-paid`, `--timeout`.
+- `RemoteRunner`, wearing `ModelRunner`'s interface and — importantly — sharing
+  its **return contract** and the same `L.strip_thinking`, so a provider swap
+  cannot change how anything is graded.
+- Payload fields `MEASURED_REMOTE_API`, `http_attempts`, `remote_tokens_in/out`,
+  `billable_run`, `local_endpoint`, `quota_recorded`.
+- The spend gate works, which matters under the standing "spend nothing"
+  constraint. MEASURED:
+
+      groq / google / cerebras                    -> allowed, billable=False
+      openai / anthropic / openrouter / custom     -> BLOCKED without --allow-paid
+
+- `--provider local` is the default, permanently, per the user's own instruction.
+
+So request 55(b) was roughly 70 % already implemented. Reporting that honestly
+was worth more than adding a feature on top of an unexamined base.
+
+### The defect that measuring found
+
+`RemoteRunner` passed the whole rendered ChatML string to `clients.chat`, which
+sent it as **one user message**. MEASURED payload:
+
+    "messages": [{"role": "user",
+                  "content": "<|im_start|>system\nYou are a bilingual..."}]
+
+A remote provider applies its **own** chat template around that. Consequences,
+none of which fail loudly:
+
+1. The system instruction was not a system instruction — just body text.
+2. The pre-closed `<think>` prefill — the D-0091 change that took silence from
+   **20 of 52 answers to 0 of 52** — arrived as literal text and **did nothing**.
+3. `seed` was never sent, so a remote arm could not be reproducible the way the
+   local run is (`DEFAULT_SEED=20260831`).
+4. `stop` was never sent.
+
+A remote run in that state produces a full set of plausible answers and a
+`MEASURED_REMOTE_API` label. It would have looked like a valid comparison
+against the local numbers and been nothing of the kind.
+
+### The fix, shaped by the user's constraint
+
+The standing instruction on this subsystem is «مدل محلی حتماً باید باقی بماند و
+فقط api به آن اضافه گردد» — the local model must remain; the API is only added.
+
+So the three builders still return the **byte-identical** string the local path
+has always consumed, as a `str` **subclass** (`Prompt`) that merely carries its
+parts alongside. `Prompt` *is* the string: equal to it, hashing the same,
+accepted anywhere a `str` is. The local path, `ModelRunner`, llama-cpp and the
+recorded evidence are untouched. `Prompt.turns()` yields provider-neutral turns,
+with the prefill as a **trailing assistant turn** — which on the OpenAI and
+Anthropic dialects is a genuine prefill the model continues, i.e. the same
+mechanism that fixed silence locally rather than a lookalike.
+
+Per-dialect translation, each verified against a stubbed opener:
+
+| dialect | system | prefill | seed | stop |
+|---|---|---|---|---|
+| openai | `system` message | trailing `assistant` | `seed` | `stop` |
+| anthropic | **top-level** `system` | trailing `assistant` | **dropped** | `stop_sequences` |
+| google | `systemInstruction` | role mapped to **`model`** | `generationConfig.seed` | `stopSequences` |
+
+Anthropic has no seed parameter, so the seed is **dropped and recorded as
+dropped** (`seed_supported_by_wire: false`). Sending it would be rejected;
+pretending it applied would be worse. Google spells the assistant role
+`model` and rejects an unrecognised role outright, so a prefill sent as
+`assistant` would fail the whole run rather than degrade quietly.
+
+New payload fields: `structured_calls`, `seed_sent`, `stop_sent`,
+`seed_supported_by_wire`. Per row: `structured_turns`, `prefill_sent`.
+**A remote run whose `structured_calls` is 0, or less than its case count, must
+not be compared against the local numbers.** That is the whole point of
+recording it.
+
+### THE MUTATION BATTERY CAUGHT D-0091 REPEATING INSIDE THE FIX FOR D-0091
+
+Five mutants **survived** the first version of my assertions:
+
+    the remote path stops sending structured turns
+    the remote path stops sending the local seed
+    the remote path stops sending the local stop tokens
+    the remote seed stops matching the local run's seed
+    the structured-call counter stops counting, hiding a flat run
+
+Every one mutates `RemoteRunner.generate`. My assertions drove `clients.chat`
+**directly**, passing `turns`/`seed`/`stop` by hand — proving the three dialects
+build correct payloads, and proving **nothing** about whether the runner ever
+passes those arguments. `grep RemoteRunner tests/` returned two hits, **both
+comments**.
+
+That is exactly D-0091's shape: there, the prefill helper was asserted while
+the production builders called something else; here, the transport was asserted
+while the production call site was untested. **Twice now, the thing under test
+has been the layer next to the one that was broken.** Ten assertions were added
+against `RemoteRunner.generate` itself, using a stub installed as **both** a
+`sys.modules` entry **and** an attribute on the `llm` package — because
+`from llm import clients` resolves the package attribute, and a probe that
+patched only `sys.modules` reached the real network and returned HTTP 403,
+proving the stub inert.
+
+### One mutant was DELETED rather than killed
+
+`markers are masked AFTER years` survived. I probed the claim instead of
+defending it: on `[2023]`, `[20]`, `in 2023 see [2]`,
+`Evidence [2], states 383,285` and `مطابق [۲] در سال ۱۴۰۲`, both orders produce
+**identical** output — the bracket guards stop the patterns overlapping. The
+comment in `normalize.py` claiming the order was critical **was wrong** and has
+been corrected. Writing an assertion to pin an ordering that does not matter
+would have been a test authored to flatter the battery.
+
+### Three more mutants had gone silently skipped
+
+The skip count moved 9 → 12. The three per-arm prefill mutants were anchored on
+each arm's own `chatml_prompt_no_think(...)` call; all three arms now route
+through `_prompt()`, so those literals no longer exist. Retargeted onto
+`_prompt` plus the per-arm dispatch, so unwiring **either** is still caught.
+Final battery: **251 seeded, 242 killed, 0 survived, 9 skipped** (the 9 are
+pre-existing), `source restored and oracle green: True`, md5s verified.
+
+### An assertion of mine that tested nothing
+
+I had written:
+
+    RP.main.__doc__ is None or "--provider local" not in ""
+
+`x not in ""` is true for every non-empty `x`, so the condition could never be
+false. It read like a check and tested nothing — the failure mode this suite
+exists to prevent. Replaced with a real one: `clients.chat` must **refuse** the
+local provider, so the remote transport is unreachable unless a remote provider
+is explicitly chosen.
+
+### A regression scare that was NOT the code
+
+The first full run after these changes reported `FAILURES PRESENT`, with
+`test_selector.py` timing out at 300 s and the total *dropping* 3380 → 3343.
+Diagnosis before conclusion: `grep -cE "normalize|citations|clients|phase4_lib|
+run_phase4" tests/test_selector.py` → **0**. Run alone, it finished in **under
+one second**: `104 passed, 0 failed`. The timeout was CPU contention with the
+mutation battery I had left running, not a defect. A timed-out suite is still
+correctly treated as a FAILURE by `run_all.sh`, because it proves nothing.
+
+### R40 recurred, exactly as recorded
+
+A sandbox reset wiped `/tmp`, taking the Qwen tokenizer files and the live XBRL
+payload with it. The next run went green with `SKIPPED: 5` — and the suite's own
+SKIP lines named what had silently stopped running. All four files were
+re-fetched per the README prerequisites. Final state: **3450 assertions,
+SKIPPED: 0, TIMED OUT: 0, ALL GREEN**. A green run with skips is not a green
+run; this is the third time that has mattered.
+
+### WHAT THIS DOES NOT SETTLE
+
+1. **No remote run has been made.** Every assertion is against the transport
+   with a stubbed opener. Nothing has touched a network, and no run starts
+   without explicit approval.
+2. **A remote model is not the local model.** The label stays
+   `MEASURED_REMOTE_API` and `model_identity.sha256` is `None`, because a
+   remote model id is not a pinned revision — the provider may change what it
+   serves between two runs bearing the same id.
+3. **An API run cannot repair the hardware FAILs.** 4.28–4.47 tok/s against a
+   minimum of 8, and 48–50 s TTFT against a maximum of 3.0, are facts about the
+   user's i5-12400. A remote arm answers a *different* question: what this
+   class of model would say if hardware were not the bottleneck.
+4. **No free-tier key has been validated.** `get_api_key` refused my
+   16-character dummy as malformed, which is correct behaviour; whether the
+   user's real key works can only be known by using it.

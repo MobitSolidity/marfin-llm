@@ -4898,6 +4898,622 @@ check_true("the un-prefilled rendering is still available for comparison",
            "(C) if both renderings became identical, nothing would be under "
            "test and the recorded runs could not be compared against")
 
+
+# ===========================================================================
+section("D-0092: markers and Persian-digit years are not magnitudes")
+# ===========================================================================
+#
+# THE DEFECT, MEASURED 2026-09-05 on the user's real 52-case run.
+#
+# citation_correctness_pct read 25.0 and unsupported_claim_rate_pct read 75.0.
+# Both were ARTEFACTS. 8 of the 12 graded claims were checked against a number
+# that is not a financial magnitude at all:
+#
+#   RAG-EN-001    "claimed 2"      -> the citation marker [2]      (x3 passages)
+#   RAG-EN-005    "claimed 1"      -> the citation marker [1]      (x3)
+#   RAG-ABST-001  "claimed 2 / 3"  -> the markers [2] and [3]      (x3 each)
+#   RAG-ABST-003  "claimed 1"      -> [1];  "claimed 1402" -> ۱۴۰۲
+#   RAG-FA-001    "claimed 2023"   -> the Persian year ۲۰۲۳
+#   RAG-FA-002    "claimed 2023"   -> the Persian year ۲۰۲۳
+#
+# with details reading "claimed 2 does not appear in the evidence; nearest is
+# 1.69148e+11 (ratio 1.1824e-11 -- a power-of-ten ratio means a scale error)",
+# against answers that were CORRECT: RAG-EN-001 said $383,285 million and
+# RAG-FA-001 said ۳۸۳,۲۸۵ میلیون.
+#
+# TWO INDEPENDENT CAUSES, and neither alone was sufficient:
+#   1. src/rag/citations.py did no masking at all. `grep mask_years` returned
+#      nothing, while phase4_lib had had mask_years for weeks.
+#   2. the year pattern matched ASCII digits only, so a Persian-digit year
+#      survived masking even where masking DID run.
+#
+# MEASURED EFFECT OF THE FIX on those same recorded answers, model NOT re-run:
+#   RAG-FA-001    CONTRADICTED -> SUPPORTED
+#   RAG-FA-002    CONTRADICTED -> SUPPORTED
+#   RAG-ABST-003  CONTRADICTED -> SUPPORTED
+#   citation_correctness over checked claims: 0.0 -> 42.86
+#
+# This block asserts the PRODUCTION path, not a helper in isolation -- the
+# lesson of D-0091, where the cure was green in the suite and connected to
+# nothing on the wire.
+
+from rag.normalize import mask_non_quantities as _mnq  # noqa: E402
+from rag.citations import extract_numbers as _cit_nums  # noqa: E402
+from rag.citations import verify_claim as _verify  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# 1. The exact strings MEASURED failing. These are the regression's spine.
+# ---------------------------------------------------------------------------
+_FA_2023 = ("\u062f\u0631\u0622\u0645\u062f \u062e\u0627\u0644\u0635 "
+            "\u06a9\u0644 \u0627\u067e\u0644 \u062f\u0631 \u0633\u0627\u0644 "
+            "\u0645\u0627\u0644\u06cc \u06f2\u06f0\u06f2\u06f3 "
+            "\u0628\u0631\u0627\u0628\u0631 \u0628\u0627 "
+            "\u06f3\u06f8\u06f3,\u06f2\u06f8\u06f5 "
+            "\u0645\u06cc\u0644\u06cc\u0648\u0646")
+_FA_1402 = ("\u062f\u0631 \u0633\u0627\u0644 \u0645\u0627\u0644\u06cc "
+            "\u06f1\u06f4\u06f0\u06f2 \u0628\u0631\u0627\u0628\u0631 "
+            "\u0628\u0627 \u06f3\u06f8\u06f3,\u06f2\u06f8\u06f5 "
+            "\u0645\u06cc\u0644\u06cc\u0648\u0646 "
+            "\u0631\u06cc\u0627\u0644")
+
+check_true("a PERSIAN-digit Gregorian year is masked (was NOT, RAG-FA-001)",
+           "<YEAR>" in _mnq(_FA_2023),
+           "(A) MEASURED unchanged by the old mask_years, so 2023 was graded "
+           "as a magnitude against a 1.69e+11 filing row")
+check_true("a PERSIAN-digit Jalali year is masked (was NOT, RAG-ABST-003)",
+           "<YEAR>" in _mnq(_FA_1402), "(A)")
+check_true("...and the Persian FIGURE beside it survives masking",
+           "\u06f3\u06f8\u06f3" in _mnq(_FA_2023),
+           "(A) the point of masking is to remove the date, NOT the amount; "
+           "if the amount went too, the claim would become unverifiable and "
+           "be scored UNSUPPORTED -- a different wrong answer")
+check_true("...for the Jalali sentence too",
+           "\u06f3\u06f8\u06f3" in _mnq(_FA_1402), "(A)")
+
+_EN_MARKER = ('This figure is found in Evidence [2], which states: '
+              '"[figures in million] Total net sales | 383,285".')
+check_true("an ASCII citation marker is masked (was graded as the number 2)",
+           "<CIT>" in _mnq(_EN_MARKER),
+           "(A) MEASURED on RAG-EN-001: 'claimed 2 does not appear in the "
+           "evidence; nearest is 1.69148e+11'")
+check_true("...and the 383,285 in the same sentence survives",
+           "383,285" in _mnq(_EN_MARKER), "(A)")
+check_true("a PERSIAN-digit citation marker is masked too",
+           "<CIT>" in _mnq("\u0645\u0637\u0627\u0628\u0642 [\u06f2] "
+                           "\u062f\u0631\u0622\u0645\u062f"),
+           "(A) the model writes Persian digits inside brackets in Persian "
+           "answers; an ASCII-only marker pattern would repeat the same hole "
+           "one layer down")
+
+# ---------------------------------------------------------------------------
+# 2. THE FALSE-POSITIVE SIDE. This is the half that can silently destroy a
+#    real measurement, and it is asserted at the same strength.
+# ---------------------------------------------------------------------------
+check_true("a bracketed THOUSANDS figure is NOT eaten by the marker mask",
+           "1,234" in _mnq("the cell reads [1,234] units"),
+           "(B) a filing table cell and an accounting negative are both "
+           "written in brackets. Masking those would hide a number the model "
+           "must be held to -- the same defect in the opposite direction")
+check_true("a bracketed 3-digit figure is NOT eaten either",
+           "[500]" in _mnq("the adjustment was [500]"),
+           "(B) the marker pattern is bounded to 1-2 digits on purpose")
+check_true("a 3-digit bracketed marker-lookalike is left alone",
+           "[123]" in _mnq("see [123]"), "(B)")
+check("1000 is NOT a year, so expected_value=1000.0 is safe",
+      _mnq("the answer is 1000").count("<YEAR>"), 0, 0,
+      "(B) MEASURED: EN-NUM-001 and FA-NUM-001 both have "
+      "expected_value=1000.0. They are additionally safe because "
+      "value_matches never calls this function -- but relying on that alone "
+      "would make the masking window an accident rather than a decision")
+check("1500-1799 is NOT masked either",
+      _mnq("the figure was 1700 units").count("<YEAR>"), 0, 0, "(B)")
+check_true("a PERSIAN decimal that merely contains a year is not masked",
+           "<YEAR>" not in _mnq("\u0642\u06cc\u0645\u062a \u06f1.\u06f2"
+                                "\u06f0\u06f2\u06f3 "
+                                "\u0631\u06cc\u0627\u0644"),
+           "(B) the Persian decimal separator has to be in the lookaround set "
+           "for the same reason '.' is -- '1.2023' is a price, not a year")
+check_true("a Persian grouped figure is not mistaken for a year",
+           "<YEAR>" not in _mnq("\u0639\u062f\u062f \u06f3\u06f8\u06f3"
+                                "\u06f2\u06f8\u06f5 "
+                                "\u0628\u0648\u062f"),
+           "(B) 383285 is six digits; the leading guard must refuse to match "
+           "inside it")
+
+# ---------------------------------------------------------------------------
+# 3. THE PRODUCTION PATH. The two callers, asserted through their own APIs.
+# ---------------------------------------------------------------------------
+check_true("phase4_lib.mask_years now handles Persian digits, via delegation",
+           "<YEAR>" in L.mask_years(_FA_2023),
+           "(D) asserted on mask_years itself, the name 25 other assertions "
+           "and two mutants use, NOT on the new function -- a delegation that "
+           "the old callers do not reach would fix nothing")
+check_true("split_claims -- the RAG arm's real entry point -- masks Persian",
+           all("\u06f2\u06f0\u06f2\u06f3" not in c
+               for c in L.split_claims(_FA_2023 + " ...")),
+           "(D) run_phase4.run_arm_rag calls split_claims, so this is the "
+           "path the 52-case run actually took")
+
+# citations.py had NO masking, and this is the assertion that pins it. Asserted
+# through verify_claim, because src/rag/answer.py calls verify_claim DIRECTLY
+# with no splitter in front of it -- that path was completely unmasked.
+# trust_level is a CLOSED VOCABULARY, not a letter grade. My first attempt
+# passed "A" and Provenance refused it -- and the guard assertion below is what
+# surfaced that, instead of letting the four verify_claim assertions beneath it
+# pass vacuously on _ps = None.
+_ps = None
+_ps_err = ""
+try:
+    from rag.documents import Passage, Provenance
+    _ps = Passage(text="[figures in million] Total net sales | 383,285",
+                  provenance=Provenance(source="sec_edgar",
+                                        trust_level="VERIFIED_PRIMARY",
+                                        filed="2023-11-03",
+                                        accession="acc",
+                                        url="http://x", licence="public"),
+                  doc_id="FIX-AAPL-10K-2023", units_note="million")
+except Exception as _e:                                    # pragma: no cover
+    _ps, _ps_err = None, "%s: %s" % (type(_e).__name__, _e)
+
+check_true("a Passage fixture could be built for the verify_claim assertions",
+           _ps is not None,
+           "(A) THE ANTI-VACUITY GUARD. The four assertions below sit inside "
+           "`if _ps is not None`, so a fixture that failed to build would make "
+           "them silently vanish while the suite stayed green -- the same "
+           "failure shape as a mutant whose anchor no longer exists. "
+           + (("build error was " + _ps_err) if _ps_err else ""))
+
+if _ps is not None:
+    # The marker [2] used to decide this claim, before the amount was even
+    # reached, because verify_claim returns on the FIRST unlocatable number.
+    _c = _verify("Evidence [2] states total net sales were 383,285 million",
+                 _ps)
+    check_true("verify_claim no longer trips over the marker before the amount",
+               _c.status == "SUPPORTED",
+               "(D) MEASURED CONTRADICTED before the fix, with detail "
+               "'claimed 2 does not appear in the evidence; nearest is "
+               "1.69148e+11'. This is the src/rag/answer.py path, which had "
+               "no masking at any layer")
+    _c2 = _verify("\u062f\u0631 \u0633\u0627\u0644 \u06f2\u06f0\u06f2\u06f3 "
+                  "\u0628\u0631\u0627\u0628\u0631 \u0628\u0627 "
+                  "\u06f3\u06f8\u06f3,\u06f2\u06f8\u06f5 "
+                  "\u0645\u06cc\u0644\u06cc\u0648\u0646 "
+                  "\u0628\u0648\u062f", _ps)
+    check_true("...and a Persian claim with a Persian year now verifies",
+               _c2.status == "SUPPORTED",
+               "(D) this is RAG-FA-001's shape, MEASURED CONTRADICTED before "
+               "the fix and SUPPORTED after, on the SAME recorded answer")
+
+    # THE OTHER DIRECTION, and it matters more than any of the above: a
+    # genuinely wrong figure must STILL be caught. A grader fix that also
+    # stops catching fabrications has made the measurement worse while
+    # appearing to improve it.
+    _c3 = _verify("Evidence [2] states total net sales were 999,999 million",
+                  _ps)
+    check_true("a FABRICATED amount is still CONTRADICTED after the fix",
+               _c3.status == "CONTRADICTED",
+               "(C) THE NEGATIVE CONTROL. Masking removes dates and markers "
+               "only. If this ever passes, the fix has become a whitewash "
+               "and every citation_correctness number after it is worthless")
+    _c4 = _verify("Evidence [2] states total net sales were 383,285", _ps)
+    check_true("...and the 10^6 scale error is still caught",
+               _c4.status != "SUPPORTED",
+               "(C) the bare figure against a 'million' passage is the very "
+               "error src/rag/citations.py exists to catch")
+
+# ---------------------------------------------------------------------------
+# 4. Evidence must NOT be masked. Only the claim side is.
+# ---------------------------------------------------------------------------
+check_true("_evidence_magnitudes still sees a year-shaped value in evidence",
+           any(abs(n.value - 1402.0) < 1e-9
+               for n in _cit_nums("the index stood at 1402")),
+           "(B) evidence legitimately contains figures that look like years "
+           "-- a CPI index, a share count, a rial price. Masking the EVIDENCE "
+           "side would delete a magnitude the model is entitled to cite and "
+           "turn a SUPPORTED claim into a CONTRADICTED one. extract_numbers "
+           "is deliberately left unmasked; the masking is applied by "
+           "verify_claim to the CLAIM argument only")
+
+# ---------------------------------------------------------------------------
+# 5. Idempotence and the contract, since two layers now mask in sequence.
+# ---------------------------------------------------------------------------
+check_true("masking is idempotent, so double application is harmless",
+           _mnq(_mnq(_EN_MARKER)) == _mnq(_EN_MARKER),
+           "(A) split_claims masks, then verify_claim masks again. If the "
+           "second pass changed anything, the RAG arm and the answer.py path "
+           "would grade differently on the same sentence")
+check_raises("mask_non_quantities refuses a non-string rather than coercing",
+             lambda: _mnq(123), TypeError)
+check_true("...and accepts None as empty",
+           _mnq(None) == "", "(A)")
+check_true("the placeholders contain no digit, or masking would be circular",
+           not any(c.isdigit() for c in "<YEAR><CIT>"),
+           "(A) a placeholder containing a digit would itself be extracted as "
+           "a claimed magnitude -- the mutant 'the year placeholder is itself "
+           "a number' exists for exactly this")
+
+# ---------------------------------------------------------------------------
+# 6. WHAT THIS FIX DOES NOT SETTLE. Recorded so the next reader does not
+#    mistake a partial repair for a complete one.
+# ---------------------------------------------------------------------------
+# MEASURED after the fix, on the same 10 recorded rag answers: 3 claims are
+# still CONTRADICTED, and NONE of the three is a marker or a year. All three
+# are the model QUOTING AN EVIDENCE ROW verbatim:
+#     'This figure is found in Evidence [2], which states:
+#      "[figures in million] Total net sales | 383,285".'
+# The scale word sits BEFORE the number, in a bracketed section header, and
+# _CLAIM_SCALE_RE only looks at the tail AFTER a number -- so the quoted row
+# reads as a bare 383,285 against a million-scaled passage, i.e. the 10^6
+# error. Six residual small values also remain, all date components:
+# "June 30," -> 30, "July 27," -> 27, "(2023-11-03)" -> -11 and -3.
+#
+# NOT FIXED, DELIBERATELY. Widening the grader further to accept a
+# leading scale word would also make it accept the real 10^6 error, which is
+# the one thing this module exists to catch. Recorded as R47 for a decision by
+# the user, not patched away here.
+check_true("the residual quote-the-evidence-row failure is left UNFIXED",
+           True,
+           "(E) recorded, not repaired: see the comment above and R47. "
+           "Over-fitting a grader to its own corpus is how a FAIL becomes a "
+           "PASS, and this project's central finding is a FAIL")
+
+
+# ===========================================================================
+section("D-0093: the API path sends real turns, not raw ChatML")
+# ===========================================================================
+#
+# THE DEFECT, MEASURED 2026-09-05 while verifying the API support the user
+# asked to have available for subsequent tests (request 55b).
+#
+# The provider surface already existed -- 14 providers, RemoteRunner, the spend
+# gate, MEASURED_REMOTE_API -- but RemoteRunner handed the ENTIRE rendered
+# ChatML string to clients.chat, which sent it as one user message:
+#
+#     "messages": [{"role": "user",
+#                   "content": "<|im_start|>system\nYou are a bilingual..."}]
+#
+# A remote provider applies its OWN chat template around that. So over the API:
+#   - the system instruction was not a system instruction, just body text;
+#   - the pre-closed <think> prefill -- the D-0091 change that took silence
+#     from 20 of 52 answers to 0 of 52 -- arrived as literal text and did
+#     NOTHING;
+#   - the local run's seed and stop tokens were not sent at all, so a remote
+#     arm could not be reproducible or comparable.
+#
+# None of that would have failed loudly. The run would have produced a full set
+# of plausible answers and a MEASURED_REMOTE_API label.
+#
+# THE CONSTRAINT THAT SHAPED THE FIX: the user's standing instruction on this
+# subsystem is «مدل محلی حتماً باید باقی بماند و فقط api به آن اضافه گردد» --
+# the local model must remain; the API is only ADDED. So the builders still
+# return the byte-identical string the local path has always consumed, as a str
+# SUBCLASS that merely carries its parts alongside.
+
+check_true("a built prompt is still a str, so every local consumer works",
+           isinstance(RP.build_plain_prompt("Q?"), str),
+           "(A) llama-cpp, ModelRunner, the recorded evidence and 780 other "
+           "assertions all consume this as a string")
+
+_p93 = RP.build_plain_prompt("what is 6*7?")
+check_true("...and is BYTE-IDENTICAL to the un-wrapped rendering",
+           str(_p93) == RP.chatml_prompt_no_think(
+               RP.SYSTEM_BASE, "Question: what is 6*7?"),
+           "(D) THE INSTRUCTION THAT MATTERS MOST HERE. If the local prompt "
+           "changed by one byte, the API work would have altered the local "
+           "run the user was told would be left alone")
+check("...including its hash, so dict and set use is unaffected",
+      1 if hash(_p93) == hash(RP.chatml_prompt_no_think(
+          RP.SYSTEM_BASE, "Question: what is 6*7?")) else 0, 1, 0, "(A)")
+check_true("...and it still ends with the prefill",
+           _p93.endswith(RP.FORCED_CLOSED_THINK), "(A)")
+
+# The turns. This is the part the remote path consumes.
+_t93 = _p93.turns()
+check("a prompt yields exactly three turns",
+      len(_t93), 3, 0, "(A) system, user, and the assistant prefill")
+check_true("the roles are system, user, assistant -- in that order",
+           [t["role"] for t in _t93] == ["system", "user", "assistant"],
+           "(A) the order IS the semantics: a trailing assistant turn is a "
+           "prefill the model continues, which is what the local ChatML "
+           "prefill does. Any other position makes it an ordinary message")
+check_true("the system turn carries the system prompt, not the question",
+           _t93[0]["content"] == RP.SYSTEM_BASE, "(A)")
+check_true("the user turn carries the question",
+           "6*7" in _t93[1]["content"], "(A)")
+check_true("the assistant turn IS the closed think block",
+           _t93[2]["content"].startswith(RP.THINK_OPEN)
+           and RP.THINK_CLOSE in _t93[2]["content"],
+           "(D) this is the mechanism that fixed silence locally, now carried "
+           "to the API by the same means rather than a lookalike")
+check_true("NO raw ChatML markup appears in any turn's content",
+           not any(RP.IM_START in t["content"] for t in _t93),
+           "(D) MEASURED before the fix: '<|im_start|>system' was inside the "
+           "user message, where the provider's own template would wrap it")
+check_true("the assistant turn has no trailing whitespace",
+           _t93[2]["content"] == _t93[2]["content"].rstrip(),
+           "(B) several providers reject an assistant message ending in "
+           "whitespace, while llama-cpp needs the exact trailing newlines -- "
+           "so the strip applies to the TURN only, never to the string")
+
+# All three arms, because a fix wired into one builder is the D-0091 shape.
+for _name93, _pp93 in (("tools", RP.build_tools_prompt("Q?", [])),
+                       ("rag", RP.build_rag_prompt("Q?", []))):
+    check_true("the %s builder also carries turns" % _name93,
+               hasattr(_pp93, "turns")
+               and [t["role"] for t in _pp93.turns()]
+               == ["system", "user", "assistant"],
+               "(D) all three arms, not just the one that was checked first")
+    check_true("...and the %s prompt is still prefixed correctly" % _name93,
+               _pp93.endswith(RP.FORCED_CLOSED_THINK), "(A)")
+
+# ---------------------------------------------------------------------------
+# The transport. Asserted through clients.chat's own `opener` seam, so the
+# dialect code under test is the code that ships -- no network, no credential.
+# ---------------------------------------------------------------------------
+import llm.clients as _LC93                                  # noqa: E402
+
+_cap93 = {}
+
+
+def _opener93(url, payload, headers, timeout=None, key=None, *a, **kw):
+    _cap93["payload"] = payload
+    return {"status": 200, "body_json": {
+        "choices": [{"message": {"content": "42"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 11, "completion_tokens": 3},
+        "content": [{"type": "text", "text": "42"}],
+        "stop_reason": "end_turn",
+        "candidates": [{"content": {"parts": [{"text": "42"}]},
+                        "finishReason": "STOP"}],
+        "usageMetadata": {"promptTokenCount": 11, "candidatesTokenCount": 3},
+    }, "body_text": ""}
+
+
+_KEY93 = "sk-" + ("0123456789abcdef" * 2)
+_saved93 = {}
+for _k93 in ("GROQ_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
+             "GOOGLE_API_KEY"):
+    _saved93[_k93] = os.environ.get(_k93)
+    os.environ[_k93] = _KEY93
+try:
+    # -- openai dialect (groq: a documented free tier, so no --allow-paid) --
+    _LC93.chat("groq", _p93, 512, model_id="m", opener=_opener93,
+               turns=_t93, seed=RP.DEFAULT_SEED, stop=list(RP.STOP_TOKENS))
+    _pl93 = _cap93["payload"]
+    check_true("openai wire: three role-tagged messages are sent",
+               [m["role"] for m in _pl93["messages"]]
+               == ["system", "user", "assistant"],
+               "(D) THE PRODUCTION TRANSPORT, not the builder. D-0091 "
+               "happened because the builder was green while the wire was not")
+    check_true("openai wire: no ChatML markup in the message content",
+               RP.IM_START not in json.dumps(_pl93["messages"],
+                                             ensure_ascii=False), "(D)")
+    check("openai wire: the local seed is sent",
+          _pl93.get("seed"), RP.DEFAULT_SEED, 0,
+          "(D) MEASURED absent before the fix, so a remote arm could not be "
+          "reproduced the way the local run can")
+    check_true("openai wire: the local stop tokens are sent",
+               _pl93.get("stop") == list(RP.STOP_TOKENS),
+               "(D) MEASURED absent before the fix. These ARE ChatML strings "
+               "and belong in the payload -- my own first assertion here "
+               "checked the whole payload for ChatML and was simply wrong")
+    check("openai wire: greedy sampling is preserved",
+          _pl93.get("temperature"), 0.0, 0, "(A)")
+
+    # -- anthropic: system is TOP-LEVEL and there is no seed parameter ------
+    _cap93.clear()
+    _LC93.chat("anthropic", _p93, 512, model_id="m", opener=_opener93,
+               turns=_t93, seed=RP.DEFAULT_SEED, stop=list(RP.STOP_TOKENS),
+               allow_paid=True)
+    _pl93 = _cap93["payload"]
+    check_true("anthropic wire: system goes to the top-level field",
+               _pl93.get("system") == RP.SYSTEM_BASE,
+               "(A) this API does not take a system MESSAGE; sending one as a "
+               "message would silently demote it to conversation")
+    check_true("anthropic wire: messages are user + assistant prefill",
+               [m["role"] for m in _pl93["messages"]] == ["user", "assistant"],
+               "(A)")
+    check_true("anthropic wire: seed is DROPPED, not faked",
+               "seed" not in _pl93,
+               "(C) this API has no seed parameter. Sending one would be "
+               "rejected; pretending it applied would be worse. The payload "
+               "records seed_supported_by_wire=False instead")
+    check_true("anthropic wire: stop becomes stop_sequences",
+               _pl93.get("stop_sequences") == list(RP.STOP_TOKENS), "(A)")
+
+    # -- google: systemInstruction, and 'assistant' is spelled 'model' -----
+    _cap93.clear()
+    _LC93.chat("google", _p93, 512, model_id="m", opener=_opener93,
+               turns=_t93, seed=RP.DEFAULT_SEED, stop=list(RP.STOP_TOKENS))
+    _pl93 = _cap93["payload"]
+    check_true("google wire: systemInstruction is a separate object",
+               "systemInstruction" in _pl93, "(A)")
+    check_true("google wire: the assistant role is mapped to 'model'",
+               [c["role"] for c in _pl93["contents"]] == ["user", "model"],
+               "(C) an unrecognised role is rejected outright here, so a "
+               "prefill sent as 'assistant' would fail the whole run")
+    check("google wire: seed is inside generationConfig",
+          _pl93["generationConfig"].get("seed"), RP.DEFAULT_SEED, 0, "(A)")
+    check_true("google wire: stop becomes stopSequences",
+               _pl93["generationConfig"].get("stopSequences")
+               == list(RP.STOP_TOKENS), "(A)")
+
+    # -- BACKWARD COMPATIBILITY. The probe calls in measure_latency pass a
+    #    bare string, and so does any caller predating Prompt.
+    _cap93.clear()
+    _LC93.chat("groq", "a bare string", 8, model_id="m", opener=_opener93)
+    _pl93 = _cap93["payload"]
+    check_true("a bare string still sends ONE user message, as before",
+               [m["role"] for m in _pl93["messages"]] == ["user"],
+               "(B) measure_latency's TTFT probe passes a plain string; "
+               "breaking that would break the latency numbers, which are the "
+               "project's central FAIL")
+    check_true("...and no seed or stop key is invented for it",
+               "seed" not in _pl93 and "stop" not in _pl93,
+               "(B) a provider that rejects an unknown field must not be "
+               "broken by a key it never asked for")
+finally:
+    for _k93, _v93 in _saved93.items():
+        if _v93 is None:
+            os.environ.pop(_k93, None)
+        else:
+            os.environ[_k93] = _v93
+
+check_true("the API env vars were restored after the transport assertions",
+           all(os.environ.get(k) == v for k, v in _saved93.items()
+               if v is not None),
+           "(C) a leaked dummy credential would make a later real run fail "
+           "in a way that looks like the user's key is wrong")
+
+# ---------------------------------------------------------------------------
+# WHAT THIS DOES NOT SETTLE, recorded so it cannot be mistaken for done.
+# ---------------------------------------------------------------------------
+# 1. NO REMOTE RUN HAS BEEN MADE. Every assertion above is against the
+#    transport with a stubbed opener. The provider surface is now correct as
+#    far as can be verified WITHOUT spending the user's free-tier quota, and
+#    no run may start without explicit approval.
+# 2. A remote model is NOT the local model. The payload label is
+#    MEASURED_REMOTE_API and model_identity.sha256 is None, because a remote
+#    model id is not a pinned revision -- the provider may change what it
+#    serves between two runs bearing the same id.
+# 3. The local decode/TTFT FAILs (4.28-4.47 tok/s against 8; 48-50 s against
+#    3.0) are facts about the user's i5-12400. An API run cannot repair them;
+#    it can only answer a DIFFERENT question, which is what the local model
+#    would say if the hardware were not the bottleneck.
+# CAUGHT IN MY OWN REVIEW: the assertion that stood here was
+#     RP.main.__doc__ is None or "--provider local" not in ""
+# which is a tautology -- `x not in ""` is true for every non-empty x, so the
+# whole condition could never be false. It read like a check and tested
+# nothing, which is the exact failure mode this suite exists to prevent
+# (D-0091: a green test of a function nobody called). Replaced with a real one:
+# the remote transport must be UNREACHABLE unless a remote provider is chosen.
+check_raises("clients.chat REFUSES the local provider, so no accidental call",
+             lambda: _LC93.chat("local", "hi", 8, model_id="m"),
+             _LC93.ProviderError)
+check_true("--provider still defaults to local",
+           "\"--provider\", default=\"local\"" in io.open(
+               os.path.join(_ROOT, "scripts", "run_phase4.py"),
+               encoding="utf-8").read().replace("'", "\""),
+           "(D) THE USER'S EXPLICIT INSTRUCTION: the local model must remain "
+           "and the API is only added. Asserted against the source, so a "
+           "later edit that flips the default is caught")
+
+
+# ---------------------------------------------------------------------------
+# D-0093b: RemoteRunner.generate itself, because the mutants proved the
+#          assertions above did not reach it.
+# ---------------------------------------------------------------------------
+#
+# FIVE MUTANTS SURVIVED the first version of this block:
+#     the remote path stops sending structured turns
+#     the remote path stops sending the local seed
+#     the remote path stops sending the local stop tokens
+#     the remote seed stops matching the local run's seed
+#     the structured-call counter stops counting, hiding a flat run
+#
+# All five mutate RemoteRunner.generate. The assertions above drive
+# clients.chat DIRECTLY with turns/seed/stop passed by hand, so they prove the
+# three dialects build the right payload -- and prove nothing about whether the
+# runner ever passes those arguments. `grep RemoteRunner tests/` returned two
+# hits, both COMMENTS.
+#
+# THIS IS D-0091 REPEATING INSIDE THE FIX FOR IT. There, the prefill helper was
+# asserted while the production builders called something else. Here, the
+# transport was asserted while the production runner's call site was untested.
+# The mutation battery is the only reason it did not ship that way twice.
+#
+# The stub replaces llm.clients, and it must be installed as BOTH a sys.modules
+# entry and an attribute on the `llm` package: RemoteRunner does
+# `from llm import clients as LC`, which resolves the package ATTRIBUTE. A
+# probe that patched only sys.modules reached the real network and returned
+# HTTP 403 -- proof the stub was inert.
+import types                                                # noqa: E402
+import llm as _llm93b                                       # noqa: E402
+
+
+class _StubClients93b(object):
+    DEFAULT_TIMEOUT_S = 30
+    MODEL_HINTS = {"groq": "e.g. llama-3.1-8b-instant"}
+
+    def __init__(self):
+        self.seen = []
+
+    def spend_gate(self, provider, allow_paid=False, base_url=None):
+        return {"billable": False, "free_tier": True, "local_endpoint": False}
+
+    def chat(self, provider, prompt, n, **kw):
+        self.seen.append(kw)
+        return {"text": "42", "prompt_tokens": 5, "completion_tokens": 2,
+                "attempts": 1, "finish_reason": "stop"}
+
+
+_stub93b = _StubClients93b()
+_mod93b = types.ModuleType("llm.clients")
+for _n93b in ("DEFAULT_TIMEOUT_S", "MODEL_HINTS", "spend_gate", "chat"):
+    setattr(_mod93b, _n93b, getattr(_stub93b, _n93b))
+_real93b = getattr(_llm93b, "clients", None)
+_savedkey93b = os.environ.get("GROQ_API_KEY")
+os.environ["GROQ_API_KEY"] = "gsk_" + ("0123456789abcdef" * 2)
+sys.modules["llm.clients"] = _mod93b
+_llm93b.clients = _mod93b
+try:
+    _rr93b = RP.RemoteRunner("groq", "llama-3.1-8b-instant")
+    _pp93b = RP.build_plain_prompt("what is 6*7?")
+    _ans93b, _met93b = _rr93b.generate(_pp93b)
+    _kw93b = _stub93b.seen[-1]
+
+    check_true("RemoteRunner PASSES structured turns to the transport",
+               _kw93b.get("turns") is not None,
+               "(D) THE ASSERTION THE SURVIVING MUTANT DEMANDED. Without it, "
+               "`turns = None` in generate() left every assertion green while "
+               "each prompt went out as one flat user message")
+    check_true("...and those turns are system, user, assistant prefill",
+               [t["role"] for t in _kw93b["turns"]]
+               == ["system", "user", "assistant"], "(D)")
+    check("RemoteRunner passes the LOCAL seed, not a fresh one",
+          _kw93b.get("seed"), RP.DEFAULT_SEED, 0,
+          "(D) two mutants survived here: dropping the seed, and changing it "
+          "to 1234. A remote arm with a different seed is not comparable "
+          "with the local run, and nothing said so")
+    check_true("RemoteRunner passes the LOCAL stop tokens",
+               _kw93b.get("stop") == list(RP.STOP_TOKENS), "(D)")
+    check("the structured-call counter actually counts",
+          _rr93b.structured_calls, 1, 0,
+          "(D) a counter stuck at 0 would report a flat run as a structured "
+          "one, which is the single fact that decides whether remote numbers "
+          "may be compared with local ones")
+    check_true("the row records that the prefill was sent",
+               _met93b.get("prefill_sent") is True
+               and _met93b.get("structured_turns") is True, "(D)")
+
+    # A bare string -- what measure_latency's TTFT probe passes -- must NOT be
+    # counted as structured, or a run of probes would inflate the counter and
+    # make a flat run look comparable.
+    _rr93b.generate("a bare probe string")
+    check("a bare string does not increment the structured counter",
+          _rr93b.structured_calls, 1, 0,
+          "(B) measure_latency sends plain strings; counting those would let "
+          "structured_calls look healthy on a run where no arm was structured")
+    check_true("...and the bare call is recorded as UNstructured",
+               _stub93b.seen[-1].get("turns") is None, "(B)")
+finally:
+    sys.modules.pop("llm.clients", None)
+    if _real93b is not None:
+        _llm93b.clients = _real93b
+        sys.modules["llm.clients"] = _real93b
+    if _savedkey93b is None:
+        os.environ.pop("GROQ_API_KEY", None)
+    else:
+        os.environ["GROQ_API_KEY"] = _savedkey93b
+
+check_true("the real llm.clients was restored after the stub",
+           getattr(_llm93b, "clients", None) is _real93b,
+           "(C) a stub left installed would silently fake every later "
+           "provider assertion in this process")
+check_true("...and the dummy GROQ_API_KEY was removed again",
+           os.environ.get("GROQ_API_KEY") == _savedkey93b,
+           "(C) a leaked dummy credential makes a later real run fail in a "
+           "way that looks like the user's own key is wrong")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

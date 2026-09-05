@@ -140,6 +140,13 @@ def _normalise_separators(text):
 # src/ must be on sys.path; both run_phase4.py and the test suite put it there.
 from rag.ingest import SCALE_WORDS  # noqa: E402
 
+# Non-quantity masking lives in rag.normalize (D-0092) because BOTH this module
+# and src/rag/citations.py need it, and citations.py cannot import from scripts/
+# without a cycle. Importing rather than copying is the point: two copies of a
+# normalization rule drift silently, which is how the Persian-digit year hole
+# survived four separate fixes.
+from rag.normalize import mask_non_quantities  # noqa: E402
+
 # MARKDOWN EMPHASIS MAY SIT BETWEEN THE NUMBER AND ITS SCALE WORD.
 #
 # DEFECT FOUND IN THE FIRST REAL RUN 2026-08-18, MEASURED. RAG-EN-001 asked for
@@ -835,13 +842,24 @@ def mask_years(text):
     A year is a date, not a quantity that can be reconciled against a filing
     row. Masking rather than deleting keeps the sentence readable for a human
     auditor and keeps character offsets roughly stable.
+
+    DELEGATES to rag.normalize.mask_non_quantities as of D-0092. This function
+    kept its own ASCII-only _YEAR_RE, and MEASURED on the user's real 52-case
+    run that meant `۲۰۲۳` and `۱۴۰۲` survived masking and were then graded as
+    financial magnitudes against filing rows in the 1e11 range. The name is
+    kept because 25 assertions and two mutants target it, and because callers
+    that only want years should not have to know about citation markers.
+
+    The delegation ALSO masks citation markers, which is a deliberate
+    widening: split_claims feeds the citation verifier, and a bare "[2]" was
+    MEASURED being graded as the number 2 in three separate cases.
     """
     if text is None:
         return ""
     if not isinstance(text, str):
         raise TypeError("mask_years expects str or None, got %s"
                         % type(text).__name__)
-    return _YEAR_RE.sub("<YEAR>", text)
+    return mask_non_quantities(text)
 
 
 def split_claims(text, min_chars=12):

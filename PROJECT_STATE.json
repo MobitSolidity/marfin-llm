@@ -202,7 +202,9 @@
       "summary": "RAG-FA-001 answered the correct figure in Persian and was graded MODEL_FAILURE. MEASURED: _THOUSANDS_SEPARATORS contains U+066C ARABIC THOUSANDS SEPARATOR, which is what the CORPUS FIXTURE uses; the MODEL writes U+060C ARABIC COMMA, which is in NEITHER table. extract_magnitudes('383<U+066C>285 million') -> [383285000000.0]; with U+060C -> [383.0, 285000000.0]. Worse than losing the number: the scale word attached to the second fragment, MANUFACTURING 285,000,000 that was never written. src/rag/citations.extract_numbers shares the blind spot. test_phase4_harness.py already says 'U+060C is the comma the Persian arm actually emits' -- for mask_years. The knowledge existed in one function and never reached the numeric path."
     },
     "D-0090",
-    "D-0091"
+    "D-0091",
+    "D-0092",
+    "D-0093"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -354,7 +356,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0091",
+  "decisions_logged": "D-0001..D-0093",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -416,6 +418,20 @@
       "title": "A fix that is written and tested but wired to nothing looks identical to a fix that shipped",
       "detail": "MEASURED 2026-09-01 (D-0091): chatml_prompt_no_think() -- the cure for D-0085's total silence -- was defined, asserted by the suite, and called by nothing outside that suite. All three arms of run_phase4.py still called chatml_prompt(). The suite was green because it tested the HELPER, and the helper was never wrong. Had item 7 run in that state it would have spent ~7 hours re-measuring the original defect and left D-0089a's units fix untested, because a model that emits no visible answer cannot repeat a unit the prompt supplies. Third instance of the R43 class (D-0088, D-0089, this).",
       "mitigation": "A fix must be asserted at the PRODUCTION call site, not on the helper: the D-0091 block asserts on build_plain_prompt / build_tools_prompt / build_rag_prompt output, adds a property test that each equals the helper applied to its own content (so an inline re-implementation is also caught), keeps a negative control so the fix stays falsifiable, and is backed by 3 mutants that unwire one arm each. Separately, the dry run RECORDS the prompts the model wrapper actually sent, which is a runtime check and is different in kind from the suite's static one. Residual: the same class can recur in any subsystem where the helper and its caller are tested separately."
+    },
+    {
+      "id": "R47",
+      "severity": "MEDIUM",
+      "title": "the citation grader cannot read a scale word that PRECEDES its number",
+      "detail": "MEASURED 2026-09-05 after D-0092: 3 of the 10 rag answers are still CONTRADICTED, and none is a marker or a year. All three are the model quoting an evidence row verbatim, e.g. '\"[figures in million] Total net sales | 383,285\"'. _CLAIM_SCALE_RE only inspects the tail AFTER a number, so the quoted row reads as a bare 383,285 against a million-scaled passage -- the 10^6 error. 6 residual small values are date components (June 30, -> 30; (2023-11-03) -> -11, -3).",
+      "mitigation": "NOT FIXED DELIBERATELY. Accepting a LEADING scale word would also make the grader accept the real 10^6 error, which is the one thing src/rag/citations.py exists to catch. Over-fitting a grader to its own corpus is how a FAIL becomes a PASS. Needs a user decision, and any fix must keep the negative controls green."
+    },
+    {
+      "id": "R48",
+      "severity": "MEDIUM",
+      "title": "a remote arm is not reproducible on every dialect",
+      "detail": "MEASURED: the Anthropic messages API has no seed parameter, so a remote run on that wire cannot be seed-reproducible the way the local run is (DEFAULT_SEED=20260831). Recorded as seed_supported_by_wire=false rather than faked.",
+      "mitigation": "Prefer an openai-wire or google-wire free-tier provider (groq, cerebras, gemini) when reproducibility matters. Never present an anthropic-wire run as seed-reproducible."
     }
   ],
   "awaiting_approval_for": null,
@@ -1388,5 +1404,214 @@
       "dry_run_of_exact_item7_argv": "PASS 9/9"
     },
     "what_this_does_not_settle": "nothing about answer quality. D-0081's FAIL still stands (D-0090 re-graded all 10 recorded rag rows, 0 flipped). The prefill fixed SILENCE; whether the model can answer these 52 cases is unmeasured until item 7 runs."
+  },
+  "item7_results": {
+    "label": "MEASURED_PER_ARM_MERGED",
+    "source_file": "phase4_merged_new.json (user upload, 2026-09-05)",
+    "run_dates": [
+      "2026-09-03T16:02:26",
+      "2026-09-03T22:27:14",
+      "2026-09-03T22:49:46"
+    ],
+    "route": "A (user's own machine), run in per-arm chunks",
+    "model": "Qwen3.5-4B-Q5_K_M.gguf, sha256 VERIFIED, 2.928 GiB",
+    "sampling": {
+      "temperature": 0.0,
+      "seed": 20260831,
+      "greedy": true,
+      "applied": true,
+      "max_tokens": 512
+    },
+    "headline_silence_ended": {
+      "plain": {
+        "n": 21,
+        "empty_output": 0,
+        "had_thinking": 0,
+        "thinking_truncated": 0
+      },
+      "tools": {
+        "n": 21,
+        "empty_output": 0,
+        "had_thinking": 0,
+        "thinking_truncated": 0
+      },
+      "rag": {
+        "n": 10,
+        "empty_output": 0,
+        "had_thinking": 0,
+        "thinking_truncated": 0
+      },
+      "note": "The 2026-08-30 run lost 20 of 52 answers inside unterminated <think> blocks. The D-0091 prefill took that to 0 of 52, and the model emitted NO <think> block at all -- the pre-closed block is being honoured, not worked around. 0 truncations at max_tokens=512 also vindicates the budget cut from 2048."
+    },
+    "rag": {
+      "n_answerable": 7,
+      "retrieval_hit_pct": 100.0,
+      "answer_correct_pct": 71.43,
+      "model_failures": 0,
+      "retrieval_failures": 0,
+      "outcomes": {
+        "OK": 6,
+        "OVER_ABSTENTION": 2,
+        "FABRICATION": 2
+      },
+      "note": "Previously only RAG-EN-004 was OK, with 5 MODEL_FAILUREs. Q8 option (b) 'lean on RAG' now has real supporting evidence."
+    },
+    "tools": {
+      "deterministic_calc_correctness_pct": 25.0,
+      "deterministic_calc_with_tool_correctness_pct": 100.0,
+      "prose_only_n": 2,
+      "tool_assisted_n": 8,
+      "tool_call_schema_validity_pct": 100.0,
+      "tool_calls_attempted": 8,
+      "malformed": 0,
+      "expected_tool_hit_pct": 80.0,
+      "note": "The headline 25.0 is a DENOMINATOR story, not a regression: with a tool in hand the model is 100%."
+    },
+    "hardware_verdicts_unchanged": {
+      "decode_tps": {
+        "plain": 4.28,
+        "tools": 4.36,
+        "rag": 4.47,
+        "threshold_min": 8,
+        "verdict": "FAIL"
+      },
+      "ttft_seconds": {
+        "plain": 49.621,
+        "tools": 49.082,
+        "rag": 48.067,
+        "threshold_max": 3.0,
+        "verdict": "FAIL"
+      },
+      "model_file_size_gib": {
+        "value": 2.928,
+        "max": 4.0,
+        "verdict": "PASS"
+      },
+      "peak_rss_8k_gib": {
+        "range": [
+          3.787,
+          3.815
+        ],
+        "max": 6.0,
+        "verdict": "PASS"
+      },
+      "paper_live_confusion_count": {
+        "value": 0,
+        "max": 0,
+        "verdict": "PASS"
+      },
+      "note": "This remains the project's CENTRAL FINDING. The problem was never answer quality; it is the speed of an i5-12400 with no GPU. An API arm cannot repair it -- it can only answer a different question."
+    },
+    "citation_metrics_CONTAMINATED": {
+      "as_reported": {
+        "citation_correctness_pct": 25.0,
+        "unsupported_claim_rate_pct": 75.0
+      },
+      "why_unusable": "8 of 12 graded claims were checked against a citation marker or a year, not a magnitude. See D-0092. These two numbers must NOT be read as model failures.",
+      "after_D0092_regrade": {
+        "citation_correctness_over_checked": 42.86,
+        "flipped_to_supported": [
+          "RAG-FA-001",
+          "RAG-FA-002",
+          "RAG-ABST-003"
+        ]
+      }
+    },
+    "threshold_verdicts_status": "PENDING (merge-level, correctly not inherited)",
+    "human_grading_status": "PENDING (21 per non-rag arm; R10 for the new 52 rows)",
+    "recorded_into_phase_4": false,
+    "why_not": "phase_4/measurements_recorded stays None until the user EXPLICITLY approves recording. This upload is a real MEASURED run, unlike the 2026-08-31 diagnostic, so recording it is now possible -- but it is a gate action and the user's call, not mine."
+  },
+  "citation_grader_fix": {
+    "decision": "D-0092",
+    "defect": "src/rag/citations.py performed NO masking (0 grep hits), and phase4_lib._YEAR_RE matched ASCII digits only, so Persian years and citation markers were graded as financial magnitudes. R43 recurring a FOURTH time.",
+    "fix": "rag.normalize.mask_non_quantities masks markers and year-like integers in ASCII, Arabic-Indic and Persian digits. phase4_lib.mask_years delegates to it; verify_claim applies it to the CLAIM argument only.",
+    "why_normalize_py": "phase4_lib imports from rag.ingest, so citations.py cannot import phase4_lib without a cycle. Copying the regex would let two copies drift silently.",
+    "why_claim_side_only": "extract_numbers also serves the EVIDENCE side. Evidence legitimately holds year-shaped values (a CPI index, a rial price); masking those would delete a magnitude the model may cite.",
+    "my_own_error_caught_by_probe": "my first pattern wrote the FIXED digits as ASCII literals, so Persian years still survived and the fix fixed nothing. Every digit position must be script-agnostic.",
+    "over_masking_risk_MEASURED": {
+      "marker_pattern_bounded_to_1_2_digits": true,
+      "bracketed_1_2_digit_runs_in_all_39_fixture_rows": 0,
+      "real_year_window": "1200-1499 and 1800-2199 (NOT 1000-2199)",
+      "expected_value_1000_cases": [
+        "EN-NUM-001",
+        "FA-NUM-001"
+      ],
+      "why_safe": "1000 is outside the window, AND value_matches never calls this function (0 call sites in run_phase4.py)."
+    },
+    "measured_effect_model_not_rerun": {
+      "flipped": {
+        "RAG-FA-001": "CONTRADICTED->SUPPORTED",
+        "RAG-FA-002": "CONTRADICTED->SUPPORTED",
+        "RAG-ABST-003": "CONTRADICTED->SUPPORTED"
+      },
+      "citation_correctness_over_checked": "0.0 -> 42.86",
+      "implausible_claimed_values": "8 -> 6"
+    },
+    "what_this_does_not_fix": "3 claims stay CONTRADICTED, none a marker or a year: the model QUOTES an evidence row whose scale word precedes the number, so it reads as a bare figure against a million-scaled passage. 6 residual small values are date components (June 30, / July 27, / -11 / -3). NOT patched: widening the grader to accept a leading scale word would also make it accept the real 10^6 error. Filed as R47."
+  },
+  "api_prompt_layer": {
+    "decision": "D-0093",
+    "request": "55(b) -- API capability available for subsequent tests",
+    "what_already_existed_MEASURED": {
+      "providers_registered": 14,
+      "free_tier_providers": [
+        "groq",
+        "google",
+        "cerebras"
+      ],
+      "flags": [
+        "--provider",
+        "--model-id",
+        "--base-url",
+        "--allow-paid",
+        "--timeout"
+      ],
+      "spend_gate_blocks_without_allow_paid": [
+        "openai",
+        "anthropic",
+        "openrouter",
+        "custom"
+      ],
+      "share_of_request_already_done": "~70%"
+    },
+    "defect": "RemoteRunner sent the ENTIRE rendered ChatML string as ONE user message. A provider wraps that in its own template, so the system prompt was body text and the pre-closed <think> prefill (the D-0091 fix) was INERT. seed and stop were never sent at all. The run would still have produced plausible answers under a MEASURED_REMOTE_API label.",
+    "fix": "Prompt(str) carries system/user/prefill alongside the byte-identical string; Prompt.turns() yields role-tagged turns with the prefill as a trailing assistant turn. clients.chat accepts turns/seed/stop and translates per dialect.",
+    "local_path_unchanged": "Prompt IS the string -- equal, same hash, accepted anywhere a str is. Asserted byte-identical. The user's instruction was that the local model must remain and the API is only ADDED.",
+    "per_dialect": {
+      "openai": "system message; trailing assistant; seed; stop",
+      "anthropic": "top-level system; trailing assistant; seed DROPPED (no such parameter) and recorded as dropped; stop_sequences",
+      "google": "systemInstruction; assistant role mapped to 'model' (an unrecognised role is rejected outright); generationConfig.seed; stopSequences"
+    },
+    "new_payload_fields": [
+      "structured_calls",
+      "seed_sent",
+      "stop_sent",
+      "seed_supported_by_wire",
+      "structured_turns",
+      "prefill_sent"
+    ],
+    "how_to_read_a_remote_run": "If structured_calls is 0 or below the case count, every prompt went out flat and the run must NOT be compared with the local numbers.",
+    "mutation_battery_caught_D0091_repeating": "5 mutants SURVIVED the first version of my assertions, all in RemoteRunner.generate. My assertions drove clients.chat directly, proving the dialects build correct payloads and proving nothing about whether the runner passes those arguments. grep RemoteRunner tests/ returned 2 hits, both COMMENTS. Twice now the thing under test has been the layer NEXT TO the broken one.",
+    "one_mutant_deleted_not_killed": "'markers are masked AFTER years' survived because it is genuinely EQUIVALENT -- probed on 6 cases, identical output. My comment claiming the order was critical was WRONG and was corrected.",
+    "what_this_does_not_settle": [
+      "No remote run has been made; nothing touched a network.",
+      "A remote model id is not a pinned revision: label stays MEASURED_REMOTE_API, sha256 None.",
+      "An API run cannot repair the local decode/TTFT FAILs -- those are facts about the i5-12400.",
+      "No free-tier key has been validated."
+    ]
+  },
+  "last_verification": {
+    "date": "2026-09-05",
+    "regression": "bash tests/run_all.sh -> 3450 assertions across 18 suites, SKIPPED 0, TIMED OUT 0, ALL GREEN",
+    "assertion_trail": "3380 -> 3450 (D-0092 +27, D-0093 +43)",
+    "phase4_suite": "754 -> 824",
+    "mutation": "251 seeded, 242 killed, 0 survived, 9 skipped (pre-existing); source restored and oracle green: True",
+    "runtime_probes": [
+      "citation regrade of the 10 recorded rag rows",
+      "wire probe across all 3 dialects, 28/28"
+    ],
+    "R40_recurred": "a sandbox reset wiped /tmp, taking the Qwen tokenizer files and the XBRL payload. The run went green with SKIPPED: 5 and the suite's own SKIP lines named what had stopped running. All four re-fetched; SKIPPED is 0 again. A green run with skips is not a green run.",
+    "false_alarm_diagnosed": "the first post-change run reported FAILURES PRESENT with test_selector.py timing out at 300 s and the total DROPPING to 3343. It has 0 references to any changed module and, run alone, finished in under a second with 104 passed. The cause was CPU contention with the mutation battery, not a defect."
   }
 }

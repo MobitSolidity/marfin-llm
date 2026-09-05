@@ -149,3 +149,150 @@ def index_terms(text: str) -> List[str]:
     """Base tokens plus Persian compound variants. Used by BOTH sides."""
     base = tokenize(text)
     return base + compound_variants(base)
+
+
+# ---------------------------------------------------------------------------
+# Non-quantity masking, shared by the indexer, the graders AND the citation
+# verifier (D-0092).
+#
+# WHY THIS LIVES HERE AND NOT IN scripts/phase4_lib.py
+# ----------------------------------------------------
+# phase4_lib already had mask_years, and src/rag/citations.py needed it. But
+# phase4_lib imports FROM rag.ingest, so citations.py cannot import phase4_lib
+# without a cycle. Duplicating the regex was the other option and is the exact
+# mistake this module's own docstring was written to prevent: two copies of a
+# normalization rule drift, and the drift is silent.
+#
+# So the rule lands in the one module BOTH sides already depend on, and
+# phase4_lib.mask_years now delegates here.
+#
+# THE DEFECT THIS FIXES, MEASURED 2026-09-05 on the user's real 52-case run
+# -------------------------------------------------------------------------
+# 8 of 12 graded RAG claims were checked against a number that is not a
+# financial magnitude at all:
+#
+#   RAG-EN-001    "claimed 2"      was the citation marker [2]
+#   RAG-EN-005    "claimed 1"      was the citation marker [1]
+#   RAG-ABST-001  "claimed 2 / 3"  were the markers [2] and [3]
+#   RAG-ABST-003  "claimed 1"      was [1]; "claimed 1402" was the year ۱۴۰۲
+#   RAG-FA-001    "claimed 2023"   was the year ۲۰۲۳
+#   RAG-FA-002    "claimed 2023"   was the year ۲۰۲۳
+#
+# producing details like "claimed 2 does not appear in the evidence; nearest is
+# 1.69148e+11 (ratio 1.1824e-11 -- a power-of-ten ratio means a scale error)".
+# citation_correctness_pct read 25.0 and unsupported_claim_rate_pct read 75.0
+# while the ANSWERS WERE CORRECT: RAG-EN-001 said $383,285 million and
+# RAG-FA-001 said ۳۸۳,۲۸۵ میلیون, both right.
+#
+# Two independent causes, and BOTH are needed:
+#   1. citations.py performed no masking whatsoever.
+#   2. the year pattern matched ASCII digits only, so a Persian-digit year
+#      survived masking even where masking DID run -- R43 recurring for the
+#      fourth time: a regex written against text the fixture author typed
+#      rather than text the model emits.
+# ---------------------------------------------------------------------------
+
+# Digits in every script this project reads: ASCII, Arabic-Indic (U+0660) and
+# Extended/Persian (U+06F0). Written as an explicit class rather than \d
+# because Python's \d is Unicode-aware but the SURROUNDING guards below must
+# reject the same set, and mixing \d with an explicit class made the two
+# disagree -- which is how the Persian-digit hole survived in the first place.
+_D = "0-9\u0660-\u0669\u06f0-\u06f9"
+
+# A citation marker: a 1-2 digit run in square brackets, e.g. [1], [ 12 ].
+#
+# BOUNDED TO TWO DIGITS ON PURPOSE. A financial magnitude does appear in
+# brackets in real filings -- "[1,234]" as a table cell, "[500]" as an
+# accounting negative -- and deleting one of those would be the same class of
+# error in the opposite direction: hiding a number the model must be held to.
+#
+# MEASURED before choosing the bound: across all 39 rows of
+# rag_corpus_v1 + rag_gold_v1 + bilingual_eval_v1, bracketed runs of 1-2
+# digits: 0. Across the user's 52 real outputs: 6 outputs contain one, and
+# every one of them is a citation marker. So the bound costs nothing here and
+# still refuses [1,234] and [500].
+_CITATION_MARKER_RE = re.compile(r"\[\s*[%s]{1,2}\s*\]" % _D)
+
+def _dig(*wanted):
+    """
+    A character class matching the given decimal VALUES in any digit script.
+
+    CAUGHT BY MY OWN PROBE, 2026-09-05, and worth recording because it is the
+    same mistake as the defect being fixed. My first version of the year
+    pattern wrote the FIXED digits as ASCII literals -- "20[d][d]" -- and only
+    the varying tail as a multi-script class. Result: `۲۰۲۳` still went
+    unmasked, because its "2" and "0" are U+06F2 and U+06F0, not "2" and "0".
+    The probe showed the Persian cases coming back UNCHANGED, i.e. the fix
+    fixed nothing.
+
+    The lesson is the one R43 keeps teaching: EVERY digit position has to be
+    script-agnostic, not just the ones that happen to vary.
+    """
+    chars = []
+    for n in wanted:
+        chars.append(str(n))
+        chars.append(chr(0x0660 + n))
+        chars.append(chr(0x06f0 + n))
+    return "[" + "".join(chars) + "]"
+
+
+_ANY = "[%s]" % _D
+_SEPS = ".,\u066b\u066c\u060c"
+
+# Year-like bare integers, in any of the three digit scripts.
+#
+# Ranges: 1200-1499 (Jalali), 1800-2199 (Gregorian). NOT 1000-2199: MEASURED
+# that 1000, 1100 and 1500-1799 are NOT masked, which is what keeps the two
+# eval cases with expected_value=1000.0 (EN-NUM-001, FA-NUM-001) safe -- and
+# they are additionally safe because value_matches never calls this at all.
+#
+# The lookarounds mirror phase4_lib's original and its recorded lesson: the
+# trailing guard must be (?!digit|[.,]digit), not a bare character class, or
+# "in 2023, revenue grew" -- the commonest prose form of the very thing being
+# masked -- stops being masked. The separator set is widened to the Persian
+# ones, because "۱.۲۰۲۳" must be protected exactly as "1.2023" is.
+_YEAR_ANY_SCRIPT_RE = re.compile(
+    "(?<![%(d)s%(s)s])"
+    "(?:%(one)s%(23)s%(any)s%(any)s"
+    "|%(one)s%(4)s%(any)s%(any)s"
+    "|%(one)s%(89)s%(any)s%(any)s"
+    "|%(two)s%(01)s%(any)s%(any)s)"
+    "(?![%(d)s]|[%(s)s][%(d)s])"
+    % {"d": _D, "s": _SEPS, "any": _ANY,
+       "one": _dig(1), "two": _dig(2),
+       "23": _dig(2, 3), "4": _dig(4), "89": _dig(8, 9), "01": _dig(0, 1)})
+
+
+def mask_non_quantities(text):
+    """
+    Blank out the things in a sentence that LOOK numeric but assert no amount.
+
+    Two kinds, both of which were MEASURED corrupting the citation grader:
+      - citation markers  [1] [2] [3]
+      - year-like bare integers, in ASCII, Arabic-Indic or Persian digits
+
+    Markers are removed first. I ORIGINALLY DOCUMENTED THIS AS ORDER-CRITICAL,
+    claiming a marker's digits would otherwise be consumed by the year
+    pattern's lookbehind. A mutant that swapped the two SURVIVED, so I probed
+    the claim instead of defending it: on `[2023]`, `[20]`, `in 2023 see [2]`,
+    `Evidence [2], states 383,285` and the Persian `مطابق [۲] در سال ۱۴۰۲`, the
+    two orders produce IDENTICAL output. The bracket guards mean the patterns
+    cannot overlap, so the order is genuinely free.
+    The swap mutant was deleted rather than "killed" with an assertion
+    manufactured to pin an ordering that does not matter -- that would have
+    been a test written to make a battery look complete.
+
+    Masking rather than deleting keeps the sentence readable for the human
+    auditor who has to review these claims (R10), and keeps offsets roughly
+    stable. The placeholders contain no digits, which is the whole point.
+
+    Returns "" for None. Raises TypeError on a non-string rather than coercing
+    it: a silently stringified dict would mask nothing and grade everything.
+    """
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        raise TypeError("mask_non_quantities expects str or None, got %s"
+                        % type(text).__name__)
+    text = _CITATION_MARKER_RE.sub("<CIT>", text)
+    return _YEAR_ANY_SCRIPT_RE.sub("<YEAR>", text)

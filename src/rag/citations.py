@@ -30,7 +30,7 @@ import re
 
 from rag.documents import Fact, Passage
 from rag.ingest import SCALE_WORDS
-from rag.normalize import fold, tokenize
+from rag.normalize import fold, mask_non_quantities, tokenize
 
 # Floor on relative tolerance, to absorb binary floating-point noise only.
 # This is NOT the rounding allowance -- see _tolerance_for().
@@ -215,7 +215,36 @@ def verify_claim(claim: str, evidence: Any,
         return Citation(claim, evidence, "UNSUPPORTED",
                         "evidence carries no provenance and cannot be cited")
 
-    claimed = extract_numbers(claim)
+    # MASK THE NON-QUANTITIES IN THE CLAIM BEFORE EXTRACTING ANY NUMBER.
+    #
+    # DEFECT MEASURED 2026-09-05 on the user's real 52-case run (D-0092). This
+    # module did no masking at all -- `grep mask_years src/rag/citations.py`
+    # returned nothing -- so 8 of 12 graded claims were checked against a
+    # citation marker or a year:
+    #
+    #   RAG-EN-001 claimed "2"    -- the marker [2]
+    #   RAG-FA-001 claimed "2023" -- the year ۲۰۲۳
+    #   RAG-ABST-003 claimed "1402" -- the year ۱۴۰۲
+    #
+    # and because verify_claim RETURNS ON THE FIRST unlocatable number, and a
+    # marker or a year is almost always the first number in a cited sentence,
+    # one artefact decided the whole case. The reported detail was
+    # "claimed 2 does not appear in the evidence; nearest is 1.69148e+11
+    # (ratio 1.1824e-11 -- a power-of-ten ratio means a scale error)", against
+    # answers that were CORRECT.
+    #
+    # WHY HERE AND NOT INSIDE extract_numbers: extract_numbers also serves the
+    # EVIDENCE side, via _evidence_magnitudes. Evidence legitimately contains
+    # figures that look like years -- a CPI index, a share count, a rial price
+    # -- and masking those would delete a magnitude the model is entitled to
+    # cite, turning a SUPPORTED claim into a CONTRADICTED one. The claim side
+    # is the only side where a year is certainly not an amount being asserted.
+    #
+    # scripts/phase4_lib.split_claims already masks before it splits, so for
+    # the Phase-4 RAG arm this is a second, idempotent application. It is kept
+    # because src/rag/answer.py calls verify_claim DIRECTLY, with no splitter
+    # in front of it, and that path had no masking whatsoever.
+    claimed = extract_numbers(mask_non_quantities(claim))
     if not claimed:
         return Citation(claim, evidence, "UNSUPPORTED",
                         "claim asserts no numeric magnitude to verify")

@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0091). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0093). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -36,7 +36,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,380 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,450 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -255,7 +255,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,380 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,450 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -912,7 +912,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,380
+unique and non-no-op *before* the battery ran. Full regression: **3,450
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1104,8 +1104,140 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,380
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,450
 assertions, 18 suites, 0 failed, 0 skipped.**
+
+### The item-7 results: the prefill worked, and it exposed a grader defect
+
+The user ran item 7 on 2026-09-03 in three chunks and uploaded the merged
+result. **MEASURED, all 52 cases across all three arms:**
+
+```
+plain  n=21  empty_output=0  had_thinking=0  thinking_truncated=0
+tools  n=21  empty_output=0  had_thinking=0  thinking_truncated=0
+rag    n=10  empty_output=0  had_thinking=0  thinking_truncated=0
+```
+
+The 2026-08-30 run lost **20 of 52** answers inside unterminated `<think>`
+blocks. Now **zero** — and the model emitted **no `<think>` block at all**, so
+the pre-closed block is being honoured rather than worked around. With
+`max_tokens=512` there were **0 truncations**, which also vindicates cutting
+the budget from 2048 (D-0091).
+
+**RAG went from 1-of-7 to 6-of-7:** `retrieval_hit_pct` 100.0,
+`answer_correct_pct` **71.43**, `model_failures` **0**, `retrieval_failures` 0,
+outcomes `{OK: 6, OVER_ABSTENTION: 2, FABRICATION: 2}`. Q8 option (b), "lean on
+RAG", now has real supporting evidence.
+
+**The hardware verdicts are unchanged, and remain the project's central
+finding:** decode **4.28 / 4.36 / 4.47 tok/s** against a minimum of 8; TTFT
+**49.6 / 49.1 / 48.1 s** against a maximum of 3.0. Both FAIL. Passes:
+model file 2.928 GiB ≤ 4.0, peak RSS 3.787–3.815 GiB ≤ 6.0, paper/live
+confusion 0. The problem was never answer quality; it is the speed of an
+i5-12400 with no GPU.
+
+**The tools arm's headline 25.0 % is a denominator story, not a regression:**
+`deterministic_calc_with_tool_correctness_pct` is **100.0** with
+`tool_assisted_n 8` and `prose_only_n 2`; schema validity 100 %, malformed 0.
+
+### D-0092: the citation grader was grading markers and Persian years as money
+
+`citation_correctness_pct 25.0` and `unsupported_claim_rate_pct 75.0` looked
+catastrophic. They are **artefacts**. MEASURED: **8 of the 12 graded claims
+were checked against a number that is not a financial magnitude at all** — the
+citation markers `[1]`, `[2]`, `[3]`, and the years `۲۰۲۳` and `۱۴۰۲`. A
+representative detail, verbatim from the evidence file:
+
+```
+claimed 2 does not appear in the evidence; nearest is 1.69148e+11
+(ratio 1.1824e-11 -- a power-of-ten ratio means a scale error)
+```
+
+The grader compared the bracket `[2]` against a filing row of 169 billion. And
+because `verify_claim` **returns on the first number it cannot locate**, and the
+first number in a cited financial sentence is almost always a marker or a year,
+one artefact decided the whole case. **The answers were right**: RAG-EN-001 said
+`$383,285 million`; RAG-FA-001 said `۳۸۳,۲۸۵ میلیون`.
+
+Two independent causes: `src/rag/citations.py` did **no** masking (0 grep hits),
+and the year pattern matched **ASCII digits only** — R43 recurring a **fourth**
+time. Fixed by `rag.normalize.mask_non_quantities`, which handles all three
+digit scripts; `phase4_lib.mask_years` delegates to it and `verify_claim`
+applies it to the **claim side only** (evidence legitimately holds year-shaped
+values such as a CPI index or a rial price).
+
+**My own first attempt failed and the probe caught it:** I wrote the *fixed*
+digits as ASCII literals, so `۲۰۲۳` still survived and the fix fixed nothing.
+Every digit position has to be script-agnostic.
+
+Re-grading the recorded answers, **model not re-run**: RAG-FA-001, RAG-FA-002
+and RAG-ABST-003 all flip CONTRADICTED → **SUPPORTED**; citation correctness
+over checked claims **0.0 → 42.86**.
+
+**What it does not fix, deliberately.** Three claims stay CONTRADICTED and none
+is a marker or a year: the model *quotes an evidence row* whose scale word
+precedes the number (`"[figures in million] Total net sales | 383,285"`), and
+`_CLAIM_SCALE_RE` only reads the tail after a number. Accepting a leading scale
+word would also make the grader accept the real 10⁶ error — the one thing that
+module exists to catch. Filed as **R47** for a decision, not patched away.
+Over-fitting a grader to its own corpus is how a FAIL becomes a PASS.
+
+### D-0093: the API path existed, and sent the prompt in a form no provider could use
+
+Request 55(b) asked for API capability in subsequent tests. **Measured first
+rather than built:** 14 providers were already registered, three with a free
+tier (**groq, google, cerebras**), along with `--provider`, `--model-id`,
+`--base-url`, `--allow-paid`, `RemoteRunner`, and a working spend gate that
+**blocks** openai/anthropic/openrouter/custom without `--allow-paid`. About
+70 % of the request was already implemented.
+
+**The defect measuring found:** `RemoteRunner` sent the entire rendered ChatML
+string as **one user message**. A provider wraps that in its own template, so
+the system instruction was body text, the pre-closed `<think>` prefill — the
+change that took silence from 20/52 to 0/52 — was **inert**, and `seed` and
+`stop` were never sent. The run would still have produced plausible answers
+under a `MEASURED_REMOTE_API` label.
+
+The fix respects the user's standing instruction that the local model must
+remain and the API is only *added*: the builders return a `str` **subclass**
+that is byte-identical to what the local path always consumed, carrying its
+parts alongside. `Prompt.turns()` yields role-tagged turns with the prefill as
+a **trailing assistant turn** — a genuine prefill on the OpenAI and Anthropic
+dialects, i.e. the same mechanism, not a lookalike.
+
+| dialect | system | prefill | seed | stop |
+|---|---|---|---|---|
+| openai | `system` message | trailing `assistant` | `seed` | `stop` |
+| anthropic | **top-level** `system` | trailing `assistant` | **dropped** (no such parameter) | `stop_sequences` |
+| google | `systemInstruction` | role mapped to **`model`** | `generationConfig.seed` | `stopSequences` |
+
+**How to read a remote run:** if `structured_calls` is 0, or below the case
+count, every prompt went out flat and the numbers must **not** be compared with
+the local ones.
+
+**The mutation battery caught D-0091 repeating inside the fix for D-0091.**
+Five mutants survived my first assertions, all in `RemoteRunner.generate`: my
+assertions drove `clients.chat` directly, proving the dialects build correct
+payloads and proving nothing about whether the runner passes those arguments.
+`grep RemoteRunner tests/` returned two hits, **both comments**. Twice now the
+thing under test has been the layer *next to* the broken one. Ten assertions
+were added against the runner itself.
+
+One mutant was **deleted rather than killed**: "markers are masked AFTER years"
+survived because it is genuinely equivalent — probed on six cases, identical
+output. My comment claiming the order was critical was wrong and was corrected.
+Writing an assertion to pin an ordering that does not matter would be a test
+authored to flatter the battery.
+
+An assertion of mine that tested nothing was also removed:
+`RP.main.__doc__ is None or "--provider local" not in ""` — `x not in ""` is
+true for every non-empty `x`, so it could never fail.
+
+**What this does not settle:** no remote run has been made, nothing touched a
+network, no free-tier key has been validated, a remote model id is not a pinned
+revision (`sha256` stays `None`), and **an API run cannot repair the local
+decode/TTFT FAILs** — those are facts about the i5-12400. A remote arm answers
+a different question.
 
 ### D-0091: the cure was written, tested, and connected to nothing
 
@@ -1226,7 +1358,7 @@ So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
 attached, and **the number to plan around is the upper bound.** Quoting only a
 central figure is how a "1 hour" run became 1.7 hours earlier in this project.
 
-Full regression: **3,380 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+Full regression: **3,450 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
 **224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
 `None`, and **0 model runs** were launched.
 
@@ -1537,7 +1669,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,380 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,450 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -1901,7 +2033,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,380 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,450 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -1950,7 +2082,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,380-assertion base is trustworthy.
+3,450-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

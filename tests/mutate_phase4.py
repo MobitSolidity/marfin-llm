@@ -63,6 +63,16 @@ EQUIVALENT = {}
 LIB = "scripts/phase4_lib.py"
 RUN = "scripts/run_phase4.py"
 
+# src/rag/normalize.py became a Phase-4 mutation target on 2026-09-05 (D-0092).
+#
+# WHY IT HAD TO: mask_non_quantities moved there, so the rule that decides
+# whether a Persian year is graded as an eleven-figure revenue now lives
+# outside both files this battery previously covered. Leaving it out would mean
+# the battery's healthy killed-count was measured over code that no longer
+# contains the logic -- the same blindness as a mutant anchored on a deleted
+# line, which this battery hit on 2026-09-01.
+NORM = "src/rag/normalize.py"
+
 # The eval fixture is a MUTATION TARGET, not just an input.
 #
 # Added 2026-08-19. Until now every mutation edited code, on the tacit
@@ -118,17 +128,29 @@ MUTATIONS = [
     # assertions on the prefill tested the HELPER, which was never wrong. If
     # any of these survives, the prefill is once again connected by nothing an
     # assertion can see.
-    (RUN, "the plain arm stops sending the pre-closed think block",
-     'return chatml_prompt_no_think(SYSTEM_BASE, "Question: %s" % question)',
-     'return chatml_prompt(SYSTEM_BASE, "Question: %s" % question)'),
-    (RUN, "the tools arm stops sending the pre-closed think block",
-     'return chatml_prompt_no_think(SYSTEM_TOOLS + "\\n".join(lines),\n'
-     '                                  "Question: %s" % question)',
-     'return chatml_prompt(SYSTEM_TOOLS + "\\n".join(lines),\n'
-     '                     "Question: %s" % question)'),
-    (RUN, "the rag arm stops sending the pre-closed think block",
-     'return chatml_prompt_no_think(\n        SYSTEM_RAG,',
-     'return chatml_prompt(\n        SYSTEM_RAG,'),
+    # RETARGETED 2026-09-05 (D-0093). These three were anchored on each arm's
+    # own `chatml_prompt_no_think(...)` call. All three arms now route through
+    # the single `_prompt()` helper, so the per-arm literals no longer exist
+    # and all three mutants SILENTLY SKIPPED -- caught by the battery's skip
+    # count going 9 -> 12, the same detection that saved this on 2026-09-01.
+    #
+    # A skipped mutant is worse than a deleted one: the killed count still
+    # looks healthy. Re-anchored on the one place the prefill is now applied,
+    # plus the per-arm dispatch, so unwiring EITHER is still caught.
+    (RUN, "the prefill helper is swapped out for the un-prefilled renderer",
+     "    return Prompt(chatml_prompt_no_think(system, user), system, user)",
+     "    return Prompt(chatml_prompt(system, user), system, user)"),
+    (RUN, "the plain arm stops going through the prefilling builder",
+     '    return _prompt(SYSTEM_BASE, "Question: %s" % question)',
+     '    return chatml_prompt(SYSTEM_BASE, "Question: %s" % question)'),
+    (RUN, "the tools arm stops going through the prefilling builder",
+     '    return _prompt(SYSTEM_TOOLS + "\\n".join(lines),\n'
+     '                   "Question: %s" % question)',
+     '    return chatml_prompt(SYSTEM_TOOLS + "\\n".join(lines),\n'
+     '                         "Question: %s" % question)'),
+    (RUN, "the rag arm stops going through the prefilling builder",
+     "    return _prompt(\n        SYSTEM_RAG,",
+     "    return chatml_prompt(\n        SYSTEM_RAG,"),
     # And the budget, which is only defensible BECAUSE the prefill is wired.
     (RUN, "the completion budget returns to the runaway-think 2048",
      'DEFAULT_MAX_TOKENS = 512',
@@ -1092,27 +1114,73 @@ MUTATIONS = [
     # MEASURED: verify_claim early-returns on its first unlocatable number, and
     # the first number in every graded answer was a year. citation_correctness
     # 0.0 and unsupported_claim_rate 100.0 were both artefacts.
-    (LIB, "years are no longer masked before verification",
-     '    return _YEAR_RE.sub("<YEAR>", text)',
+    # RETARGETED 2026-09-05 (D-0092). These five were anchored on
+    #     return _YEAR_RE.sub("<YEAR>", text)
+    # and on the ASCII-only pattern literal, both of which mask_years no longer
+    # contains: it now delegates to rag.normalize.mask_non_quantities. An
+    # anchor that no longer exists makes a mutant SKIP, and a skipped mutant
+    # still leaves the killed-count looking healthy -- which is worse than a
+    # deleted one. Re-anchored on the code that now carries the logic.
+    (LIB, "mask_years stops delegating and returns the text unmasked",
+     "    return mask_non_quantities(text)",
      "    return text"),
-    (LIB, "the year mask reverts to rejecting a trailing comma",
-     '    r"(?<![\\d.,])(?:1[89]\\d\\d|20\\d\\d|21\\d\\d|1[23]\\d\\d|14[0-9]\\d)"\n'
-     '    r"(?!\\d|[.,]\\d)")',
-     '    r"(?<![\\d.,])(?:1[89]\\d\\d|20\\d\\d|21\\d\\d|1[23]\\d\\d|14[0-9]\\d)"\n'
-     '    r"(?![\\d.,])")'),
-    (LIB, "the year mask swallows any four-digit number",
-     '    r"(?<![\\d.,])(?:1[89]\\d\\d|20\\d\\d|21\\d\\d|1[23]\\d\\d|14[0-9]\\d)"\n'
-     '    r"(?!\\d|[.,]\\d)")',
-     '    r"(?<![\\d.,])(?:\\d\\d\\d\\d)"\n'
-     '    r"(?!\\d|[.,]\\d)")'),
-    (LIB, "the year mask drops its leading guard and matches inside numbers",
-     '    r"(?<![\\d.,])(?:1[89]\\d\\d|20\\d\\d|21\\d\\d|1[23]\\d\\d|14[0-9]\\d)"\n'
-     '    r"(?!\\d|[.,]\\d)")',
-     '    r"(?:1[89]\\d\\d|20\\d\\d|21\\d\\d|1[23]\\d\\d|14[0-9]\\d)"\n'
-     '    r"(?!\\d|[.,]\\d)")'),
-    (LIB, "the year placeholder is itself a number",
-     '    return _YEAR_RE.sub("<YEAR>", text)',
-     '    return _YEAR_RE.sub("2000", text)'),
+    (NORM, "years are no longer masked before verification",
+     '    return _YEAR_ANY_SCRIPT_RE.sub("<YEAR>", text)',
+     "    return text"),
+    (NORM, "the year mask reverts to rejecting a trailing comma",
+     '    "(?![%(d)s]|[%(s)s][%(d)s])"',
+     '    "(?![%(d)s%(s)s])"'),
+    (NORM, "the year mask swallows any four-digit number",
+     '    "(?:%(one)s%(23)s%(any)s%(any)s"\n'
+     '    "|%(one)s%(4)s%(any)s%(any)s"\n'
+     '    "|%(one)s%(89)s%(any)s%(any)s"\n'
+     '    "|%(two)s%(01)s%(any)s%(any)s)"',
+     '    "(?:%(any)s%(any)s%(any)s%(any)s)"'),
+    (NORM, "the year mask drops its leading guard and matches inside numbers",
+     '    "(?<![%(d)s%(s)s])"\n',
+     '    ""\n'),
+    (NORM, "the year placeholder is itself a number",
+     '    return _YEAR_ANY_SCRIPT_RE.sub("<YEAR>", text)',
+     '    return _YEAR_ANY_SCRIPT_RE.sub("2000", text)'),
+
+    # -- DEFECT 5: markers and Persian-digit years graded as magnitudes ------
+    # MEASURED 2026-09-05 on the user's real 52-case run: 8 of 12 graded RAG
+    # claims were checked against a citation marker or a year rather than a
+    # magnitude, e.g. "claimed 2 does not appear in the evidence; nearest is
+    # 1.69148e+11". citation_correctness 25.0 / unsupported_claim_rate 75.0
+    # were BOTH artefacts, while the answers were right.
+    (NORM, "citation markers are no longer masked, so [2] is graded as 2",
+     '    text = _CITATION_MARKER_RE.sub("<CIT>", text)',
+     "    text = text"),
+    (NORM, "the marker mask widens and eats a bracketed magnitude",
+     '_CITATION_MARKER_RE = re.compile(r"\\[\\s*[%s]{1,2}\\s*\\]" % _D)',
+     '_CITATION_MARKER_RE = re.compile(r"\\[[^\\]]*\\]")'),
+    (NORM, "the digit class loses Persian digits, so a Persian year survives",
+     '_D = "0-9\\u0660-\\u0669\\u06f0-\\u06f9"',
+     '_D = "0-9"'),
+    (NORM, "_dig writes ASCII literals only, the exact bug the probe caught",
+     "    chars = []\n"
+     "    for n in wanted:\n"
+     "        chars.append(str(n))\n"
+     "        chars.append(chr(0x0660 + n))\n"
+     "        chars.append(chr(0x06f0 + n))",
+     "    chars = []\n"
+     "    for n in wanted:\n"
+     "        chars.append(str(n))"),
+    # DELETED, NOT KILLED: "markers are masked AFTER years". This mutant
+    # SURVIVED, and probing showed it survived because it is genuinely
+    # EQUIVALENT -- the bracket guards stop the two patterns overlapping, so
+    # both orders give identical output on every case tried, including
+    # '[2023]', '[20]' and the Persian 'مطابق [۲] در سال ۱۴۰۲'. My comment in
+    # normalize.py had claimed the order was critical; the comment was wrong
+    # and has been corrected. Adding an assertion to pin an ordering that does
+    # not matter would have been a test written to flatter the battery.
+    (NORM, "mask_non_quantities coerces a non-string instead of refusing it",
+     "    if not isinstance(text, str):\n"
+     '        raise TypeError("mask_non_quantities expects str or None, got %s"\n'
+     "                        % type(text).__name__)",
+     "    if not isinstance(text, str):\n"
+     "        text = str(text)"),
     (LIB, "mask_years coerces a non-string instead of refusing it",
      "    if not isinstance(text, str):\n"
      '        raise TypeError("mask_years expects str or None, got %s"\n'
@@ -1297,6 +1365,60 @@ MUTATIONS = [
     (EVAL, "the rationale for the widening is deleted",
      'no working fails.", "tolerance_rationale"',
      'no working fails.", "tolerance_rationale_removed"'),
+
+    # -- DEFECT 6: the API path sent raw ChatML as one user message ----------
+    # MEASURED 2026-09-05 (D-0093). RemoteRunner handed the whole rendered
+    # ChatML string to clients.chat, which sent it as a single user message.
+    # A remote provider wraps that in its OWN template, so the system prompt
+    # was body text and the pre-closed <think> prefill was inert -- while the
+    # run still produced a full set of plausible answers.
+    (RUN, "the remote path stops sending structured turns",
+     '        turns = prompt.turns() if hasattr(prompt, "turns") else None',
+     "        turns = None"),
+    (RUN, "the remote path stops sending the local seed",
+     "                           seed=self.seed,\n"
+     "                           stop=self.stop)",
+     "                           seed=None,\n"
+     "                           stop=self.stop)"),
+    (RUN, "the remote path stops sending the local stop tokens",
+     "                           seed=self.seed,\n"
+     "                           stop=self.stop)",
+     "                           seed=self.seed,\n"
+     "                           stop=None)"),
+    (RUN, "the remote seed stops matching the local run's seed",
+     "        self.seed = DEFAULT_SEED",
+     "        self.seed = 1234"),
+    (RUN, "the prefill turn is dropped from the remote turns",
+     "        pre = (self.prefill or \"\").rstrip()\n"
+     "        if pre:\n"
+     '            out.append({"role": "assistant", "content": pre})',
+     "        pre = (self.prefill or \"\").rstrip()\n"
+     "        if False:\n"
+     '            out.append({"role": "assistant", "content": pre})'),
+    (RUN, "the prefill is sent as a USER turn, so it is not a prefill at all",
+     '            out.append({"role": "assistant", "content": pre})',
+     '            out.append({"role": "user", "content": pre})'),
+    (RUN, "the system turn is demoted to a user turn",
+     '        out = [{"role": "system", "content": self.system},',
+     '        out = [{"role": "user", "content": self.system},'),
+    (RUN, "the prefill turn keeps trailing whitespace providers reject",
+     '        pre = (self.prefill or "").rstrip()',
+     '        pre = (self.prefill or "")'),
+    (RUN, "a Prompt stops being byte-identical to the local rendering",
+     "def _prompt(system, user):\n"
+     '    """Render with the prefill, keeping the parts for the remote path."""\n'
+     "    return Prompt(chatml_prompt_no_think(system, user), system, user)",
+     "def _prompt(system, user):\n"
+     '    """Render with the prefill, keeping the parts for the remote path."""\n'
+     "    return Prompt(chatml_prompt(system, user), system, user)"),
+    (RUN, "the structured-call counter stops counting, hiding a flat run",
+     "        if turns is not None:\n"
+     "            self.structured_calls += 1",
+     "        if turns is not None:\n"
+     "            self.structured_calls += 0"),
+    (RUN, "--provider silently defaults to a remote provider",
+     '    ap.add_argument("--provider", default="local",',
+     '    ap.add_argument("--provider", default="groq",'),
 ]
 
 

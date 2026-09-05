@@ -488,6 +488,17 @@ class RemoteRunner(object):
         self.http_attempts = 0
         self.tokens_in = 0
         self.tokens_out = 0
+        # Counted so the report can prove the structured-turn path was actually
+        # taken. A count of 0 alongside a full set of answers means every
+        # prompt went out as one undifferentiated user message -- the D-0093
+        # defect -- and the run is NOT comparable with the local one.
+        self.structured_calls = 0
+        # The local run is greedy and seeded (DEFAULT_SEED). Sending the same
+        # values is what makes a remote arm comparable rather than merely
+        # similar. Recorded on the instance so the payload can state what was
+        # sent instead of what was intended.
+        self.seed = DEFAULT_SEED
+        self.stop = list(STOP_TOKENS)
         # Validate the credential and the endpoint NOW, before any arm starts.
         # MEASURED cost of not doing this: the local 52-case run takes hours, so
         # discovering a bad key at case 1 of arm 3 wastes everything before it.
@@ -508,11 +519,29 @@ class RemoteRunner(object):
         self.calls += 1
         n = max_tokens or self.max_tokens
         t0 = time.time()
+
+        # SEND STRUCTURED TURNS WHEN THE PROMPT CARRIES THEM (D-0093).
+        #
+        # A remote provider builds its own ChatML from role-tagged turns. Handing
+        # it our pre-rendered ChatML as a single user message MEASURED as: the
+        # system instruction demoted to body text, and the pre-closed <think>
+        # prefill -- the fix that took silence from 20/52 to 0/52 locally --
+        # inert. Both failures are invisible in the output.
+        #
+        # `turns` is passed only when available, so a plain string prompt (the
+        # probe calls in measure_latency, and any caller predating Prompt) keeps
+        # the previous behaviour rather than crashing on a missing attribute.
+        turns = prompt.turns() if hasattr(prompt, "turns") else None
+        if turns is not None:
+            self.structured_calls += 1
         res = self._c.chat(self.provider, prompt, n,
                            model_id=self.model_id,
                            base_url=self.base_url,
                            timeout=self.timeout,
-                           allow_paid=self.allow_paid)
+                           allow_paid=self.allow_paid,
+                           turns=turns,
+                           seed=self.seed,
+                           stop=self.stop)
         elapsed = time.time() - t0
         text = res["text"]
         self.http_attempts += res.get("attempts", 1)
@@ -544,6 +573,12 @@ class RemoteRunner(object):
             "model_id": self.model_id,
             "http_attempts": res.get("attempts", 1),
             "finish_reason": res.get("finish_reason"),
+            # Whether THIS call carried role-tagged turns and the prefill, or
+            # went out as one flat user message. Recorded per row, because a
+            # mixed run would otherwise average into something meaningless.
+            "structured_turns": turns is not None,
+            "prefill_sent": bool(
+                turns and turns[-1].get("role") == "assistant"),
         }
 
 
@@ -636,8 +671,69 @@ SYSTEM_RAG = SYSTEM_BASE + (
 # this change therefore checks the PRODUCTION BUILDERS' output, not the helper's
 # -- a test of the helper was exactly what failed to catch this.
 
+# A PROMPT CARRIES ITS OWN PARTS, SO A REMOTE PROVIDER CAN BE SENT REAL TURNS.
+#
+# DEFECT MEASURED 2026-09-05 (D-0093), while verifying the API support the user
+# asked to have available for subsequent tests. RemoteRunner passed the whole
+# ChatML string to clients.chat, which sent it as ONE user message:
+#
+#     "messages": [{"role": "user",
+#                   "content": "<|im_start|>system\nYou are a bilingual..."}]
+#
+# A remote provider then applies its OWN chat template around that. So over the
+# API the system instruction was not a system instruction, and the pre-closed
+# <think> prefill -- the D-0091 fix that took silence from 20 of 52 answers to
+# 0 of 52 -- arrived as literal body text and did nothing at all. The run would
+# still have completed and produced numbers.
+#
+# WHY A str SUBCLASS AND NOT A NEW RETURN TYPE: the local path, ModelRunner,
+# llama-cpp, every existing assertion and the recorded evidence all consume
+# these builders' output AS A STRING. Changing the return type would touch the
+# one path the user instructed must not change ("مدل محلی حتماً باید باقی
+# بماند"). A str subclass IS the string -- byte-for-byte identical, equal to
+# it, hashable as it -- and merely carries the parts alongside for the caller
+# that needs them.
+class Prompt(str):
+    """The rendered ChatML string, plus the turns it was rendered from."""
+
+    __slots__ = ("system", "user", "prefill")
+
+    def __new__(cls, rendered, system, user, prefill=FORCED_CLOSED_THINK):
+        obj = str.__new__(cls, rendered)
+        obj.system = system
+        obj.user = user
+        obj.prefill = prefill
+        return obj
+
+    def turns(self):
+        """
+        The same content as provider-neutral chat turns.
+
+        The trailing ASSISTANT turn is the prefill. On the OpenAI and Anthropic
+        dialects a trailing assistant message is a genuine prefill the model
+        continues from, which is exactly what the local ChatML prefill does --
+        so the mechanism that fixed silence locally is the mechanism used
+        remotely, rather than a different one that merely resembles it.
+        """
+        out = [{"role": "system", "content": self.system},
+               {"role": "user", "content": self.user}]
+        # Trailing whitespace is stripped ONLY for the remote turn: several
+        # providers reject an assistant message ending in whitespace, while
+        # llama-cpp needs the exact "\n\n" the local template produces. The
+        # local string is untouched -- self is still byte-identical.
+        pre = (self.prefill or "").rstrip()
+        if pre:
+            out.append({"role": "assistant", "content": pre})
+        return out
+
+
+def _prompt(system, user):
+    """Render with the prefill, keeping the parts for the remote path."""
+    return Prompt(chatml_prompt_no_think(system, user), system, user)
+
+
 def build_plain_prompt(question):
-    return chatml_prompt_no_think(SYSTEM_BASE, "Question: %s" % question)
+    return _prompt(SYSTEM_BASE, "Question: %s" % question)
 
 
 def build_tools_prompt(question, schemas):
@@ -647,8 +743,8 @@ def build_tools_prompt(question, schemas):
         req = ", ".join(fn.get("parameters", {}).get("required", []))
         lines.append("- %s(%s): %s" % (fn.get("name"), req,
                                        fn.get("description", "")))
-    return chatml_prompt_no_think(SYSTEM_TOOLS + "\n".join(lines),
-                                  "Question: %s" % question)
+    return _prompt(SYSTEM_TOOLS + "\n".join(lines),
+                   "Question: %s" % question)
 
 
 def build_rag_prompt(question, passages):
@@ -700,7 +796,7 @@ def build_rag_prompt(question, passages):
                          ps.text))
         else:
             ev.append("[%d] (%s) %s" % (i, ps.provenance.citation(), ps.text))
-    return chatml_prompt_no_think(
+    return _prompt(
         SYSTEM_RAG,
         "Evidence:\n%s\n\nQuestion: %s"
         % ("\n".join(ev) if ev else "(no evidence retrieved)", question))
@@ -1565,6 +1661,26 @@ def main(argv=None):
             # NOT a quota. No provider's limits are recorded as fact anywhere in
             # this project, because published figures contradict each other.
             "quota_recorded": None,
+            # HOW MANY CALLS CARRIED ROLE-TAGGED TURNS AND THE PREFILL (D-0093).
+            #
+            # This number is the difference between a remote arm that is
+            # comparable with the local one and a remote arm that merely looks
+            # like it. MEASURED before the fix: every prompt went out as ONE
+            # user message containing raw ChatML, so the system instruction was
+            # body text and the pre-closed <think> prefill -- the change that
+            # took silence from 20 of 52 to 0 of 52 locally -- was inert.
+            #
+            # A remote run whose structured_calls is 0, or fewer than its case
+            # count, must NOT be compared against the local numbers.
+            "structured_calls": (getattr(runner, "structured_calls", None)
+                                 if remote else None),
+            "seed_sent": getattr(runner, "seed", None) if remote else None,
+            "stop_sent": getattr(runner, "stop", None) if remote else None,
+            # Anthropic has NO seed parameter, so a seed cannot apply there
+            # however it is sent. Stated rather than left for the reader to
+            # infer from an unchanged number.
+            "seed_supported_by_wire": (
+                prov_spec["wire"] != "anthropic" if remote else None),
         },
         "model": {"file": os.path.basename(a.model) if a.model else None,
                   "size_gib": model_size_gib,

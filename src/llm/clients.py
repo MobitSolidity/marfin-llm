@@ -64,7 +64,7 @@ import re
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from .providers import ProviderError, get_api_key, get_provider, redact, resolve_base_url
 
@@ -269,13 +269,38 @@ def _error_text(resp: Dict[str, Any], key: Optional[str]) -> str:
 
 def _openai_request(base_url: str, key: Optional[str], model_id: str,
                     prompt: str, max_tokens: int, temperature: float,
-                    token_field: str) -> Dict[str, Any]:
+                    token_field: str,
+                    turns: Optional[Sequence[Dict[str, str]]] = None,
+                    seed: Optional[int] = None,
+                    stop: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    """
+    Build one chat-completions request.
+
+    `turns`, `seed` and `stop` added 2026-09-05 (D-0093). Without them the
+    caller's whole ChatML string went out as ONE user message, MEASURED:
+
+        "messages": [{"role": "user",
+                      "content": "<|im_start|>system\\nYou are a bilingual..."}]
+
+    A remote provider applies its OWN chat template to that, so the system
+    instruction was not a system instruction and the pre-closed <think> prefill
+    -- the D-0091 fix that eliminated silence in all 52 local cases -- arrived
+    as literal body text and did nothing. The result would still have looked
+    like a valid run.
+    """
     payload = {
         "model": model_id,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": (list(turns) if turns
+                     else [{"role": "user", "content": prompt}]),
         token_field: int(max_tokens),
         "temperature": float(temperature),
     }
+    # Sent only when supplied, so a provider that rejects an unknown field is
+    # not broken by a key it never asked for.
+    if seed is not None:
+        payload["seed"] = int(seed)
+    if stop:
+        payload["stop"] = list(stop)
     headers = {}
     if key:
         headers["Authorization"] = "Bearer " + key
@@ -315,13 +340,40 @@ def _openai_parse(js: Any) -> Dict[str, Any]:
 
 def _anthropic_request(base_url: str, key: Optional[str], model_id: str,
                        prompt: str, max_tokens: int,
-                       temperature: float) -> Dict[str, Any]:
+                       temperature: float,
+                       turns: Optional[Sequence[Dict[str, str]]] = None,
+                       seed: Optional[int] = None,
+                       stop: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    """
+    Build one Anthropic messages request.
+
+    Structural note for D-0093: this API takes `system` as a TOP-LEVEL field,
+    not as a messages entry, and it accepts a trailing assistant turn as a
+    genuine prefill the model continues. So the ChatML prefill translates
+    natively here -- but only if the turns are handed over separately, which is
+    why `turns` exists.
+
+    `seed` is accepted and DELIBERATELY DROPPED: this API has no seed
+    parameter. Silently sending one would be rejected by the provider; silently
+    pretending it applied would be worse, so the run report records what was
+    actually sent, not what was asked for.
+    """
+    msgs = [{"role": "user", "content": prompt}]
+    system_text = None
+    if turns:
+        msgs = [t for t in turns if t.get("role") != "system"]
+        sys_turns = [t["content"] for t in turns if t.get("role") == "system"]
+        system_text = "\n\n".join(sys_turns) if sys_turns else None
     payload = {
         "model": model_id,
         "max_tokens": int(max_tokens),       # required by this API, not optional
         "temperature": float(temperature),
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": msgs,
     }
+    if system_text:
+        payload["system"] = system_text
+    if stop:
+        payload["stop_sequences"] = list(stop)
     headers = {"anthropic-version": "2023-06-01"}
     if key:
         headers["x-api-key"] = key           # NOT an Authorization bearer
@@ -356,12 +408,42 @@ def _anthropic_parse(js: Any) -> Dict[str, Any]:
 
 def _google_request(base_url: str, key: Optional[str], model_id: str,
                     prompt: str, max_tokens: int,
-                    temperature: float) -> Dict[str, Any]:
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": int(max_tokens),
-                             "temperature": float(temperature)},
-    }
+                    temperature: float,
+                    turns: Optional[Sequence[Dict[str, str]]] = None,
+                    seed: Optional[int] = None,
+                    stop: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    """
+    Build one Gemini generateContent request.
+
+    Structural notes for D-0093: the system instruction is a separate
+    `systemInstruction` object, and the assistant role is spelled "model", not
+    "assistant". Mapping the role is not cosmetic -- an unrecognised role is
+    rejected outright, so a prefill turn sent as "assistant" would fail the
+    whole run rather than degrade quietly.
+    """
+    contents = [{"role": "user", "parts": [{"text": prompt}]}]
+    system_instruction = None
+    if turns:
+        contents = []
+        sys_turns = []
+        for t in turns:
+            role = t.get("role")
+            if role == "system":
+                sys_turns.append(t["content"])
+                continue
+            contents.append({"role": "model" if role == "assistant" else "user",
+                             "parts": [{"text": t["content"]}]})
+        if sys_turns:
+            system_instruction = {"parts": [{"text": "\n\n".join(sys_turns)}]}
+    gen: Dict[str, Any] = {"maxOutputTokens": int(max_tokens),
+                           "temperature": float(temperature)}
+    if seed is not None:
+        gen["seed"] = int(seed)
+    if stop:
+        gen["stopSequences"] = list(stop)
+    payload: Dict[str, Any] = {"contents": contents, "generationConfig": gen}
+    if system_instruction:
+        payload["systemInstruction"] = system_instruction
     headers = {}
     if key:
         # The key goes in a HEADER, never in the query string. `?key=` would be
@@ -414,7 +496,10 @@ def chat(provider: str, prompt: str, max_tokens: int,
          timeout: float = DEFAULT_TIMEOUT_S,
          retries: int = DEFAULT_RETRIES,
          allow_paid: bool = False,
-         opener: Optional[Any] = None) -> Dict[str, Any]:
+         opener: Optional[Any] = None,
+         turns: Optional[Sequence[Dict[str, str]]] = None,
+         seed: Optional[int] = None,
+         stop: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """
     One completion from a remote provider.
 
@@ -479,13 +564,16 @@ def chat(provider: str, prompt: str, max_tokens: int,
         attempts += 1
         if wire == "openai":
             built = _openai_request(url_base, key, model_id, prompt,
-                                    max_tokens, temperature, token_field)
+                                    max_tokens, temperature, token_field,
+                                    turns=turns, seed=seed, stop=stop)
         elif wire == "anthropic":
             built = _anthropic_request(url_base, key, model_id, prompt,
-                                       max_tokens, temperature)
+                                       max_tokens, temperature,
+                                       turns=turns, seed=seed, stop=stop)
         elif wire == "google":
             built = _google_request(url_base, key, model_id, prompt,
-                                    max_tokens, temperature)
+                                    max_tokens, temperature,
+                                    turns=turns, seed=seed, stop=stop)
         else:                                            # pragma: no cover
             raise ProviderError("unsupported wire dialect %r" % wire)
 
