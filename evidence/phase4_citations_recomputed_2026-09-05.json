@@ -1,0 +1,111 @@
+{
+  "label": "RECOMPUTED_FROM_RECORDED_OUTPUT",
+  "computed_by": "scripts/regrade_citations.py",
+  "run_file": "phase4_merged_2026-09-03.json",
+  "model_re_run": false,
+  "grader_fix": "D-0092",
+  "top_k": 4,
+  "rows": [
+    {
+      "id": "RAG-EN-001",
+      "old": "CONTRADICTED",
+      "new": "CONTRADICTED",
+      "n_claims": 2,
+      "per_claim": [
+        "SUPPORTED",
+        "CONTRADICTED"
+      ]
+    },
+    {
+      "id": "RAG-EN-002",
+      "old": "NOT_CHECKED",
+      "new": "NOT_CHECKED",
+      "n_claims": 0,
+      "per_claim": []
+    },
+    {
+      "id": "RAG-EN-003",
+      "old": "NOT_CHECKED",
+      "new": "NOT_CHECKED",
+      "n_claims": 0,
+      "per_claim": []
+    },
+    {
+      "id": "RAG-EN-004",
+      "old": "UNSUPPORTED",
+      "new": "UNSUPPORTED",
+      "n_claims": 1,
+      "per_claim": [
+        "UNSUPPORTED"
+      ]
+    },
+    {
+      "id": "RAG-EN-005",
+      "old": "CONTRADICTED",
+      "new": "CONTRADICTED",
+      "n_claims": 2,
+      "per_claim": [
+        "SUPPORTED",
+        "CONTRADICTED"
+      ]
+    },
+    {
+      "id": "RAG-FA-001",
+      "old": "CONTRADICTED",
+      "new": "SUPPORTED",
+      "n_claims": 1,
+      "per_claim": [
+        "SUPPORTED"
+      ]
+    },
+    {
+      "id": "RAG-FA-002",
+      "old": "CONTRADICTED",
+      "new": "SUPPORTED",
+      "n_claims": 1,
+      "per_claim": [
+        "SUPPORTED"
+      ]
+    },
+    {
+      "id": "RAG-ABST-001",
+      "old": "CONTRADICTED",
+      "new": "CONTRADICTED",
+      "n_claims": 3,
+      "per_claim": [
+        "SUPPORTED",
+        "CONTRADICTED",
+        "CONTRADICTED"
+      ]
+    },
+    {
+      "id": "RAG-ABST-002",
+      "old": "NOT_CHECKED",
+      "new": "NOT_CHECKED",
+      "n_claims": 0,
+      "per_claim": []
+    },
+    {
+      "id": "RAG-ABST-003",
+      "old": "CONTRADICTED",
+      "new": "SUPPORTED",
+      "n_claims": 1,
+      "per_claim": [
+        "SUPPORTED"
+      ]
+    }
+  ],
+  "summary": {
+    "answers_checked": 7,
+    "answers_supported": 3,
+    "citation_correctness_pct": 42.86,
+    "claims_checked": 11,
+    "claims_not_supported": 5,
+    "unsupported_claim_rate_pct": 45.45
+  },
+  "as_recorded_by_defective_grader": {
+    "rag.citation_correctness_pct": 25.0,
+    "rag.unsupported_claim_rate_pct": 75.0
+  },
+  "scope_limit": "ONLY the two citation metrics are recomputed. Decode rate, TTFT, RSS, abstention and fabrication are properties of the run and are left as recorded, including their FAILs."
+}

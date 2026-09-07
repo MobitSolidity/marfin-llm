@@ -4608,3 +4608,169 @@ run; this is the third time that has mattered.
 4. **No free-tier key has been validated.** `get_api_key` refused my
    16-character dummy as malformed, which is correct behaviour; whether the
    user's real key works can only be known by using it.
+
+
+## D-0094 — Phase 4 graded, recorded, and answered: FAIL, and the reason is the hardware
+
+**Date:** 2026-09-05 · **Status:** RECORDED · **Authorised by:** explicit user
+instruction — «هر ۳ را به ترتیب و دقیق و حرفه‌ای انجام بده»
+
+This is the gate action the project has been holding open since 2026-08-10.
+Three things were asked for, in order, and all three are done.
+
+### 1. The 52-case run graded against the 13 approved thresholds
+
+`merge_phase4.py` deliberately refuses to compute threshold verdicts, and its
+reason is written into the file it produces: *"Verdicts in a per-arm file were
+computed over that arm only... Grade the merged summaries deliberately; do not
+inherit a subset's verdict."* That refusal is right, and it left a gap somebody
+had to fill. It is now filled by **`scripts/grade_merged.py`** rather than by a
+hand-written verdict in a chat message, so it can be re-run whenever a grader
+changes — and one changed the same week.
+
+**VERDICT: FAIL — 3 PASS, 7 FAIL, 2 UNMEASURED.**
+
+| threshold | observed | required | verdict |
+|---|---|---|---|
+| `generation_tokens_per_sec_min` | 4.28 / 4.36 / 4.47 | ≥ 8 | **FAIL** |
+| `time_to_first_token_2k_sec_max` | 49.6 / 49.1 / 48.1 s | ≤ 3.0 | **FAIL** |
+| `deterministic_calc_correctness_pct_min` | 25.0 | ≥ 100 | **FAIL** |
+| `correct_abstention_pct_min` | 66.67 | ≥ 90 | **FAIL** |
+| `fabricated_financial_data_count_max` | 2 | ≤ 0 | **FAIL** |
+| `citation_correctness_pct_min` | 42.86 † | ≥ 95 | **FAIL** |
+| `unsupported_claim_rate_pct_max` | 45.45 † | ≤ 3 | **FAIL** |
+| `model_file_size_gib_max` | 2.928 | ≤ 4.0 | PASS |
+| `peak_rss_8k_gib_max` | 3.815 | ≤ 6.0 | PASS |
+| `tool_call_schema_validity_pct_min` | 100.0 | ≥ 98 | PASS |
+| `paper_live_confusion_count_max` | — | ≤ 0 | **UNMEASURED** |
+| `persian_fluency_regression_pct_max` | — | ≤ 2 | **UNMEASURED** |
+
+† recomputed after D-0092 — see below.
+
+**Three rules make this verdict honest, and each is asserted:**
+
+1. **An absent metric is UNMEASURED, never PASS.** An unmeasured requirement is
+   not a met requirement. If a missing number read as green, a harness that
+   stopped emitting a metric would *improve* the verdict.
+2. **The worst arm decides.** A bilingual analyst that fails on Persian is not
+   two-thirds acceptable. The mean of the abstention figures would have read
+   87.9 % where the worst arm reads 66.67 %.
+3. **A single FAIL is an overall FAIL.** The thresholds were pre-committed on
+   2026-08-10; softening the aggregation after seeing the numbers would make a
+   pre-registration into decoration.
+
+**One temptation refused explicitly.** An earlier *per-arm* file carried a PASS
+for `paper_live_confusion_count_max`, and I reported that PASS in an earlier
+summary. It was not adopted here: `merge_phase4.py` refuses to inherit per-arm
+verdicts, and adopting one would be exactly the error it warns about.
+`persian_fluency_regression_pct` was never computable at all — there is no
+Persian baseline to regress against, and `fa_not_in_persian = 0` is a different
+measurement wearing a similar name.
+
+**The citation metrics were recomputed, and that is a correction, not a
+softening.** The recorded 25.0 / 75.0 came from the verifier that D-0092 fixed;
+8 of 12 claims had been graded against a citation marker or a year. So
+`scripts/regrade_citations.py` re-verifies the **recorded answer text**, byte
+for byte, against the passages the model actually saw — rebuilt with the
+runner's own `build_index`. Corrected: **42.86 %** and **45.45 %**. Both still
+**FAIL**. The output is labelled `RECOMPUTED_FROM_RECORDED_OUTPUT`, never
+MEASURED, and the override is restricted to those two keys: decode, TTFT, RSS,
+abstention and fabrication are properties of the run and are graded as
+recorded, FAILs included. Widening that override would be laundering.
+
+### 2. R47 — ACCEPTED AS RECORDED, and the arithmetic proves it cannot matter
+
+The residual defect (the model quoting an evidence row whose scale word
+*precedes* its number) stays unfixed, and the reason is now measured rather
+than argued:
+
+- 7 checkable answers → `citation_correctness_pct_min = 95` is satisfiable
+  **only by 7 of 7**, because 6 of 7 is 85.71 %.
+- 11 verifiable claims → `unsupported_claim_rate_pct_max = 3` is satisfiable
+  **only by 0 of 11**, because 1 of 11 is 9.09 %.
+
+So even a perfect R47 fix leaves both thresholds failing unless *every* claim
+verifies. Meanwhile, accepting a leading scale word would make the grader
+accept the real 10⁶ error — the one thing `src/rag/citations.py` exists to
+catch. Fixing it would risk the measurement and could not change the outcome.
+
+**That computation surfaced a separate finding, filed as R49:** those two
+thresholds are **all-or-nothing at the current eval size**. They were approved
+against an eval set small enough that they cannot be met by a
+good-but-imperfect system. The honest response is *not* to relax them — that
+would be rewriting a pre-registration after seeing the result — but to record
+plainly that at n=7/11 they are pass-at-perfection gates, and to decide before
+Phase 5 whether the eval set should grow.
+
+### 3. Q8 — answered (b), and NOT because (b) passes
+
+The question was: (a) fall back to a 1.7B model, (b) accept the speed and lean
+on RAG, or (c) re-quantize lower.
+
+**COMPUTED** from the MEASURED 4.28–4.47 tok/s and 48.1–49.6 s TTFT at 1963
+prompt tokens, scaled by active-parameter ratio (CPU decode is roughly
+inverse-linear in active params; prefill is compute-bound):
+
+| option | decode | TTFT |
+|---|---|---|
+| (a) 1.7B | ~10.1–10.5 → **PASS** | ~20.4–21.1 s → **FAIL** |
+| (a) 0.6B | ~28.5–29.8 → PASS | ~7.2–7.4 s → **STILL FAIL** |
+| (c) Q4_K_M | ~5.2–5.5 → **FAIL** | barely moves |
+
+**The 3.0 s TTFT threshold is unreachable on this hardware by any of the three
+options.** Even a 0.6B model misses it by 2.4×. So Q8 was never a choice
+between passing configurations — it is a choice about **what to keep while
+failing**.
+
+(b) is chosen because it keeps what the run *proved*: RAG at 71.43 % with **0
+model failures** and 100 % retrieval, tool schema validity at 100 %, and
+silence eliminated across all 52 cases. Option (a) would trade exactly that
+capability for a decode gain that still fails TTFT — paying in the only
+dimension that PASSED to buy an improvement in one that still FAILS. Option (c)
+spends arithmetic and citation accuracy for a number that also fails.
+
+**What (b) commits to, and this is the part that must not be softened later:**
+48–50 s to first token means this is a **batch/analysis tool on this hardware,
+not a chat assistant**. No document may describe it otherwise. The API path
+(D-0093) exists as an *addition* for cases where latency matters, with the
+local model remaining the default.
+
+**What would change it:** a GPU, or a machine with roughly 16× faster prefill.
+That is a **hardware decision, not a model-selection one**, and it is the
+honest conclusion of Phase 4.
+
+### What the run DID establish, and it is not small
+
+The verdict is FAIL, and the same run also proved four things:
+
+- **Silence is gone.** `empty_output 0`, `had_thinking 0`,
+  `thinking_truncated 0` across all 52 cases in all three arms, against 20 of
+  52 answers lost on 2026-08-30.
+- **512 tokens is enough.** 0 truncations, vindicating the cut from 2048.
+- **RAG works.** 100 % retrieval, 71.43 % correct, **0** model failures — up
+  from 1 of 7 with 5 MODEL_FAILUREs.
+- **Tool routing is sound.** 100 % schema validity, 0 malformed, and 100 %
+  correctness whenever a tool was actually used.
+
+The `deterministic_calc 25.0` FAIL is a denominator story worth stating
+precisely: `deterministic_calc_with_tool_correctness_pct` is **100.0** with
+`tool_assisted_n 8` and `prose_only_n 2`. What fails is the model's prose
+restatement of a figure the tool already computed correctly.
+
+### Provenance protected against R40
+
+The run file now lives in the repository as
+`evidence/phase4_merged_2026-09-03.json`, sha256
+`a0a625a2...c95e93f`, identical to the upload. It was held only in `/tmp`
+before, and `/tmp` was wiped by a sandbox reset earlier the same day. A
+measurement whose evidence file can vanish is not recorded.
+
+### Coverage
+
+47 new assertions (`test_phase4_harness` 824 → 871) and 11 new mutants across
+both graders, which became mutation targets the same day their output became
+the phase record. The assertions pin the recorded verdict itself: if
+`OVERALL: FAIL` ever stops holding for that file, either the run or the grader
+changed and the record is stale. They also pin that recording a measurement
+did **not** enable live trading, change the active mode, or quietly loosen any
+of the 13 thresholds it failed against.

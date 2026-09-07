@@ -204,7 +204,8 @@
     "D-0090",
     "D-0091",
     "D-0092",
-    "D-0093"
+    "D-0093",
+    "D-0094"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -356,7 +357,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0093",
+  "decisions_logged": "D-0001..D-0094",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -424,7 +425,10 @@
       "severity": "MEDIUM",
       "title": "the citation grader cannot read a scale word that PRECEDES its number",
       "detail": "MEASURED 2026-09-05 after D-0092: 3 of the 10 rag answers are still CONTRADICTED, and none is a marker or a year. All three are the model quoting an evidence row verbatim, e.g. '\"[figures in million] Total net sales | 383,285\"'. _CLAIM_SCALE_RE only inspects the tail AFTER a number, so the quoted row reads as a bare 383,285 against a million-scaled passage -- the 10^6 error. 6 residual small values are date components (June 30, -> 30; (2023-11-03) -> -11, -3).",
-      "mitigation": "NOT FIXED DELIBERATELY. Accepting a LEADING scale word would also make the grader accept the real 10^6 error, which is the one thing src/rag/citations.py exists to catch. Over-fitting a grader to its own corpus is how a FAIL becomes a PASS. Needs a user decision, and any fix must keep the negative controls green."
+      "mitigation": "NOT FIXED DELIBERATELY. Accepting a LEADING scale word would also make the grader accept the real 10^6 error, which is the one thing src/rag/citations.py exists to catch. Over-fitting a grader to its own corpus is how a FAIL becomes a PASS. Needs a user decision, and any fix must keep the negative controls green.",
+      "decision_2026_09_05": "ACCEPTED AS RECORDED -- not fixed",
+      "why": "Fixing it cannot change the verdict, and MEASURED arithmetic proves it: with only 7 checkable answers and 11 claims, citation_correctness_pct_min=95 requires 7 of 7 SUPPORTED, and unsupported_claim_rate_pct_max=3 requires 0 of 11 bad claims -- one bad claim out of 11 is already 9.09%. So even a perfect R47 fix leaves both thresholds FAILING unless every single claim verifies. Meanwhile, accepting a LEADING scale word would make the grader accept the real 10^6 error, which is the one thing src/rag/citations.py exists to catch.",
+      "separate_finding": "THE EVAL SET IS TOO SMALL FOR THESE THRESHOLDS. A 95% floor over 7 items and a 3% ceiling over 11 claims are both all-or-nothing gates: they cannot be met by a good-but-imperfect system, and a single defect makes them unmeetable. Filed as R49."
     },
     {
       "id": "R48",
@@ -432,6 +436,13 @@
       "title": "a remote arm is not reproducible on every dialect",
       "detail": "MEASURED: the Anthropic messages API has no seed parameter, so a remote run on that wire cannot be seed-reproducible the way the local run is (DEFAULT_SEED=20260831). Recorded as seed_supported_by_wire=false rather than faked.",
       "mitigation": "Prefer an openai-wire or google-wire free-tier provider (groq, cerebras, gemini) when reproducibility matters. Never present an anthropic-wire run as seed-reproducible."
+    },
+    {
+      "id": "R49",
+      "severity": "MEDIUM",
+      "title": "two approved thresholds are all-or-nothing at the current eval size",
+      "detail": "MEASURED 2026-09-05. The rag arm has 7 checkable answers and 11 verifiable claims. citation_correctness_pct_min = 95 is therefore satisfiable ONLY by 7/7 (6/7 = 85.71%), and unsupported_claim_rate_pct_max = 3 ONLY by 0/11 (1/11 = 9.09%). Both thresholds were approved on 2026-08-10 against an eval set whose size makes them binary.",
+      "mitigation": "Do NOT relax the thresholds -- they were pre-committed, and loosening them after seeing the numbers would turn a pre-registration into decoration. The honest options are to enlarge the eval set so the percentages have resolution, or to record explicitly that these two thresholds are pass/fail-at-perfection at n=7/11. Requires a user decision before Phase 5 relies on them."
     }
   ],
   "awaiting_approval_for": null,
@@ -750,7 +761,7 @@
   },
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
-    "status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
+    "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND",
     "execution_route": "A - user's own machine (i5-12400 / 16 GB / Windows 11)",
     "route_approved_by_user": "2026-08-16",
     "route_options_document": "docs/phase-reports/phase-4-execution-options.md",
@@ -774,7 +785,109 @@
       "project_wide_assertions": 2704,
       "eval_fixture_is_mutation_target": "NEW 2026-08-19 (D-0055). Until now every mutation edited code, on the tacit assumption that only code can be wrong. But tolerances decide PASS/FAIL and live in evals/bilingual_eval_v1.jsonl, so an unpinned number there could be quietly edited later to make an inconvenient result disappear with the suite still green. Six mutations now seed that drift in both directions, and each mutant was verified to remain valid JSONL so it is killed by an assertion rather than by a parse crash."
     },
-    "measurements_recorded": null,
+    "measurements_recorded": {
+      "label": "MEASURED",
+      "recorded_on": "2026-09-05",
+      "authorised_by": "explicit user instruction, 2026-09-05: 'do all 3 in order, precisely and professionally'",
+      "run_file": "evidence/phase4_merged_2026-09-03.json",
+      "run_sha256": "a0a625a2b153e28350b57fe1ba8843fd5e75ff3e82f27fc480e8080a1c95e93f",
+      "run_dates": [
+        "2026-09-03T16:02:26",
+        "2026-09-03T22:27:14",
+        "2026-09-03T22:49:46"
+      ],
+      "route": "A (user's own machine), three per-arm chunks",
+      "host": "Windows 11, Intel64 Family 6 Model 151 (i5-12400), Python 3.12.10",
+      "model": "Qwen3.5-4B-Q5_K_M.gguf, sha256 VERIFIED 8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+      "config": {
+        "ctx": 16384,
+        "threads": 6,
+        "max_tokens": 512,
+        "temperature": 0.0,
+        "seed": 20260831,
+        "greedy_applied": true
+      },
+      "cases": 52,
+      "verdict": "FAIL",
+      "verdict_counts": {
+        "pass": 3,
+        "fail": 7,
+        "unmeasured": 2
+      },
+      "verdict_file": "evidence/phase4_threshold_verdicts_2026-09-05.json",
+      "graded_by": "scripts/grade_merged.py",
+      "aggregation_rule": "the WORST arm decides each per-arm threshold; a single FAIL is an overall FAIL; UNMEASURED counts against, never as a pass",
+      "failing_thresholds": {
+        "generation_tokens_per_sec_min": {
+          "observed": [
+            4.28,
+            4.36,
+            4.47
+          ],
+          "required": ">= 8",
+          "note": "worst arm plain; this is the project's central finding"
+        },
+        "time_to_first_token_2k_sec_max": {
+          "observed": [
+            49.621,
+            49.082,
+            48.067
+          ],
+          "required": "<= 3.0",
+          "note": "measured at 1963 prompt tokens, inside the 2k window"
+        },
+        "deterministic_calc_correctness_pct_min": {
+          "observed": 25.0,
+          "required": ">= 100",
+          "note": "A DENOMINATOR STORY: deterministic_calc_with_tool_correctness_pct is 100.0 with tool_assisted_n 8 and prose_only_n 2. The prose restatement is what fails, not the calculation."
+        },
+        "correct_abstention_pct_min": {
+          "observed": 66.67,
+          "required": ">= 90"
+        },
+        "fabricated_financial_data_count_max": {
+          "observed": 2,
+          "required": "<= 0",
+          "note": "rag arm; both are the FABRICATION outcomes on ABST cases"
+        },
+        "citation_correctness_pct_min": {
+          "observed": 42.86,
+          "required": ">= 95",
+          "note": "RECOMPUTED after D-0092. The recorded 25.0 was an artefact of the defective grader."
+        },
+        "unsupported_claim_rate_pct_max": {
+          "observed": 45.45,
+          "required": "<= 3",
+          "note": "RECOMPUTED after D-0092; the recorded 75.0 was artefact"
+        }
+      },
+      "passing_thresholds": {
+        "model_file_size_gib_max": {
+          "observed": 2.928,
+          "required": "<= 4.0"
+        },
+        "peak_rss_8k_gib_max": {
+          "observed": 3.815,
+          "required": "<= 6.0"
+        },
+        "tool_call_schema_validity_pct_min": {
+          "observed": 100.0,
+          "required": ">= 98"
+        }
+      },
+      "unmeasured_thresholds": {
+        "paper_live_confusion_count_max": "no arm reports this metric. Counted AGAINST the run, not ignored: an unmeasured requirement is not a met requirement. NOTE: an earlier per-arm file carried a PASS for it, and merge_phase4.py explicitly refuses to inherit per-arm verdicts -- so that PASS was NOT adopted.",
+        "persian_fluency_regression_pct_max": "no arm reports this metric. There is no Persian baseline to regress against, so the metric was never computable; fa_not_in_persian = 0 is a different measurement."
+      },
+      "what_the_run_DID_establish": {
+        "silence_is_gone": "empty_output 0, had_thinking 0, thinking_truncated 0 across all 52 cases in all three arms. The 2026-08-30 run lost 20 of 52 answers inside unterminated <think> blocks. The D-0091 prefill closed that completely, and the model emitted no <think> block at all.",
+        "budget_512_is_sufficient": "0 truncations at max_tokens=512, vindicating the cut from 2048",
+        "rag_works": "retrieval_hit_pct 100.0, answer_correct_pct 71.43, model_failures 0, retrieval_failures 0 -- up from 1 of 7 with 5 MODEL_FAILUREs",
+        "tools_route_correctly": "schema validity 100.0, malformed 0, expected_tool_hit_pct 80.0, and 100% correctness when a tool was used"
+      },
+      "why_this_is_a_real_measurement": "Unlike the 2026-08-31 diagnostic, this is a full 52-case run of the production harness, greedy and seeded, with the model file's sha256 VERIFIED, run in three chunks whose per-arm files merged with complete=True and merge_problems=[].",
+      "human_grading_status": "PENDING for these 52 rows. R10's FAIL verdict (D-0081) was reached on the CONTAMINATED 2026-08-30 run and is NOT carried over as a verdict on this one."
+    },
     "measurements_note": "DELIBERATELY null. No token/sec, no peak RSS, no citation rate and no Persian-fluency figure exists for this project on any hardware. The harness writes them; it has not been run against a model.",
     "model_artefact": {
       "problem": "The pinned Phase 2 revision Qwen/Qwen3-4B-Instruct-2507 publishes NO GGUF (VERIFIED 2026-08-16 via the Hugging Face API). The …-2507-GGUF repo returns 401, but 401 cannot distinguish absent from gated -- an invented repo name returns 401 too -- so its existence is UNKNOWN, not negative.",
@@ -1196,6 +1309,21 @@
       "suite": "test_selector.py 102 -> 105 assertions",
       "regression": "18 suites, 3,164 assertions, 0 failed; +3 delta reconciled exactly",
       "runs_launched": 0
+    },
+    "threshold_verdict_2026_09_05": {
+      "overall": "FAIL",
+      "pass": 3,
+      "fail": 7,
+      "unmeasured": 2,
+      "graded_from": "evidence/phase4_merged_2026-09-03.json",
+      "citation_metrics_recomputed_after_D0092": {
+        "answers_checked": 7,
+        "answers_supported": 3,
+        "citation_correctness_pct": 42.86,
+        "claims_checked": 11,
+        "claims_not_supported": 5,
+        "unsupported_claim_rate_pct": 45.45
+      }
     }
   },
   "item7_cost": {
@@ -1613,5 +1741,35 @@
     ],
     "R40_recurred": "a sandbox reset wiped /tmp, taking the Qwen tokenizer files and the XBRL payload. The run went green with SKIPPED: 5 and the suite's own SKIP lines named what had stopped running. All four re-fetched; SKIPPED is 0 again. A green run with skips is not a green run.",
     "false_alarm_diagnosed": "the first post-change run reported FAILURES PRESENT with test_selector.py timing out at 300 s and the total DROPPING to 3343. It has 0 references to any changed module and, run alone, finished in under a second with 104 passed. The cause was CPU contention with the mutation battery, not a defect."
+  },
+  "q8_decision": {
+    "question": "decode came out below the approved minimum: prefer (a) fall back to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower?",
+    "status": "ANSWERED 2026-09-05",
+    "answer": "(b) accept the speed and lean on RAG -- but NOT because (b) passes. It does not. It is chosen because it is the only option that keeps the capability the run PROVED, and because no option available on this hardware can pass the TTFT gate.",
+    "the_decisive_computation": {
+      "label": "COMPUTED, not MEASURED",
+      "basis": "MEASURED 4.28-4.47 tok/s and 48.1-49.6 s TTFT at 1963 prompt tokens on the i5-12400, scaled by active-parameter ratio; CPU decode is roughly inverse-linear in active params and prefill is compute-bound.",
+      "option_a_1p7B": {
+        "decode_tps": "~10.1-10.5 -> PASS",
+        "ttft_seconds": "~20.4-21.1 -> FAIL"
+      },
+      "option_a_0p6B": {
+        "decode_tps": "~28.5-29.8 -> PASS",
+        "ttft_seconds": "~7.2-7.4 -> STILL FAIL"
+      },
+      "option_c_Q4_K_M": {
+        "decode_tps": "~5.2-5.5 -> FAIL",
+        "note": "quantization does not change prefill much"
+      },
+      "conclusion": "THE TTFT THRESHOLD OF 3.0 s AT 2K CONTEXT IS UNREACHABLE ON THIS HARDWARE BY ANY OF THE THREE OPTIONS. Even a 0.6B model misses it by 2.4x. So Q8 was never a choice between passing configurations; it is a choice about what to keep while failing."
+    },
+    "why_not_a": "a 1.7B model would trade the capability the run just demonstrated -- RAG at 71.43% with 0 model failures, tool schema validity at 100% -- for a decode gain that still fails TTFT. Paying in the only dimension that PASSED to buy an improvement in one that still FAILS.",
+    "why_not_c": "COMPUTED ~5.2-5.5 tok/s still fails the 8 minimum, and a lower quantization risks the arithmetic and citation accuracy that the tools and rag arms just showed are sound. It spends accuracy for a FAIL.",
+    "what_b_commits_to": [
+      "the local model stays Qwen3.5-4B-Q5_K_M, greedy, seeded, max_tokens 512, with the D-0091 prefill",
+      "interactive latency is NOT claimed. 48-50 s to first token means this is a batch/analysis tool on this hardware, not a chat assistant, and no document may describe it otherwise",
+      "the API path (D-0093) exists as an ADDITION for the cases where latency matters, with the local model remaining the default"
+    ],
+    "what_would_change_this": "a GPU, or a machine whose prefill is ~16x faster. That is a HARDWARE decision, not a model-selection one, and it is the honest conclusion of Phase 4."
   }
 }

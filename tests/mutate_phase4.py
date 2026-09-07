@@ -73,6 +73,18 @@ RUN = "scripts/run_phase4.py"
 # line, which this battery hit on 2026-09-01.
 NORM = "src/rag/normalize.py"
 
+# The two scripts that DECIDE the phase verdict became mutation targets on
+# 2026-09-05 (D-0094), the same day their output was recorded into
+# phase_4/measurements_recorded.
+#
+# WHY THEY HAD TO: merge_phase4.py deliberately refuses to compute threshold
+# verdicts, so these two are the only code that turns 52 rows into a PASS or a
+# FAIL. Leaving them unmutated would mean the battery's killed count was
+# measured over everything EXCEPT the code whose output is now the phase
+# record.
+GRADE = "scripts/grade_merged.py"
+REGRADE = "scripts/regrade_citations.py"
+
 # The eval fixture is a MUTATION TARGET, not just an input.
 #
 # Added 2026-08-19. Until now every mutation edited code, on the tacit
@@ -1419,6 +1431,54 @@ MUTATIONS = [
     (RUN, "--provider silently defaults to a remote provider",
      '    ap.add_argument("--provider", default="local",',
      '    ap.add_argument("--provider", default="groq",'),
+
+    # -- DEFECT 7: the graders that DECIDE the phase verdict ----------------
+    # grade_merged.py and regrade_citations.py produced the FAIL now recorded
+    # in phase_4/measurements_recorded. A defect in either would manufacture a
+    # PASS or destroy a real one, and the record would carry it.
+    (GRADE, "an absent metric grades as a PASS instead of UNMEASURED",
+     '        return {"threshold": name, "limit": limit, '
+     '"verdict": "UNMEASURED",',
+     '        return {"threshold": name, "limit": limit, '
+     '"verdict": "PASS",'),
+    (GRADE, "the worst arm no longer decides a minimum",
+     "        src, val = min(obs, key=lambda p: p[1])",
+     "        src, val = max(obs, key=lambda p: p[1])"),
+    (GRADE, "the worst arm no longer decides a maximum",
+     "        src, val = max(obs, key=lambda p: p[1])\n"
+     "        ok = val <= limit",
+     "        src, val = min(obs, key=lambda p: p[1])\n"
+     "        ok = val <= limit"),
+    (GRADE, "a minimum comparison is inverted",
+     "        ok = val >= limit",
+     "        ok = val <= limit"),
+    (GRADE, "a maximum comparison is inverted",
+     "        ok = val <= limit",
+     "        ok = val >= limit"),
+    (GRADE, "UNMEASURED stops counting against the overall verdict",
+     '    overall = "PASS" if (n_fail == 0 and n_un == 0) else "FAIL"',
+     '    overall = "PASS" if n_fail == 0 else "FAIL"'),
+    (GRADE, "an incomplete merged run is graded anyway",
+     '    if run.get("complete") is not True:',
+     "    if False:"),
+    (GRADE, "the citation override widens to every metric",
+     '        for key in ("citation_correctness_pct", '
+     '"unsupported_claim_rate_pct"):',
+     "        for key in s:"),
+    (REGRADE, "the unsupported-claim rate is computed over ANSWERS",
+     '    all_claims = [s for r in rows for s in r["per_claim"]]',
+     '    all_claims = [r["new"] for r in rows]'),
+    (REGRADE, "a CONTRADICTED claim no longer decides its answer",
+     '            if "CONTRADICTED" in per_claim:\n'
+     '                status = "CONTRADICTED"',
+     '            if False:\n'
+     '                status = "CONTRADICTED"'),
+    (REGRADE, "one SUPPORTED passage is required to be ALL passages",
+     '                if "SUPPORTED" in stats:',
+     '                if all(x == "SUPPORTED" for x in stats):'),
+    (REGRADE, "the recompute is mislabelled as a MEASUREMENT",
+     '        "label": "RECOMPUTED_FROM_RECORDED_OUTPUT",',
+     '        "label": "MEASURED",'),
 ]
 
 

@@ -5514,6 +5514,411 @@ check_true("...and the dummy GROQ_API_KEY was removed again",
            "(C) a leaked dummy credential makes a later real run fail in a "
            "way that looks like the user's own key is wrong")
 
+
+# ===========================================================================
+section("D-0094: the scripts that decide the Phase-4 verdict")
+# ===========================================================================
+#
+# scripts/grade_merged.py and scripts/regrade_citations.py produced the FAIL
+# recorded in phase_4/measurements_recorded. They therefore need assertions at
+# least as strong as the harness they grade: a defect in either would either
+# manufacture a PASS or destroy a real one, and the recorded verdict would
+# carry the defect with it.
+#
+# THE FAILURE MODE THAT MATTERS MOST is a missing metric silently reading as a
+# pass. merge_phase4.py already refuses to recompute per-arm verdicts, so the
+# gap these scripts fill is exactly where an absent number could quietly
+# become a green one.
+
+import importlib.util as _ilu94                              # noqa: E402
+
+def _load94(name):
+    _s = _ilu94.spec_from_file_location(
+        name, os.path.join(_ROOT, "scripts", name + ".py"))
+    _m = _ilu94.module_from_spec(_s)
+    _s.loader.exec_module(_m)
+    return _m
+
+
+GM94 = _load94("grade_merged")
+
+# ---------------------------------------------------------------------------
+# 1. THE THRESHOLD TABLE AND THE SPEC MUST AGREE. A threshold with no metric
+#    mapping is a requirement nobody grades.
+# ---------------------------------------------------------------------------
+_thr94 = dict(json.load(io.open(os.path.join(_ROOT, "PROJECT_STATE.json"),
+                                encoding="utf-8"))["acceptance_thresholds"])
+_thr94.pop("status", None)
+check("all 12 numeric thresholds have a metric mapping",
+      len(set(_thr94) - set(GM94.SPEC)), 0, 0,
+      "(D) an unmapped threshold is silently never graded. The run report "
+      "prints them, but printing is not grading")
+check("the spec maps no threshold that does not exist",
+      len(set(GM94.SPEC) - set(_thr94)), 0, 0,
+      "(A) a spec entry with no approved threshold would grade against a "
+      "number nobody agreed to")
+for _n94, _s94 in sorted(GM94.SPEC.items()):
+    check_true("%s declares a direction" % _n94,
+               _s94.get("dir") in ("min", "max"),
+               "(A) without a direction the comparison is a coin toss")
+
+# ---------------------------------------------------------------------------
+# 2. AN ABSENT METRIC IS UNMEASURED, NEVER PASS. The single most important
+#    property of this script.
+# ---------------------------------------------------------------------------
+_empty94 = {"complete": True, "arms_missing": [], "summaries": {"plain": {}},
+            "latency_per_invocation": [], "model": {}}
+_r94 = GM94.grade_one("citation_correctness_pct_min", 95,
+                      GM94.SPEC["citation_correctness_pct_min"], _empty94)
+check_true("a missing metric grades UNMEASURED, not PASS",
+           _r94["verdict"] == "UNMEASURED",
+           "(C) THE DECISIVE GUARD. If an absent number read as a pass, a "
+           "harness that stopped emitting a metric would improve the verdict")
+check_true("...and UNMEASURED says plainly that it is not a met requirement",
+           "NOT a met requirement" in _r94["why"], "(A)")
+
+# ---------------------------------------------------------------------------
+# 3. THE WORST ARM DECIDES. A bilingual analyst that fails on Persian is not
+#    two-thirds acceptable.
+# ---------------------------------------------------------------------------
+_multi94 = {
+    "complete": True, "arms_missing": [],
+    "summaries": {"plain": {"correct_abstention_pct": 99.0},
+                  "tools": {"correct_abstention_pct": 66.67},
+                  "rag": {"correct_abstention_pct": 98.0}},
+    "latency_per_invocation": [], "model": {},
+}
+_r94b = GM94.grade_one("correct_abstention_pct_min", 90,
+                       GM94.SPEC["correct_abstention_pct_min"], _multi94)
+check("a minimum is decided by the LOWEST arm, not the mean",
+      _r94b["deciding"]["value"], 66.67, 1e-9,
+      "(D) the mean of 99.0/66.67/98.0 is 87.9, which would also FAIL here -- "
+      "so a mean would have looked adequate. Asserted on the deciding VALUE, "
+      "because the verdict alone would not distinguish the two rules")
+check_true("...and that arm is named", _r94b["deciding"]["source"] == "tools",
+           "(A) a verdict that does not say WHICH arm failed cannot be acted on")
+
+_multi94["summaries"] = {"a": {"unsupported_claim_rate_pct": 1.0},
+                         "b": {"unsupported_claim_rate_pct": 45.45}}
+_r94c = GM94.grade_one("unsupported_claim_rate_pct_max", 3,
+                       GM94.SPEC["unsupported_claim_rate_pct_max"], _multi94)
+check("a maximum is decided by the HIGHEST arm",
+      _r94c["deciding"]["value"], 45.45, 1e-9, "(A)")
+check_true("...and it FAILS", _r94c["verdict"] == "FAIL", "(A)")
+
+# ---------------------------------------------------------------------------
+# 4. THE LATENCY SHAPE. My first version assumed a dict keyed by arm and the
+#    key "decode_tps"; the real file is a LIST of records keyed
+#    "decode_tokens_per_sec". The script CRASHED rather than reporting
+#    UNMEASURED, which is the behaviour a wrong guess should get.
+# ---------------------------------------------------------------------------
+_lat94 = {"complete": True, "arms_missing": [], "summaries": {},
+          "model": {},
+          "latency_per_invocation": [
+              {"source": "phase4_plain.json", "decode_tokens_per_sec": 4.28,
+               "ttft_seconds": 49.621},
+              {"source": "phase4_rag.json", "decode_tokens_per_sec": 4.47,
+               "ttft_seconds": 48.067}]}
+_r94d = GM94.grade_one("generation_tokens_per_sec_min", 8,
+                       GM94.SPEC["generation_tokens_per_sec_min"], _lat94)
+check("the LIST-shaped latency block is read, at its real key",
+      _r94d["deciding"]["value"], 4.28, 1e-9,
+      "(D) MEASURED from the user's real run. If this read UNMEASURED, the "
+      "project's CENTRAL FINDING -- decode below the approved minimum -- "
+      "would vanish from the verdict")
+check_true("...and it FAILS against the approved 8",
+           _r94d["verdict"] == "FAIL", "(A)")
+_r94e = GM94.grade_one("time_to_first_token_2k_sec_max", 3.0,
+                       GM94.SPEC["time_to_first_token_2k_sec_max"], _lat94)
+check("TTFT is decided by the SLOWEST arm",
+      _r94e["deciding"]["value"], 49.621, 1e-9, "(A)")
+
+# A dict-shaped latency block must still work, because an older evidence file
+# may use one -- but the shape is CHECKED, not assumed.
+_lat94dict = dict(_lat94)
+_lat94dict["latency_per_invocation"] = {
+    "plain": {"decode_tokens_per_sec": 4.28}}
+check("a dict-shaped latency block is tolerated too",
+      GM94.grade_one("generation_tokens_per_sec_min", 8,
+                     GM94.SPEC["generation_tokens_per_sec_min"],
+                     _lat94dict)["deciding"]["value"], 4.28, 1e-9,
+      "(B) evidence/phase4_merged.json predates the list shape")
+
+# ---------------------------------------------------------------------------
+# 5. AN INCOMPLETE RUN IS REFUSED, not graded over whatever arms are present.
+# ---------------------------------------------------------------------------
+import io as _io94                                           # noqa: E402
+_buf94 = _io94.StringIO()
+_old94 = sys.stdout
+try:
+    sys.stdout = _buf94
+    _rc94 = GM94.main([os.path.join(_ROOT, "evidence",
+                                    "phase4_merged_2026-09-03.json")])
+finally:
+    sys.stdout = _old94
+_out94 = _buf94.getvalue()
+check("grading the real recorded run exits 0", _rc94, 0, 0,
+      "(A) exit 0 means the GRADING completed, not that it passed -- a "
+      "non-zero exit would make a legitimate FAIL look like a broken script")
+check_true("...and reports OVERALL: FAIL on that run",
+           "OVERALL: FAIL" in _out94,
+           "(D) THE RECORDED VERDICT. This is the number now sitting in "
+           "phase_4/measurements_recorded; if this assertion ever flips, "
+           "either the run file or the grader changed and the record is stale")
+check_true("...naming decode and TTFT among the failures",
+           "generation_tokens_per_sec_min" in _out94
+           and "time_to_first_token_2k_sec_max" in _out94, "(A)")
+check_true("...and counting the 2 unmeasured thresholds AGAINST the run",
+           "unmeasured (counted AGAINST, not ignored)" in _out94,
+           "(C) paper_live_confusion_count and persian_fluency_regression "
+           "are absent from every arm. An earlier PER-ARM file carried a "
+           "PASS for the first, and merge_phase4.py refuses to inherit "
+           "per-arm verdicts -- so it was NOT adopted")
+
+# ---------------------------------------------------------------------------
+# 6. THE CITATION OVERRIDE IS NARROW. It corrects a grader defect; it must not
+#    become a way to launder any other metric.
+# ---------------------------------------------------------------------------
+_gm94src = io.open(os.path.join(_ROOT, "scripts", "grade_merged.py"),
+                   encoding="utf-8").read()
+check_true("the override touches ONLY the two citation metrics",
+           'for key in ("citation_correctness_pct", '
+           '"unsupported_claim_rate_pct"):' in _gm94src,
+           "(C) THE ANTI-LAUNDERING GUARD. Decode, TTFT, RSS, abstention and "
+           "fabrication are properties of the RUN. Recomputing those from a "
+           "recorded file would not be correcting a grader, it would be "
+           "rewriting the measurement")
+check_true("the script never writes PROJECT_STATE.json",
+           "PROJECT_STATE" in _gm94src and "json.dump" in _gm94src
+           and 'open(PATH, "w"' not in _gm94src,
+           "(C) recording a measurement into the phase record is a GATE "
+           "action requiring explicit user approval; a grader that could "
+           "write it would bypass the gate")
+
+RC94 = _load94("regrade_citations")
+_rc94src = io.open(os.path.join(_ROOT, "scripts", "regrade_citations.py"),
+                   encoding="utf-8").read()
+check_true("the regrader declares model_re_run False in its payload",
+           '"model_re_run": False' in _rc94src,
+           "(A) the whole basis of the recompute is that the OUTPUT TEXT is "
+           "unchanged. A reader must not have to infer that")
+check_true("...and labels its output RECOMPUTED, never MEASURED",
+           '"label": "RECOMPUTED_FROM_RECORDED_OUTPUT"' in _rc94src,
+           "(C) the number did not come out of a run and may never be "
+           "presented as though it did")
+
+# The unsupported-claim rate must be over CLAIMS, not answers: an answer with
+# three claims and one bad claim is not 'one third unsupported'.
+_rows94 = [{"id": "A", "old": "x", "new": "SUPPORTED", "n_claims": 1,
+            "per_claim": ["SUPPORTED"]},
+           {"id": "B", "old": "x", "new": "CONTRADICTED", "n_claims": 3,
+            "per_claim": ["SUPPORTED", "SUPPORTED", "CONTRADICTED"]}]
+_s94 = RC94.summarise(_rows94)
+check("citation_correctness is over ANSWERS", _s94["answers_checked"], 2, 0,
+      "(A)")
+check("unsupported_claim_rate is over CLAIMS, not answers",
+      _s94["claims_checked"], 4, 0,
+      "(D) 1 of 4 claims = 25.0%. Computed per ANSWER it would read 50.0%, "
+      "and the threshold is 3% -- so the denominator changes the magnitude "
+      "of the failure being reported")
+check("...and the rate uses that denominator",
+      _s94["unsupported_claim_rate_pct"], 25.0, 1e-9, "(A)")
+
+# ---------------------------------------------------------------------------
+# 7. THE RECORDED VERDICT AND THE STATE FILE MUST NOT DRIFT APART.
+# ---------------------------------------------------------------------------
+_st94 = json.load(io.open(os.path.join(_ROOT, "PROJECT_STATE.json"),
+                          encoding="utf-8"))
+_mr94 = _st94["phase_4"]["measurements_recorded"]
+check_true("a Phase-4 measurement IS now recorded", _mr94 is not None,
+           "(A) recorded 2026-09-05 on the user's explicit approval")
+check_true("...and it records a FAIL",
+           _mr94["verdict"] == "FAIL",
+           "(D) THE GATE EXISTS SO A MEASUREMENT CANNOT BE ENTERED CASUALLY, "
+           "not so it can only be entered when favourable. What was recorded "
+           "is the FAIL that was measured")
+check_true("...and names who authorised it",
+           "user instruction" in _mr94["authorised_by"], "(A)")
+_vf94 = json.load(io.open(os.path.join(
+    _ROOT, "evidence", "phase4_threshold_verdicts_2026-09-05.json"),
+    encoding="utf-8"))
+check_true("the recorded counts match the verdict file exactly",
+           _mr94["verdict_counts"] == _vf94["counts"],
+           "(D) two copies of a verdict are two chances to disagree; this "
+           "pins them together so a re-grade that changes the numbers "
+           "without updating the record is caught")
+check("the verdict file itself says FAIL",
+      1 if _vf94["overall"] == "FAIL" else 0, 1, 0, "(A)")
+
+# The safety invariants must be untouched by recording a measurement.
+check_true("recording a measurement did not enable live trading",
+           _st94["live_trading_enabled"] is False, "(C)")
+check_true("...and did not change the active mode",
+           _st94["active_mode"] == "ANALYSIS_ONLY", "(C)")
+check("...and left all 13 approved thresholds in place",
+      len(_st94["acceptance_thresholds"]), 13, 0,
+      "(C) the one edit that must never accompany a FAIL is a quiet "
+      "loosening of the thresholds it failed against")
+
+# ---------------------------------------------------------------------------
+# 8. R49: the two thresholds that are all-or-nothing at this eval size.
+#    Arithmetic, so it can be asserted rather than argued.
+# ---------------------------------------------------------------------------
+check("6 of 7 supported answers is 85.71%, so 95 needs 7 of 7",
+      round(100.0 * 6 / 7, 2), 85.71, 0.01,
+      "(D) R49. citation_correctness_pct_min = 95 over 7 checkable answers "
+      "is satisfiable ONLY by perfection. This is a property of the EVAL "
+      "SIZE, not of the model")
+check("1 bad claim of 11 is 9.09%, against a 3% ceiling",
+      round(100.0 * 1 / 11, 2), 9.09, 0.01,
+      "(D) R49. unsupported_claim_rate_pct_max = 3 over 11 claims is "
+      "satisfiable ONLY by 0 of 11. Recorded rather than relaxed: loosening "
+      "a pre-committed threshold after seeing the numbers would turn a "
+      "pre-registration into decoration")
+check_true("R49 is recorded as a risk",
+           any(isinstance(r, dict) and r.get("id") == "R49"
+               for r in _st94["risks_new"]),
+           "(A)")
+check_true("R47 is recorded as ACCEPTED, not silently fixed",
+           any(isinstance(r, dict) and r.get("id") == "R47"
+               and "ACCEPTED" in (r.get("decision_2026_09_05") or "")
+               for r in _st94["risks_new"]),
+           "(D) the user asked for a decision on it; 'accepted as recorded' "
+           "is a decision and is written down as one")
+
+
+# ---------------------------------------------------------------------------
+# D-0094b: four mutants survived, and each names a path my assertions missed.
+# ---------------------------------------------------------------------------
+#
+#   grade_merged      UNMEASURED stops counting against the overall verdict
+#   grade_merged      an incomplete merged run is graded anyway
+#   regrade_citations a CONTRADICTED claim no longer decides its answer
+#   regrade_citations one SUPPORTED passage is required to be ALL passages
+#
+# WHY THEY SURVIVED, diagnosed rather than guessed: my assertions drove
+# grade_one() and summarise() in isolation, and drove main() only against the
+# REAL recorded run. That run already FAILs on seven thresholds, so removing
+# UNMEASURED from the overall rule changes nothing observable; and it is
+# complete, so deleting the completeness guard changes nothing either. The two
+# regrade survivors live in regrade(), which needs an index and gold rows and
+# which summarise() never touches.
+#
+# The lesson is the one this project keeps relearning: a unit test of a helper
+# does not exercise the branch that COMBINES helpers. Each assertion below is
+# built on a case constructed to make the mutated branch observable.
+
+# -- 1. UNMEASURED must be able to decide the overall verdict ALONE ---------
+# A run with zero FAILs and one UNMEASURED. On the real file this is
+# unreachable, because seven thresholds fail anyway.
+_allpass94 = {
+    "complete": True, "arms_missing": [], "label": "SYNTHETIC",
+    "model": {"size_gib": 2.0},
+    "peak_rss_gib": 1.0,
+    "latency_per_invocation": [
+        {"source": "s", "decode_tokens_per_sec": 99.0, "ttft_seconds": 0.5}],
+    "summaries": {"only": {
+        "deterministic_calc_correctness_pct": 100.0,
+        "unsupported_claim_rate_pct": 0.0,
+        "citation_correctness_pct": 100.0,
+        "correct_abstention_pct": 100.0,
+        "fabricated_financial_data_count": 0,
+        "tool_call_schema_validity_pct": 100.0,
+        "paper_live_confusion_count": 0,
+        # persian_fluency_regression_pct DELIBERATELY ABSENT -> UNMEASURED
+    }},
+}
+_tmp94 = os.path.join(_tempdir(), "synthetic_allpass.json")
+with io.open(_tmp94, "w", encoding="utf-8") as _f94:
+    json.dump(_allpass94, _f94)
+
+_buf94b = io.StringIO()
+_old94b = sys.stdout
+try:
+    sys.stdout = _buf94b
+    GM94.main([_tmp94])
+finally:
+    sys.stdout = _old94b
+_out94b = _buf94b.getvalue()
+
+check_true("a run with NO fails but ONE unmeasured is still OVERALL: FAIL",
+           "OVERALL: FAIL" in _out94b,
+           "(C) THE ASSERTION THE SURVIVOR DEMANDED. Every other threshold "
+           "passes here, so this is decided by the unmeasured one alone. On "
+           "the real recorded run the same mutation is invisible, because "
+           "seven thresholds fail regardless -- which is exactly why the "
+           "mutant lived")
+check_true("...and the unmeasured threshold is named in the output",
+           "persian_fluency_regression_pct_max" in _out94b, "(A)")
+check_true("...while the 11 measurable thresholds did all pass",
+           "PASS 11" in _out94b,
+           "(A) NON-VACUITY: if this synthetic run failed something else, the "
+           "assertion above would pass for the wrong reason")
+
+# -- 2. An INCOMPLETE run must be refused, not graded -----------------------
+_incomplete94 = dict(_allpass94)
+_incomplete94["complete"] = False
+_incomplete94["arms_missing"] = ["rag"]
+_tmp94b = os.path.join(_tempdir(), "synthetic_incomplete.json")
+with io.open(_tmp94b, "w", encoding="utf-8") as _f94b:
+    json.dump(_incomplete94, _f94b)
+
+_buf94c = io.StringIO()
+try:
+    sys.stdout = _buf94c
+    _rc94c = GM94.main([_tmp94b])
+finally:
+    sys.stdout = _old94b
+_out94c = _buf94c.getvalue()
+check_true("an incomplete merged run is REFUSED, not graded",
+           "REFUSING TO GRADE" in _out94c,
+           "(C) grading a subset of arms is the exact error merge_phase4.py "
+           "refuses to make. Without this the mutant graded a run with a "
+           "missing arm and reported a verdict over what happened to be there")
+check_true("...and no verdict is emitted for it",
+           "OVERALL:" not in _out94c,
+           "(D) THE STRONGER HALF. Printing a warning AND a verdict would "
+           "still leave a verdict for someone to quote")
+check("...and it still exits 0, because refusing is not crashing",
+      _rc94c, 0, 0, "(A)")
+
+# -- 3 & 4. regrade(): the two combining rules ------------------------------
+# These need the real index and gold rows, because regrade() reads them. Using
+# the recorded run means the inputs are the ones that produced the record.
+_run94d = json.load(io.open(os.path.join(
+    _ROOT, "evidence", "phase4_merged_2026-09-03.json"), encoding="utf-8"))
+_rows94d = RC94.regrade(_run94d,
+                        os.path.join(_ROOT, "evals", "rag_corpus_v1.jsonl"),
+                        os.path.join(_ROOT, "evals", "rag_gold_v1.jsonl"), 4)
+_by94 = {r["id"]: r for r in _rows94d}
+
+# RAG-EN-001: MEASURED to hold two claims, one SUPPORTED and one CONTRADICTED.
+# It is the case that proves a CONTRADICTED claim decides the answer -- if the
+# rule were dropped, this answer would read PARTIALLY_SUPPORTED.
+check_true("RAG-EN-001 really does hold both a supported and a bad claim",
+           sorted(set(_by94["RAG-EN-001"]["per_claim"]))
+           == ["CONTRADICTED", "SUPPORTED"],
+           "(A) NON-VACUITY GUARD for the assertion below: if this case ever "
+           "stops being mixed, that assertion proves nothing")
+check_true("one CONTRADICTED claim decides the whole answer",
+           _by94["RAG-EN-001"]["new"] == "CONTRADICTED",
+           "(C) THE ASSERTION THE SURVIVOR DEMANDED. One fabricated figure is "
+           "not redeemed by a sound one beside it -- that dilution is exactly "
+           "how a bad number ships. The mutant made this PARTIALLY_SUPPORTED")
+
+# RAG-FA-001: MEASURED SUPPORTED after D-0092, and grounded by ONE passage out
+# of four. Requiring ALL passages to support a claim would break it.
+check_true("RAG-FA-001 is SUPPORTED, grounded by one passage of several",
+           _by94["RAG-FA-001"]["new"] == "SUPPORTED"
+           and _by94["RAG-FA-001"]["per_claim"] == ["SUPPORTED"],
+           "(C) THE OTHER SURVIVOR. Evidence is retrieved top_k=4, and a "
+           "figure lives in ONE filing row -- demanding that every retrieved "
+           "passage support the claim would mark every correct citation "
+           "unsupported. The mutant required exactly that")
+check("...and the recompute still reports 3 supported answers of 7",
+      RC94.summarise(_rows94d)["answers_supported"], 3, 0,
+      "(D) pins the recomputed 42.86% that is now in the phase record")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())
