@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0095). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0096). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -32,6 +32,9 @@ paper/live trading controls.
 | `scripts/threshold_resolution.py` | Reports whether each percentage threshold has any **resolution** at the current eval size — the smallest n at which it can tolerate ONE failure. Continuous quantities and counts-of-zero are excluded, not force-fitted. **Proposes no threshold change**, and never writes `PROJECT_STATE.json`. |
 | `R49_EVAL_SIZE_OPTIONS.md` | Three costed options for R49, with MEASURED costs. Option C (relaxing a threshold) is refused with the reason recorded. |
 | `R10_GRADING_GUIDE_FA.md` | Persian handover for the R10 human grading session: exact commands, three resumable per-arm sessions, the 5-verdict vocabulary, and the honest limit that grading produces a baseline rather than a PASS. |
+| `evals/rag_gold_v2.jsonl` / `evals/rag_corpus_v2.jsonl` | **The v2 eval set (D-0096)**: 15 answerable + 7 abstain questions over 13 documents, every magnitude and accession from `data.sec.gov`. Takes the combined totals to 22 checkable answers and 10 abstain cases, clearing two R49 targets without touching a threshold. |
+| `tools/fetch_xbrl.sh` · `tools/extract_xbrl_facts.py` · `tools/build_eval_v2.py` | The v2 build chain, committed so the fixture can be rebuilt and audited rather than trusted. `extract_xbrl_facts.py` keys on the period **end**, never on EDGAR's `fy` — see D-0096 for why that distinction would otherwise have made all 15 questions wrong. |
+| `tools/validate_eval_set.py` | Proves an eval set is usable BEFORE a model run is spent on it: retrievability, gradability, a fabricated-figure negative control, and genuine absence of every abstain entity. It caught 5 of 15 questions failing to retrieve their own gold document. |
 | `evidence/threshold_resolution_2026-09-07.json` | The resolution measurement: 6 of 12 thresholds have none, including one that PASSED. |
 | `evidence/phase4_merged_2026-09-03.json` | **The recorded Phase 4 run**, sha256 `a0a625a2…c95e93f`, byte-identical to the user's upload. Held in the repo because `/tmp` was wiped by a sandbox reset the same day (R40). |
 | `evidence/phase4_threshold_verdicts_2026-09-05.json` | The graded verdict: 3 PASS, 7 FAIL, 2 UNMEASURED, **OVERALL FAIL**. |
@@ -45,7 +48,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,529 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,549 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -264,7 +267,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,529 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,549 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -921,7 +924,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,529
+unique and non-no-op *before* the battery ran. Full regression: **3,549
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1113,7 +1116,7 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,529
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,549
 assertions, 18 suites, 0 failed, 0 skipped.**
 
 ## PHASE 4 VERDICT: FAIL — recorded 2026-09-05
@@ -1577,7 +1580,7 @@ So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
 attached, and **the number to plan around is the upper bound.** Quoting only a
 central figure is how a "1 hour" run became 1.7 hours earlier in this project.
 
-Full regression: **3,529 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+Full regression: **3,549 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
 **224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
 `None`, and **0 model runs** were launched.
 
@@ -1888,7 +1891,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,529 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,549 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -2252,7 +2255,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,529 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,549 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -2301,7 +2304,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,529-assertion base is trustworthy.
+3,549-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

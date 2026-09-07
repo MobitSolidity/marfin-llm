@@ -206,7 +206,8 @@
     "D-0092",
     "D-0093",
     "D-0094",
-    "D-0095"
+    "D-0095",
+    "D-0096"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -358,7 +359,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0095",
+  "decisions_logged": "D-0001..D-0096",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -483,7 +484,8 @@
       "excluded_and_why": "tok/s, TTFT, model size and peak RSS are continuous quantities with no denominator; fabricated_count and paper_live_confusion are counts of 0 with no percentage to resolve. Neither group was force-fitted into the analysis.",
       "does_not_change_the_verdict": "The 2026-09-05 FAIL stands at any n: 42.86% fails against 95 whether the denominator is 7 or 20. Resolution is about whether a FUTURE good-but-imperfect result could be distinguished from a bad one.",
       "options_document": "R49_EVAL_SIZE_OPTIONS.md",
-      "decision": "PENDING -- user's call"
+      "decision": "OPTION B TAKEN 2026-09-07 (D-0096) -- eval set enlarged, no threshold relaxed",
+      "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
   "awaiting_approval_for": null,
@@ -1832,5 +1834,49 @@
       "MEASURED in D-0081: the machine's unsupported-claim set and the human's had ZERO overlap. The machine does not substitute for the reader."
     ],
     "status": "READY -- awaiting the user's grading session"
+  },
+  "eval_set_v2": {
+    "decision": "D-0096",
+    "answers_R49_option": "B (enlarge the eval set; thresholds untouched)",
+    "sizes": {
+      "v1": {
+        "docs": 8,
+        "answerable": 7,
+        "abstain": 3
+      },
+      "v2": {
+        "docs": 13,
+        "answerable": 15,
+        "abstain": 7
+      },
+      "combined": {
+        "docs": 21,
+        "answerable": 22,
+        "abstain": 10
+      }
+    },
+    "targets_reached": {
+      "citation_correctness_pct_min": "n>=20 needed, 22 reached",
+      "correct_abstention_pct_min": "n>=10 needed, 10 reached (was short by 1)",
+      "unsupported_claim_rate_pct_max": "n>=34 needed, ~35 ESTIMATED at the MEASURED 1.57 claims/answer -- a margin of ONE claim. ESTIMATED, not MEASURED: the real count depends on how many sentences the model writes."
+    },
+    "provenance": "every magnitude, accession, filing date and period comes from data.sec.gov. v1 used real numbers with FIXTURE- accessions; v2 resolves to an actual filing. A bigger set of invented numbers would have been worse than the small one.",
+    "trap_avoided": "EDGAR's `fy` is the fiscal year of the FILING CONTAINING the fact, not of the fact. MEASURED: fy=2023 carries end=2021-09-25 for Apple net income. Keying on `fy` would have made all 15 questions wrong and every one plausible. Re-keyed on period end, earliest filed wins.",
+    "defect_caught_by_own_validator": "the first corpus put only numeric rows in `text`, and 5 of 15 questions then failed to retrieve their own gold document -- a noise doc outranked it, because the company name and year were in the QUERY and nowhere in the passage. v1 hid this at 8 docs. Fixed by giving each passage the heading a real filing page carries.",
+    "what_it_does_not_achieve": [
+      "changes NO verdict -- nothing has been run",
+      "cannot fix decode rate or TTFT: no denominator, no eval set helps",
+      "cannot give a 100% floor resolution (zero-tolerance at any n)",
+      "the claim-count margin is ONE claim, and is ESTIMATED",
+      "still one passage per document, so retrieval is easier than production"
+    ],
+    "tools": [
+      "tools/fetch_xbrl.sh",
+      "tools/extract_xbrl_facts.py",
+      "tools/build_eval_v2.py",
+      "tools/validate_eval_set.py"
+    ],
+    "validator_result": "16 of 16 checks pass",
+    "run_status": "NOT RUN. Using v2 requires a model run on the user's machine and their explicit approval. ESTIMATED ~12.4 min for a 22-row rag arm at the MEASURED 29.9 s per case, plus the 49 s TTFT probe and model load (UNKNOWN)."
   }
 }

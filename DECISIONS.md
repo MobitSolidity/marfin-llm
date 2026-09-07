@@ -4919,3 +4919,116 @@ omission.
 output is what the R49 decision rests on — and because its most important
 property is a **negative** one: it must never propose relaxing a threshold.
 Final battery: **268 seeded, 259 killed, 0 survived, 9 skipped** (pre-existing).
+
+
+## D-0096 — the v2 eval set: R49 option B, built from real filings
+
+**Date:** 2026-09-07 · **Status:** BUILT AND VALIDATED, run not yet approved
+**Trigger:** user instruction — «برای گزینه ۱ توصیه خودت را انجام بده»
+
+### What was built
+
+| | v1 | v2 | combined |
+|---|---|---|---|
+| documents | 8 | 13 | 21 |
+| answerable questions | 7 | **15** | **22** |
+| abstain questions | 3 | **7** | **10** |
+
+That clears both R49 targets: `citation_correctness_pct_min = 95` needs n≥20
+checkable answers, and `correct_abstention_pct_min = 90` needs n≥10 — which was
+short by exactly one before this.
+
+Five companies (Apple, Microsoft, Alphabet, Johnson & Johnson, Walmart), each
+in **two adjacent fiscal years**, plus a Persian passage over real Apple FY2024
+figures and two noise documents.
+
+### What makes it different from merely bigger
+
+**Every magnitude, accession, filing date and period came from
+`data.sec.gov`.** v1 used real numbers with `FIXTURE-` accessions, so a
+citation could be traced to the fixture and no further; v2's provenance
+resolves to an actual filing. A larger set of invented numbers would have been
+*worse* than the small one — more confident output about nothing. The fetch,
+extraction, build and validation are all committed as tools, so the set can be
+rebuilt and re-checked rather than trusted.
+
+### THE TRAP THAT WOULD HAVE POISONED EVERY QUESTION
+
+`fy` in an EDGAR `companyconcept` response is the fiscal year of the **filing
+that contains** the fact, not the fiscal year the fact describes. MEASURED on
+Apple net income:
+
+    fy=2023   val=94,680,000,000   end=2021-09-25
+
+A 10-K reports three years of income statement, so one filing contributes three
+facts and they all carry the same `fy`. My first extraction keyed on `fy` and
+would have asked "net income in fiscal 2023" while grading against a 2021
+period — **all fifteen questions wrong, and every one of them plausible.**
+Re-keyed on the period `end`, with the earliest `filed` winning so a later
+amendment cannot give two different correct answers to one question.
+
+### THE DEFECT MY OWN VALIDATOR CAUGHT
+
+My first corpus put only numeric rows in `text`
+(`"Net income | 96,995 -- Total assets | 352,583"`). MEASURED: **5 of 15
+questions failed to retrieve their own gold document**, and a noise document
+outranked it — because "Apple" and "2023" appear in the QUERY and nowhere in
+the passage, so BM25 had nothing to match on.
+
+v1 hid this completely: with 8 documents and one per company, even near-random
+ranking put the right one in the top 4. At 13 documents it collapsed.
+
+The fix is not a concession to the retriever. A real filing page carries its
+own heading, so adding `"Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2023,
+consolidated financial statements (in millions)"` made the fixture **more**
+faithful. The noise documents got the same treatment, because leaving them
+headingless would have made them artificially easy to out-rank — flattering the
+retriever rather than testing it.
+
+**Without that validator, a model run would have been spent on an eval set
+that was broken in a way the results would not have revealed.**
+
+### Two more things the validator forced
+
+**A stale assertion of my own.** After expanding to 7 abstain cases the
+validator failed on `3 abstain questions` — its own hard-coded number. And its
+absent-entity check listed `("nvidia", "amazon", "tesla")` by hand, so the four
+cases added afterwards were **silently unchecked**: a guard that only guards
+what its author remembered. The list is now derived.
+
+**A case I removed rather than kept.** `"What was Apple's net income in fiscal
+2019?"` was a different *kind* of absence — the company is in the corpus, only
+the year is missing — and it is genuinely arguable whether a model reciting a
+real 2019 figure from pre-training is fabricating. One arguable verdict inside
+a 10-item all-or-nothing threshold is worse than one fewer case, so it was
+replaced with a clean absent-entity question (Broadcom). All ten abstain cases
+are now the same kind, so one rule covers them.
+
+### WHAT v2 DOES NOT ACHIEVE
+
+1. **The claim-count target is reached only in ESTIMATE.** 22 answers × the
+   MEASURED 1.57 claims/answer ≈ 35 against a target of 34 — a margin of **one
+   claim**, from a ratio measured on 7 answers. If the model writes terser
+   answers here, `unsupported_claim_rate` loses its resolution again. This is
+   ESTIMATED and must never be reported as MEASURED.
+2. **It cannot fix the two hardware thresholds.** Decode rate and TTFT have no
+   denominator; no eval set of any size moves them. The recorded FAIL stands.
+3. **It cannot give a 100 % floor resolution.**
+   `deterministic_calc_correctness_pct_min` stays zero-tolerance at any n.
+4. **It changes no verdict yet.** Nothing has been run. v2 exists so a *future*
+   result can be distinguished from a bad one; it does not re-measure the past.
+5. **The corpus is still one passage per document.** Real filings are longer
+   and messier, so retrieval here remains easier than in production.
+
+### Coverage
+
+20 new assertions (`test_phase4_harness` 903 → 923), including the negative
+control that a fabricated `999,999 million` must still fail to verify, the
+retrievability check that caught the heading defect, and three assertions
+recording what v2 does **not** achieve. Regression **3549, 0 skipped, 0 timed
+out, ALL GREEN**.
+
+`tools/fetch_xbrl.sh`, `tools/extract_xbrl_facts.py`, `tools/build_eval_v2.py`
+and `tools/validate_eval_set.py` are committed rather than left in `/tmp` —
+R40 wiped `/tmp` twice this week, and a fixture whose build script has vanished
+cannot be audited.

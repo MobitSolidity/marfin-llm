@@ -6090,6 +6090,205 @@ check_true("...and the reason names the missing baseline",
            ["measurements_recorded"]["unmeasured_thresholds"]
            ["persian_fluency_regression_pct_max"], "(A)")
 
+
+# ===========================================================================
+section("D-0096: the v2 eval set, built from real filings")
+# ===========================================================================
+#
+# R49 option B. The v1 rag set has 7 answerable questions and 11 verifiable
+# claims, so citation_correctness_pct_min = 95 was satisfiable only by 7/7 and
+# unsupported_claim_rate_pct_max = 3 only by 0/11. v2 adds 15 answerable
+# questions and 7 abstain questions over 13 documents, taking the combined
+# totals to 22 checkable answers and 10 abstain cases.
+#
+# WHAT MAKES THIS DIFFERENT FROM MERELY BIGGER: every magnitude, accession,
+# filing date and period comes from data.sec.gov. v1 used real numbers with
+# FIXTURE- accessions, so provenance stopped at the fixture; v2's provenance
+# resolves to an actual filing. A larger set of invented numbers would have
+# been worse than the small one -- more confident output about nothing.
+
+_c96 = RP.load_jsonl(os.path.join(_ROOT, "evals", "rag_corpus_v2.jsonl"))
+_g96 = RP.load_jsonl(os.path.join(_ROOT, "evals", "rag_gold_v2.jsonl"))
+_ans96 = [g for g in _g96 if g["answerable"]]
+_abst96 = [g for g in _g96 if not g["answerable"]]
+
+check("v2 has 13 corpus documents", len(_c96), 13, 0, "(A)")
+check("v2 has 15 answerable questions", len(_ans96), 15, 0,
+      "(D) 7 + 15 = 22 checkable answers, clearing the n>=20 that "
+      "citation_correctness_pct_min = 95 needs to tolerate one failure")
+check("v2 has 7 abstain questions", len(_abst96), 7, 0,
+      "(D) 3 + 7 = 10, exactly the n that correct_abstention_pct_min = 90 "
+      "needs. It was short by ONE before this")
+
+# ---------------------------------------------------------------------------
+# 1. PROVENANCE IS REAL. This is the property that separates a bigger eval set
+#    from a better one.
+# ---------------------------------------------------------------------------
+check_true("no v2 accession is a FIXTURE placeholder",
+           not any(str(c["accession"]).startswith("FIXTURE")
+                   for c in _c96),
+           "(D) v1's accessions were fabricated, so a citation could be "
+           "traced to the fixture and no further. Every v2 accession is a "
+           "real EDGAR accession")
+check_true("every v2 accession has EDGAR's shape",
+           all(len(str(c["accession"]).split("-")) == 3
+               for c in _c96),
+           "(A) 10 digits - 2 digit year - 6 digit sequence")
+check_true("every v2 document names a permitted source",
+           all(c["source_key"] in ("sec_edgar_xbrl", "sec_edgar_submissions")
+               for c in _c96),
+           "(C) SEC EDGAR is public domain and enabled in rag.sources. A "
+           "document from a disabled source would make the whole set "
+           "unusable regardless of its size")
+
+# ---------------------------------------------------------------------------
+# 2. IDS MUST NOT COLLIDE WITH v1, because both sets appear in recorded
+#    evidence and a shared id would silently merge two different questions.
+# ---------------------------------------------------------------------------
+_v1ids96 = set(g["id"] for g in RP.load_jsonl(
+    os.path.join(_ROOT, "evals", "rag_gold_v1.jsonl")))
+check("no v2 id collides with a v1 id",
+      len(set(g["id"] for g in _g96) & _v1ids96), 0, 0,
+      "(D) the R10 grading tool keys on arm::id and the merged evidence "
+      "keys on id; a collision would make one question's verdict another's")
+check("...and v2's own ids are unique",
+      len(_g96) - len(set(g["id"] for g in _g96)), 0, 0, "(A)")
+
+# ---------------------------------------------------------------------------
+# 3. RETRIEVABILITY. THE DEFECT MY OWN VALIDATOR CAUGHT.
+#
+# My first version of the corpus put only numeric rows in `text`
+# ("Net income | 96,995 -- Total assets | 352,583"). MEASURED: 5 of 15
+# questions then failed to retrieve their own gold document, and a noise
+# document outranked it -- because "Apple" and "2023" are in the QUERY and
+# were nowhere in the passage, so BM25 had nothing to match.
+#
+# v1 hid this: 8 documents, one per company, so even near-random ranking put
+# the right one in the top 4. At 13 documents it collapsed. Real filing pages
+# carry their own heading, so adding one made the fixture MORE faithful.
+# ---------------------------------------------------------------------------
+_idx96 = RP.build_index(_c96)
+_miss96 = []
+for _g in _ans96:
+    _ids = [h.doc_id for h in _idx96.search(_g["query"], top_k=4).hits]
+    if not (set(_g["gold_doc_ids"]) & set(_ids)):
+        _miss96.append(_g["id"])
+check("every answerable v2 question retrieves its own gold document",
+      len(_miss96), 0, 0,
+      "(D) THE ASSERTION THAT WOULD HAVE SAVED A MODEL RUN. Measured at 5 "
+      "failures before the passages carried headings; an eval set whose gold "
+      "document cannot be found produces confident numbers about nothing. "
+      "Missing: %s" % _miss96)
+
+check_true("every v2 passage names its own company",
+           all(c["entity"].split()[0].lower() in c["text"].lower()
+               for c in _c96),
+           "(D) the direct form of the same property, so a future edit that "
+           "strips the heading fails here and not only in the retrieval "
+           "check above")
+
+# ---------------------------------------------------------------------------
+# 4. THE WRONG-YEAR TRAP MUST ACTUALLY BE SET. A wrong-year answer is the
+#    commonest real failure and is only detectable when the wrong year is in
+#    the retrieved evidence.
+# ---------------------------------------------------------------------------
+_dist96 = 0
+for _g in _ans96:
+    _ids = [h.doc_id for h in _idx96.search(_g["query"], top_k=4).hits]
+    _ent = _g["gold_doc_ids"][0].split("-")[1]
+    if sum(1 for i in _ids if ("-%s-" % _ent) in i) >= 2:
+        _dist96 += 1
+check("the neighbouring-year distractor is retrieved for every question",
+      _dist96, 15, 0,
+      "(D) each company appears in TWO adjacent fiscal years. If only the "
+      "gold year were retrievable, a wrong-year answer would be impossible "
+      "and the retrieval metric would flatter the model")
+
+# ---------------------------------------------------------------------------
+# 5. GRADABILITY, both directions. A question whose perfect answer cannot
+#    grade correct punishes the model for the fixture; a question whose wrong
+#    answer grades correct measures nothing.
+# ---------------------------------------------------------------------------
+_bad96 = []
+for _g in _ans96:
+    _mm = round(_g["gold_magnitude"] / 1e6)
+    if not L.value_matches(_g["gold_magnitude"],
+                           "The figure is %s million." % "{:,}".format(_mm),
+                           tolerance=None, scaled=True):
+        _bad96.append(_g["id"])
+check("a PERFECT answer grades correct for every v2 question",
+      len(_bad96), 0, 0, "(D) failing: %s" % _bad96)
+
+_unsup96 = []
+_fp96 = []
+for _g in _ans96:
+    _mm = round(_g["gold_magnitude"] / 1e6)
+    _hits = list(_idx96.search(_g["query"], top_k=4).hits)
+    if not any(_verify("The figure is %s million." % "{:,}".format(_mm),
+                       h).status == "SUPPORTED" for h in _hits):
+        _unsup96.append(_g["id"])
+    if any(_verify("The figure is 999,999 million.", h).status == "SUPPORTED"
+           for h in _hits):
+        _fp96.append(_g["id"])
+check("a perfect claim verifies as SUPPORTED against retrieved evidence",
+      len(_unsup96), 0, 0,
+      "(D) uses the SAME verify_claim the RAG arm uses. unsupported: %s"
+      % _unsup96)
+check("a FABRICATED figure does NOT verify -- the negative control",
+      len(_fp96), 0, 0,
+      "(C) without this, the assertion above could be passing because the "
+      "verifier accepts anything. false positives: %s" % _fp96)
+
+# ---------------------------------------------------------------------------
+# 6. ABSTAIN CASES MUST BE GENUINELY ABSENT, and all of ONE kind.
+# ---------------------------------------------------------------------------
+_blob96 = " ".join(c["text"] + " " + c["entity"] for c in _c96).lower()
+_leak96 = [w for w in ("nvidia", "amazon", "tesla", "meta", "intel",
+                       "broadcom") if w in _blob96]
+check("no abstain entity appears anywhere in the v2 corpus",
+      len(_leak96), 0, 0,
+      "(D) a question about an obscure figure is not a test of refusal; only "
+      "a genuinely absent entity is. leaked: %s" % _leak96)
+check_true("every abstain question has no gold document and no magnitude",
+           all(g["gold_doc_ids"] == [] and g["gold_magnitude"] is None
+               for g in _abst96),
+           "(A) an abstain case with a gold magnitude would be gradeable two "
+           "contradictory ways")
+
+# A CASE I REMOVED RATHER THAN KEPT. "What was Apple's net income in fiscal
+# 2019?" was a different KIND of absence -- the company is in the corpus, only
+# the year is missing -- and it is genuinely arguable whether a model reciting
+# a real 2019 figure from pre-training is fabricating. One arguable verdict
+# inside a 10-item all-or-nothing threshold is worse than one fewer case.
+check_true("no abstain question relies on a merely-missing YEAR",
+           not any("2019" in g["query"] for g in _abst96),
+           "(C) all ten abstain cases are now the same clean kind, so one "
+           "rule covers them and no verdict is arguable")
+
+# ---------------------------------------------------------------------------
+# 7. WHAT v2 DOES NOT ACHIEVE. Recorded so a later reader cannot mistake a
+#    resolution fix for a threshold fix.
+# ---------------------------------------------------------------------------
+# The claim count is ESTIMATED, not MEASURED: 22 answers x the MEASURED 1.57
+# claims/answer = ~35, clearing 34. But the real number depends on how many
+# sentences the model writes, which cannot be known without a run.
+check_true("the claim-count target is only reached in ESTIMATE",
+           abs(22 * 11.0 / 7 - 34.6) < 1.0,
+           "(E) 22 answers at the MEASURED 1.57 claims/answer gives ~35 "
+           "against a target of 34 -- a margin of ONE claim, from a ratio "
+           "measured on 7 answers. If the model writes terser answers on "
+           "these questions, unsupported_claim_rate loses its resolution "
+           "again. ESTIMATED, and it must not be reported as MEASURED")
+check_true("v2 cannot fix the two hardware thresholds",
+           "generation_tokens_per_sec_min" in RES95.CONTINUOUS
+           and "time_to_first_token_2k_sec_max" in RES95.CONTINUOUS,
+           "(E) decode rate and TTFT have no denominator, so no eval set of "
+           "any size changes them. The recorded FAIL stands")
+check_true("...and cannot give a 100%% floor resolution either",
+           RES95.min_n_for_one_failure(100, "min") is None,
+           "(E) deterministic_calc_correctness_pct_min stays "
+           "zero-tolerance at any n")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())
