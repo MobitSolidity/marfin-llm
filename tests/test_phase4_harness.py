@@ -5919,6 +5919,177 @@ check("...and the recompute still reports 3 supported answers of 7",
       RC94.summarise(_rows94d)["answers_supported"], 3, 0,
       "(D) pins the recomputed 42.86% that is now in the phase record")
 
+
+# ===========================================================================
+section("D-0095: threshold resolution, and R10 readiness")
+# ===========================================================================
+#
+# R49 was recorded on 2026-09-05 as affecting TWO thresholds -- the two that
+# FAILed. Measuring all of them found SIX, including one that PASSED. A PASS
+# without resolution is as uninformative as a FAIL without it, and recording
+# only the failures was my own selection bias: I looked where the bad news was.
+
+RES95 = _load94("threshold_resolution")
+
+# ---------------------------------------------------------------------------
+# 1. The arithmetic of resolution. These are the numbers the decision rests
+#    on, so they are pinned rather than recomputed by a reader.
+# ---------------------------------------------------------------------------
+check("a 95% floor needs n>=20 to survive one failure",
+      RES95.min_n_for_one_failure(95, "min"), 20, 0,
+      "(D) at n=7, 6 of 7 is 85.71% -- so the threshold is satisfiable ONLY "
+      "by perfection, and a future improvement from 42.86% to 85.71% would "
+      "still read FAIL with no way to see the progress")
+check("a 3% ceiling needs n>=34 to survive one failure",
+      RES95.min_n_for_one_failure(3, "max"), 34, 0,
+      "(D) at n=11, one bad claim is 9.09%")
+check("a 98% floor needs n>=50",
+      RES95.min_n_for_one_failure(98, "min"), 50, 0,
+      "(D) tool_call_schema_validity PASSED at 100% over 8 attempted calls. "
+      "It had no resolution either -- the PASS is not evidence of 98% "
+      "reliability, and recording only the failing thresholds hid that")
+check("a 2% ceiling needs n>=50",
+      RES95.min_n_for_one_failure(2, "max"), 50, 0, "(A)")
+check("a 90% floor needs n>=10",
+      RES95.min_n_for_one_failure(90, "min"), 10, 0,
+      "(D) correct_abstention is short by exactly ONE case. The cheapest "
+      "resolution gain in the whole table")
+check_true("a 100% floor is unreachable at ANY n",
+           RES95.min_n_for_one_failure(100, "min") is None,
+           "(C) 100% demands perfection by construction, so enlarging the "
+           "eval set cannot give it resolution. deterministic_calc_"
+           "correctness_pct_min is a ZERO-TOLERANCE threshold like "
+           "fabricated_count=0, and must be read as one rather than as a "
+           "percentage that happens to be high")
+
+# ---------------------------------------------------------------------------
+# 2. Continuous and absolute thresholds are EXCLUDED, not force-fitted.
+# ---------------------------------------------------------------------------
+check_true("tok/s and TTFT are excluded as continuous quantities",
+           "generation_tokens_per_sec_min" in RES95.CONTINUOUS
+           and "time_to_first_token_2k_sec_max" in RES95.CONTINUOUS,
+           "(B) they have no denominator; inventing one would produce a "
+           "resolution number that means nothing")
+check_true("count-of-zero thresholds are excluded too",
+           "fabricated_financial_data_count_max" in RES95.ABSOLUTE
+           and "paper_live_confusion_count_max" in RES95.ABSOLUTE,
+           "(B) a count of 0 has no percentage to resolve")
+_all95 = set(RES95.COUNTED) | set(RES95.CONTINUOUS) | set(RES95.ABSOLUTE)
+_thr95 = dict(json.load(io.open(os.path.join(_ROOT, "PROJECT_STATE.json"),
+                                encoding="utf-8"))["acceptance_thresholds"])
+_thr95.pop("status", None)
+check("every approved threshold is classified",
+      len(set(_thr95) - _all95), 0, 0,
+      "(D) an unclassified threshold would be silently omitted from the "
+      "resolution report -- the same blindness as an unmapped threshold in "
+      "grade_merged.py")
+check("...and no classification names a threshold that does not exist",
+      len(_all95 - set(_thr95)), 0, 0, "(A)")
+
+# EXACTLY ONCE, counted rather than set-differenced.
+#
+# A MUTANT SURVIVED HERE and it was my assertion at fault, not the code. The
+# text above originally read "classified exactly once" while the check was
+# `len(set(thresholds) - all_classified) == 0` -- a set difference, which
+# cannot see a threshold that appears in TWO tables. The mutant added
+# generation_tokens_per_sec_min to COUNTED, leaving it in CONTINUOUS too, and
+# both set differences stayed empty. The claim in the message was strictly
+# stronger than the condition being tested, which is a quieter version of an
+# assertion that tests nothing.
+check("...and each is classified EXACTLY once, by count not by set",
+      len(RES95.COUNTED) + len(RES95.CONTINUOUS) + len(RES95.ABSOLUTE),
+      len(_thr95), 0,
+      "(D) a threshold listed in two tables would be analysed as a "
+      "percentage AND excluded as continuous -- reporting a resolution "
+      "number for a quantity that has no denominator")
+_seen95 = list(RES95.COUNTED) + list(RES95.CONTINUOUS) + list(RES95.ABSOLUTE)
+check("...with no duplicate across the three tables",
+      len(_seen95) - len(set(_seen95)), 0, 0,
+      "(A) asserted directly as well, because an equal COUNT could still "
+      "hide a duplicate paired with an omission")
+
+# ---------------------------------------------------------------------------
+# 3. The script must propose NO threshold change. This is the guard that
+#    keeps a resolution analysis from becoming a relaxation argument.
+# ---------------------------------------------------------------------------
+_res95src = io.open(os.path.join(_ROOT, "scripts",
+                                 "threshold_resolution.py"),
+                    encoding="utf-8").read()
+check_true("the script states it proposes no threshold change",
+           '"proposes_no_threshold_change": True' in _res95src,
+           "(C) THE DECISIVE GUARD. The thresholds were pre-committed on "
+           "2026-08-10. An analysis showing they are hard to meet is one "
+           "step away from an argument for loosening them, and loosening a "
+           "pre-registration after seeing the numbers would invalidate the "
+           "whole evidence base")
+check_true("...and it never writes PROJECT_STATE.json",
+           'open(PATH, "w"' not in _res95src, "(C)")
+_resfile95 = json.load(io.open(os.path.join(
+    _ROOT, "evidence", "threshold_resolution_2026-09-07.json"),
+    encoding="utf-8"))
+check_true("the recorded resolution report agrees",
+           _resfile95["proposes_no_threshold_change"] is True, "(A)")
+check("...and it found SIX thresholds without resolution",
+      sum(1 for r in _resfile95["rows"]
+          if r["status"] in ("PASS_AT_PERFECTION_ONLY", "UNREACHABLE")), 6, 0,
+      "(D) R49 as first recorded named only the 2 that FAILED. Measuring all "
+      "of them found 6, including a PASS. Looking only where the bad news is "
+      "is a selection bias, and it was mine")
+
+# ---------------------------------------------------------------------------
+# 4. R10 readiness. The claim in the guide is that the prefill made every case
+#    gradeable; that is a MEASURED claim and must be checked, not asserted in
+#    prose only.
+# ---------------------------------------------------------------------------
+_run95 = json.load(io.open(os.path.join(
+    _ROOT, "evidence", "phase4_merged_2026-09-03.json"), encoding="utf-8"))
+_empty95 = sum(1 for arm in _run95["arms"] for r in _run95["arms"][arm]
+               if not (r.get("output") or "").strip())
+check("every one of the 52 cases has output to grade",
+      _empty95, 0, 0,
+      "(D) the 2026-08-30 run had 15 empty outputs, which are not gradeable "
+      "for fluency at all -- a human would have been reading blank pages. "
+      "The R10 guide's central claim, asserted rather than just written")
+check("...across all 52 cases",
+      sum(len(v) for v in _run95["arms"].values()), 52, 0, "(A)")
+
+# The arm::id keying matters more than it looks: plain and tools ask the SAME
+# 21 questions, so keying by id alone would let one arm's verdict become the
+# other's -- and that would not look like an error, it would look like a
+# finding.
+_ids95 = {}
+for _arm95 in _run95["arms"]:
+    for _r95 in _run95["arms"][_arm95]:
+        _ids95.setdefault(_r95["id"], []).append(_arm95)
+check("52 cases carry only 31 distinct ids",
+      len(_ids95), 31, 0,
+      "(D) 21 ids appear in TWO arms. This is why the grading tool keys on "
+      "arm::id: keying on id alone silently collapsed 52 cases to 31 and "
+      "made a tools verdict the plain verdict too")
+check("...and exactly 21 ids appear in more than one arm",
+      sum(1 for v in _ids95.values() if len(v) > 1), 21, 0, "(A)")
+
+# ---------------------------------------------------------------------------
+# 5. THE HONEST LIMIT OF R10. Grading cannot turn this threshold green,
+#    because it is a REGRESSION metric with no baseline. Asserted so the
+#    limitation cannot quietly disappear from a later summary.
+# ---------------------------------------------------------------------------
+_st95 = json.load(io.open(os.path.join(_ROOT, "PROJECT_STATE.json"),
+                          encoding="utf-8"))
+check_true("persian_fluency_regression is still recorded as UNMEASURED",
+           "persian_fluency_regression_pct_max"
+           in _st95["phase_4"]["measurements_recorded"]
+           ["unmeasured_thresholds"],
+           "(C) THE CLAIM THAT MUST NOT DRIFT. It is a REGRESSION metric and "
+           "there is no baseline to regress against, so completing R10 "
+           "grading produces a BASELINE, not a PASS. Presenting a first "
+           "measurement as though it cleared a regression threshold would be "
+           "exactly the ESTIMATED-as-MEASURED error this project forbids")
+check_true("...and the reason names the missing baseline",
+           "no Persian baseline" in _st95["phase_4"]
+           ["measurements_recorded"]["unmeasured_thresholds"]
+           ["persian_fluency_regression_pct_max"], "(A)")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

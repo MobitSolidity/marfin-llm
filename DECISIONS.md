@@ -4774,3 +4774,148 @@ the phase record. The assertions pin the recorded verdict itself: if
 changed and the record is stale. They also pin that recording a measurement
 did **not** enable live trading, change the active mode, or quietly loosen any
 of the 13 thresholds it failed against.
+
+
+## D-0095 — R49 was understated, and R10 cannot do what its threshold asks
+
+**Date:** 2026-09-07 · **Status:** ITEM 1 SOLVED (options costed, decision
+pending) · ITEM 3 SOLVED (tool verified, guide written) · **Trigger:** user
+instruction — solve items 1 and 3, skip item 2 (hardware)
+
+### Item 1 (R49): I recorded the risk too narrowly, and the correction is worse news
+
+On 2026-09-05 I filed R49 naming **two** thresholds — the two that FAILED.
+`scripts/threshold_resolution.py` measured all of them. **Six of twelve have no
+resolution:**
+
+| threshold | limit | current n | n needed for ONE failure | shortfall |
+|---|---|---|---|---|
+| `citation_correctness_pct_min` | 95 | 7 | **20** | 13 |
+| `unsupported_claim_rate_pct_max` | 3 | 11 | **34** | 23 |
+| `tool_call_schema_validity_pct_min` | 98 | 8 | **50** | 42 |
+| `persian_fluency_regression_pct_max` | 2 | 23 | **50** | 27 |
+| `correct_abstention_pct_min` | 90 | 9 | **10** | **1** |
+| `deterministic_calc_correctness_pct_min` | 100 | 8 | — | **any n** |
+
+**Two things I had wrong.**
+
+First, **`tool_call_schema_validity_pct_min` PASSED and still has no
+resolution.** 100 % over 8 attempted tool calls, where a 98 % floor needs 50
+calls to survive one failure. That PASS is not evidence of 98 % reliability. By
+filing R49 from the failing thresholds only, I had looked exactly where the bad
+news was — a selection bias, and it was mine. **A PASS without resolution is as
+uninformative as a FAIL without it.**
+
+Second, **a 100 % floor is unreachable at any n.** Enlarging the eval set
+cannot give `deterministic_calc_correctness_pct_min` resolution, because 100 %
+demands perfection by construction. It is a **zero-tolerance** threshold like
+`fabricated_count = 0` and must be read as one, not as a percentage that
+happens to be high.
+
+Continuous quantities (tok/s, TTFT, GiB) and counts-of-zero are **excluded, not
+force-fitted** — a resolution number for a quantity with no denominator would
+mean nothing.
+
+**What resolution is not.** It does not change the recorded FAIL: 42.86 % fails
+against 95 whether the denominator is 7 or 20. It is about whether a *future*
+good-but-imperfect result could ever be distinguished from a bad one. Today it
+could not: an improvement from 42.86 % to 85.71 % would still read FAIL, with
+nothing to show the progress.
+
+**Three options are costed in `R49_EVAL_SIZE_OPTIONS.md`, and the decision is
+the user's.** The costs are MEASURED, not estimated: the ratio is 1.57 claims
+per answer (11/7), so **+15 answerable rows** reaches both n=20 answers and
+n=34 claims; and the rag arm averaged **29.9 s per case** in the real run, so
+25 rag rows is **~12.4 minutes** of generation, not hours.
+
+A risk recorded with the option rather than discovered later: the current
+corpus is **fixtures** (`accession: FIXTURE-...`). Fifteen new questions built
+from invented numbers would make the eval set larger but **not more real**, so
+they have to come from genuine SEC/FRED filings — and that, not writing the
+questions, is where the work is.
+
+**Option C — relaxing a threshold — I refuse and did not do.** The thresholds
+were pre-committed on 2026-08-10. Loosening one *after seeing the numbers*
+turns a pre-registration into decoration and invalidates the evidence base. If
+instructed I will do it, but the recommendation is explicitly against, and this
+sentence is the record of that.
+
+One cheap item is worth separating out: `correct_abstention_pct_min` is short
+by **exactly one case**. A single extra abstain-oriented question moves it from
+pass-at-perfection to tolerating one failure — the cheapest resolution gain in
+the table, independent of which option is chosen.
+
+### Item 3 (R10): the tool works, the work got easier, and it still cannot pass
+
+`tools/grade_persian.py` (D-0072) was verified against the new run rather than
+assumed to work. MEASURED:
+
+```
+cases total                 52
+graded by a human            0
+not gradeable (no output)    0      <- was 15
+still ungraded              52
+```
+
+**The D-0091 prefill changed the nature of this task.** On 2026-08-30, 15 cases
+had empty output and were not gradeable for fluency at all — a human would have
+been reading blank pages. Now every one of the 52 has an answer in it. More
+cases, but each is real work rather than wasted attention.
+
+`R10_GRADING_GUIDE_FA.md` hands over the exact commands, in three **resumable**
+per-arm sessions (rag 10, plain 21, tools 21). ESTIMATED ~40 minutes at ~45 s
+per case — labelled ESTIMATED because I have no measurement of the user's
+reading speed. The guide also records why the tool keys on `arm::id`: 52 cases
+carry only **31 distinct ids**, with 21 appearing in both `plain` and `tools`,
+so keying on `id` alone collapsed the file and made one arm's verdict the
+other's.
+
+**THE HONEST LIMIT, and it is the most important sentence here.** Completing
+R10 **cannot** turn `persian_fluency_regression_pct_max` green. It is a
+**regression** metric and there is **no baseline** to regress against —
+`PROJECT_STATE` has said so since Phase 4 began: *"no prior measurement exists
+to regress against"*. Grading produces a **recorded baseline**, which is what
+makes a future comparison possible. Presenting a first measurement as though it
+had cleared a regression threshold would be precisely the
+ESTIMATED-as-MEASURED error this project forbids, and the guide says so on its
+first page rather than burying it.
+
+**Why do it anyway,** stated in the guide so the user can weigh it:
+
+1. The model's Persian quality is currently recorded **nowhere** — neither good
+   nor bad. This is the only way to know it.
+2. D-0081's FAIL verdict was reached on the **contaminated** 2026-08-30 run
+   where 20 of 52 answers were lost. It was deliberately not carried over, and
+   needs replacing.
+3. MEASURED in D-0081: the machine's unsupported-claim set and the human's had
+   **zero overlap**. The machine does not substitute for the reader.
+
+### Item 2 (hardware) — skipped on instruction
+
+Not analysed further. Q8's conclusion stands as recorded: the 3.0 s TTFT
+threshold is unreachable on this hardware by any model choice, and that is a
+hardware decision the user has set aside.
+
+### A mutant survived, and my assertion was the one at fault
+
+`a continuous threshold is force-fitted into the counted table` lived through
+the first battery. The assertion guarding it read *"every approved threshold is
+classified **exactly once**"* while the condition was a **set difference** —
+which cannot see a threshold present in two tables. The mutant added
+`generation_tokens_per_sec_min` to `COUNTED` while leaving it in `CONTINUOUS`,
+and both set differences stayed empty.
+
+The message claimed strictly more than the check tested. That is a quieter
+version of an assertion that tests nothing, and it is the second time this week
+a green check has been found not to reach the thing it described. Replaced with
+a **count** across the three tables plus a direct duplicate check — two
+assertions, because an equal count could still hide a duplicate paired with an
+omission.
+
+### Coverage
+
+22 new assertions (`test_phase4_harness` 881 → 903) and 5 new mutants on
+`scripts/threshold_resolution.py`, which became a mutation target because its
+output is what the R49 decision rests on — and because its most important
+property is a **negative** one: it must never propose relaxing a threshold.
+Final battery: **268 seeded, 259 killed, 0 survived, 9 skipped** (pre-existing).

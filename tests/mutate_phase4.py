@@ -85,6 +85,12 @@ NORM = "src/rag/normalize.py"
 GRADE = "scripts/grade_merged.py"
 REGRADE = "scripts/regrade_citations.py"
 
+# scripts/threshold_resolution.py became a target on 2026-09-07 (D-0095).
+# It decides whether a threshold has any resolution at all, which is the
+# question the R49 decision rests on -- and its most important property is a
+# NEGATIVE one: it must never propose relaxing a threshold.
+RESOL = "scripts/threshold_resolution.py"
+
 # The eval fixture is a MUTATION TARGET, not just an input.
 #
 # Added 2026-08-19. Until now every mutation edited code, on the tacit
@@ -1479,6 +1485,28 @@ MUTATIONS = [
     (REGRADE, "the recompute is mislabelled as a MEASUREMENT",
      '        "label": "RECOMPUTED_FROM_RECORDED_OUTPUT",',
      '        "label": "MEASURED",'),
+
+    # -- DEFECT 8: the resolution analysis (D-0095) --------------------------
+    (RESOL, "a 100% floor is reported as reachable, hiding zero-tolerance",
+     "        if direction == \"min\":\n"
+     "            if 100.0 * (n - 1) / n >= limit:\n"
+     "                return n",
+     "        if direction == \"min\":\n"
+     "            if 100.0 * n / n >= limit:\n"
+     "                return n"),
+    (RESOL, "the minimum-direction resolution is off by one",
+     "            if 100.0 * (n - 1) / n >= limit:",
+     "            if 100.0 * (n - 2) / n >= limit:"),
+    (RESOL, "the maximum-direction resolution tolerates two failures",
+     "            if 100.0 * 1 / n <= limit:",
+     "            if 100.0 * 2 / n <= limit:"),
+    (RESOL, "the script starts claiming it proposes a threshold change",
+     '        "proposes_no_threshold_change": True,',
+     '        "proposes_no_threshold_change": False,'),
+    (RESOL, "a continuous threshold is force-fitted into the counted table",
+     '    "citation_correctness_pct_min": {',
+     '    "generation_tokens_per_sec_min": {"unit": "x", "where": "y", '
+     '"dir": "min"},\n    "citation_correctness_pct_min": {'),
 ]
 
 

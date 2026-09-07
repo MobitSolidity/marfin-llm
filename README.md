@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0094). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0095). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -29,6 +29,10 @@ paper/live trading controls.
 | `scripts/merge_phase4.py` | Merges per-arm Phase 4 result files (`--arms rag` / `tools` / `plain`) into one payload. Latency kept per-invocation with its spread, peak RSS taken as a max, per-process counters summed, `threshold_verdicts` left `null` on purpose. Refuses on a missing arm, a duplicate arm, or a config mismatch. |
 | `scripts/grade_merged.py` | Grades a merged Phase 4 run against the 13 approved thresholds — the step `merge_phase4.py` deliberately refuses. An absent metric is **UNMEASURED, never PASS**; the **worst arm** decides each per-arm threshold; a single FAIL is an overall FAIL. Refuses to grade an incomplete run, and never writes `PROJECT_STATE.json`. |
 | `scripts/regrade_citations.py` | Recomputes ONLY the two citation metrics of a recorded run with the current grader, after D-0092. The model is **not** re-run: the answer text comes from the recorded file and the evidence is rebuilt with the runner's own `build_index`. Output labelled `RECOMPUTED_FROM_RECORDED_OUTPUT`, never MEASURED. |
+| `scripts/threshold_resolution.py` | Reports whether each percentage threshold has any **resolution** at the current eval size — the smallest n at which it can tolerate ONE failure. Continuous quantities and counts-of-zero are excluded, not force-fitted. **Proposes no threshold change**, and never writes `PROJECT_STATE.json`. |
+| `R49_EVAL_SIZE_OPTIONS.md` | Three costed options for R49, with MEASURED costs. Option C (relaxing a threshold) is refused with the reason recorded. |
+| `R10_GRADING_GUIDE_FA.md` | Persian handover for the R10 human grading session: exact commands, three resumable per-arm sessions, the 5-verdict vocabulary, and the honest limit that grading produces a baseline rather than a PASS. |
+| `evidence/threshold_resolution_2026-09-07.json` | The resolution measurement: 6 of 12 thresholds have none, including one that PASSED. |
 | `evidence/phase4_merged_2026-09-03.json` | **The recorded Phase 4 run**, sha256 `a0a625a2…c95e93f`, byte-identical to the user's upload. Held in the repo because `/tmp` was wiped by a sandbox reset the same day (R40). |
 | `evidence/phase4_threshold_verdicts_2026-09-05.json` | The graded verdict: 3 PASS, 7 FAIL, 2 UNMEASURED, **OVERALL FAIL**. |
 | `evidence/phase4_citations_recomputed_2026-09-05.json` | The corrected citation metrics: 42.86 % and 45.45 %, both still FAIL. |
@@ -41,7 +45,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,507 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,529 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -260,7 +264,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,507 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,529 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -917,7 +921,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,507
+unique and non-no-op *before* the battery ran. Full regression: **3,529
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1109,7 +1113,7 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,507
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,529
 assertions, 18 suites, 0 failed, 0 skipped.**
 
 ## PHASE 4 VERDICT: FAIL — recorded 2026-09-05
@@ -1227,6 +1231,100 @@ The run file lives in the repo as `evidence/phase4_merged_2026-09-03.json`,
 sha256 `a0a625a2…c95e93f`, byte-identical to the upload. It had been held only
 in `/tmp`, which a sandbox reset wiped the same day (R40). **A measurement
 whose evidence file can vanish is not recorded.**
+
+### R49: six thresholds have no resolution, not two — and one of them PASSED
+
+`scripts/threshold_resolution.py` asks a question the thresholds cannot answer
+about themselves: **at the current eval size, can this threshold tolerate a
+single failure?**
+
+| threshold | limit | current n | n needed for ONE failure |
+|---|---|---|---|
+| `citation_correctness_pct_min` | 95 | 7 | **20** |
+| `unsupported_claim_rate_pct_max` | 3 | 11 | **34** |
+| `tool_call_schema_validity_pct_min` | 98 | 8 | **50** |
+| `persian_fluency_regression_pct_max` | 2 | 23 | **50** |
+| `correct_abstention_pct_min` | 90 | 9 | **10** |
+| `deterministic_calc_correctness_pct_min` | 100 | 8 | **unreachable at any n** |
+
+```bash
+python3 scripts/threshold_resolution.py --observed obs.json \
+  --out evidence/threshold_resolution_2026-09-07.json
+```
+
+**Two corrections to what I recorded on 2026-09-05.**
+
+I filed R49 naming only the **two** thresholds that FAILED. Measuring all of
+them found **six**, including `tool_call_schema_validity_pct_min`, which
+**PASSED** — 100 % over 8 attempted tool calls, where a 98 % floor needs 50
+calls to survive one failure. That PASS is not evidence of 98 % reliability.
+Filing the risk from the failures alone meant looking exactly where the bad news
+was, and **a PASS without resolution is as uninformative as a FAIL without
+one.**
+
+And a **100 % floor is unreachable at any n**: enlarging the eval set cannot
+give `deterministic_calc_correctness_pct_min` resolution, because 100 % demands
+perfection by construction. It is a **zero-tolerance** threshold like
+`fabricated_count = 0`, and must be read as one rather than as a percentage that
+happens to be high.
+
+Continuous quantities (tok/s, TTFT, GiB) and counts-of-zero are **excluded, not
+force-fitted** — a resolution number for a quantity with no denominator would
+mean nothing.
+
+**Resolution does not change the recorded FAIL.** 42.86 % fails against 95
+whether the denominator is 7 or 20. What it decides is whether a *future*
+good-but-imperfect result could be told apart from a bad one. Today it could
+not: an improvement from 42.86 % to 85.71 % would still read FAIL, with nothing
+to show the progress.
+
+Three options are costed in **`R49_EVAL_SIZE_OPTIONS.md`**, with MEASURED costs
+— the ratio is 1.57 claims per answer, so **+15 answerable rows** reaches both
+targets, and the rag arm averaged **29.9 s per case**, so 25 rag rows is
+**~12.4 minutes** of generation. **Relaxing a threshold is refused**: they were
+pre-committed on 2026-08-10, and loosening one after seeing the numbers turns a
+pre-registration into decoration.
+
+One cheap item stands apart: `correct_abstention_pct_min` is short by **exactly
+one case**.
+
+### R10 is ready to grade, and it still cannot pass its own threshold
+
+`tools/grade_persian.py` was verified against the new run rather than assumed
+to work. MEASURED: **52 cases, 0 not-gradeable, 0 graded** — against **15**
+empty outputs on 2026-08-30. The D-0091 prefill means a human is no longer
+reading blank pages.
+
+`R10_GRADING_GUIDE_FA.md` hands over the commands in three **resumable** per-arm
+sessions (rag 10, plain 21, tools 21), ESTIMATED ~40 minutes.
+
+**The honest limit, stated on the guide's first page rather than buried:**
+completing R10 **cannot** turn `persian_fluency_regression_pct_max` green. It is
+a **regression** metric with **no baseline** to regress against — PROJECT_STATE
+has said so since Phase 4 began. Grading produces a **recorded baseline**, which
+is what makes a future comparison possible. Presenting a first measurement as
+though it had cleared a regression threshold would be the ESTIMATED-as-MEASURED
+error this project forbids.
+
+It is still worth doing: the model's Persian quality is recorded **nowhere**
+today, D-0081's FAIL was reached on the **contaminated** run, and the machine's
+unsupported-claim set had **zero overlap** with the human's — the machine does
+not substitute for the reader.
+
+### A mutant survived, and the assertion was at fault, not the code
+
+`a continuous threshold is force-fitted into the counted table` lived through
+the first battery. Its guard read *"every approved threshold is classified
+**exactly once**"* while the condition was a **set difference** — which cannot
+see a threshold present in two tables. The mutant added
+`generation_tokens_per_sec_min` to `COUNTED` while leaving it in `CONTINUOUS`,
+and both set differences stayed empty.
+
+The message claimed strictly more than the check tested — a quieter version of
+an assertion that tests nothing, and the second time this week a green check was
+found not to reach what it described. Replaced with a **count** across the three
+tables *plus* a direct duplicate check, because an equal count could still hide
+a duplicate paired with an omission.
 
 ### The item-7 results: the prefill worked, and it exposed a grader defect
 
@@ -1479,7 +1577,7 @@ So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
 attached, and **the number to plan around is the upper bound.** Quoting only a
 central figure is how a "1 hour" run became 1.7 hours earlier in this project.
 
-Full regression: **3,507 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+Full regression: **3,529 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
 **224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
 `None`, and **0 model runs** were launched.
 
@@ -1790,7 +1888,7 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,507 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh              # 3,529 assertions across 18 suites + 7 probes (~9 s)
 ./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
@@ -2154,7 +2252,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,507 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,529 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -2203,7 +2301,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,507-assertion base is trustworthy.
+3,529-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

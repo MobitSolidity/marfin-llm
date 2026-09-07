@@ -205,7 +205,8 @@
     "D-0091",
     "D-0092",
     "D-0093",
-    "D-0094"
+    "D-0094",
+    "D-0095"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -357,7 +358,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0094",
+  "decisions_logged": "D-0001..D-0095",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -442,7 +443,47 @@
       "severity": "MEDIUM",
       "title": "two approved thresholds are all-or-nothing at the current eval size",
       "detail": "MEASURED 2026-09-05. The rag arm has 7 checkable answers and 11 verifiable claims. citation_correctness_pct_min = 95 is therefore satisfiable ONLY by 7/7 (6/7 = 85.71%), and unsupported_claim_rate_pct_max = 3 ONLY by 0/11 (1/11 = 9.09%). Both thresholds were approved on 2026-08-10 against an eval set whose size makes them binary.",
-      "mitigation": "Do NOT relax the thresholds -- they were pre-committed, and loosening them after seeing the numbers would turn a pre-registration into decoration. The honest options are to enlarge the eval set so the percentages have resolution, or to record explicitly that these two thresholds are pass/fail-at-perfection at n=7/11. Requires a user decision before Phase 5 relies on them."
+      "mitigation": "Do NOT relax the thresholds -- they were pre-committed, and loosening them after seeing the numbers would turn a pre-registration into decoration. The honest options are to enlarge the eval set so the percentages have resolution, or to record explicitly that these two thresholds are pass/fail-at-perfection at n=7/11. Requires a user decision before Phase 5 relies on them.",
+      "corrected_2026_09_07": "AS FIRST RECORDED THIS RISK WAS UNDERSTATED. I named the two thresholds that FAILED. Measuring ALL of them with scripts/threshold_resolution.py found SIX without resolution, including tool_call_schema_validity_pct_min -- which PASSED. That PASS came from 100% over 8 attempted tool calls, where a 98% floor needs 50 calls to survive one failure, so it is not evidence of 98% reliability either. Recording only the failures was a selection bias: I looked where the bad news was.",
+      "full_measurement": {
+        "citation_correctness_pct_min": {
+          "limit": 95,
+          "n": 7,
+          "n_needed": 20
+        },
+        "unsupported_claim_rate_pct_max": {
+          "limit": 3,
+          "n": 11,
+          "n_needed": 34
+        },
+        "tool_call_schema_validity_pct_min": {
+          "limit": 98,
+          "n": 8,
+          "n_needed": 50,
+          "note": "this one PASSED, and still has no resolution"
+        },
+        "persian_fluency_regression_pct_max": {
+          "limit": 2,
+          "n": 23,
+          "n_needed": 50
+        },
+        "correct_abstention_pct_min": {
+          "limit": 90,
+          "n": 9,
+          "n_needed": 10,
+          "note": "short by ONE case -- the cheapest fix in the table"
+        },
+        "deterministic_calc_correctness_pct_min": {
+          "limit": 100,
+          "n": 8,
+          "n_needed": null,
+          "note": "UNREACHABLE AT ANY n. A 100% floor demands perfection by construction, so enlarging the eval set cannot give it resolution. It is a ZERO-TOLERANCE threshold like fabricated_count=0 and must be read as one, not as a percentage that happens to be high."
+        }
+      },
+      "excluded_and_why": "tok/s, TTFT, model size and peak RSS are continuous quantities with no denominator; fabricated_count and paper_live_confusion are counts of 0 with no percentage to resolve. Neither group was force-fitted into the analysis.",
+      "does_not_change_the_verdict": "The 2026-09-05 FAIL stands at any n: 42.86% fails against 95 whether the denominator is 7 or 20. Resolution is about whether a FUTURE good-but-imperfect result could be distinguished from a bad one.",
+      "options_document": "R49_EVAL_SIZE_OPTIONS.md",
+      "decision": "PENDING -- user's call"
     }
   ],
   "awaiting_approval_for": null,
@@ -1771,5 +1812,25 @@
       "the API path (D-0093) exists as an ADDITION for the cases where latency matters, with the local model remaining the default"
     ],
     "what_would_change_this": "a GPU, or a machine whose prefill is ~16x faster. That is a HARDWARE decision, not a model-selection one, and it is the honest conclusion of Phase 4."
+  },
+  "r10_readiness_2026_09_07": {
+    "tool": "tools/grade_persian.py (D-0072), verified working on the new run",
+    "guide": "R10_GRADING_GUIDE_FA.md",
+    "measured_state": {
+      "cases_total": 52,
+      "graded_by_human": 0,
+      "not_gradeable_no_output": 0,
+      "still_ungraded": 52
+    },
+    "what_changed": "the 2026-08-30 run had 15 EMPTY outputs that are not gradeable for fluency at all -- a human would have been reading blank pages. After the D-0091 prefill that is 0 of 52. More cases to grade, but every one now actually has an answer in it.",
+    "estimated_effort": "ESTIMATED ~40 minutes at ~45 s per case, in three resumable per-arm sessions (rag 10, plain 21, tools 21). NOT MEASURED: I have no measurement of the user's reading speed.",
+    "arm_id_keying": "52 cases carry only 31 distinct ids; 21 ids appear in BOTH plain and tools, which ask the same questions. The tool keys on arm::id, so one arm's verdict cannot become the other's.",
+    "THE_HONEST_LIMIT": "COMPLETING R10 CANNOT TURN persian_fluency_regression_pct_max GREEN. It is a REGRESSION metric and there is NO baseline to regress against -- PROJECT_STATE has said so since Phase 4 began: 'no prior measurement exists to regress against'. Grading produces a RECORDED BASELINE, which is valuable and is what makes a future comparison possible, but presenting a first measurement as though it cleared a regression threshold would be the ESTIMATED-as-MEASURED error this project forbids.",
+    "why_do_it_anyway": [
+      "the model's Persian quality is currently recorded NOWHERE -- neither good nor bad. This is the only way to know it.",
+      "D-0081's FAIL verdict was reached on the CONTAMINATED 2026-08-30 run, where 20 of 52 answers were lost. It was deliberately not carried over to this run and needs replacing.",
+      "MEASURED in D-0081: the machine's unsupported-claim set and the human's had ZERO overlap. The machine does not substitute for the reader."
+    ],
+    "status": "READY -- awaiting the user's grading session"
   }
 }

@@ -1,0 +1,78 @@
+{
+  "label": "COMPUTED_THRESHOLD_RESOLUTION",
+  "computed_by": "scripts/threshold_resolution.py",
+  "risk": "R49",
+  "rows": [
+    {
+      "threshold": "citation_correctness_pct_min",
+      "limit": 95,
+      "unit": "checkable answers",
+      "counted_over": "the rag arm's answerable rows that produced a claim",
+      "min_n_to_tolerate_one_failure": 20,
+      "current_n": 7,
+      "status": "PASS_AT_PERFECTION_ONLY",
+      "shortfall": 13
+    },
+    {
+      "threshold": "correct_abstention_pct_min",
+      "limit": 90,
+      "unit": "cases that should abstain",
+      "counted_over": "eval rows with must_abstain",
+      "min_n_to_tolerate_one_failure": 10,
+      "current_n": 9,
+      "status": "PASS_AT_PERFECTION_ONLY",
+      "shortfall": 1
+    },
+    {
+      "threshold": "deterministic_calc_correctness_pct_min",
+      "limit": 100,
+      "unit": "deterministic calculation cases",
+      "counted_over": "eval rows carrying expected_value",
+      "min_n_to_tolerate_one_failure": null,
+      "current_n": 8,
+      "status": "UNREACHABLE"
+    },
+    {
+      "threshold": "persian_fluency_regression_pct_max",
+      "limit": 2,
+      "unit": "Persian cases with a human grade",
+      "counted_over": "fa-language rows, once R10 grading is done",
+      "min_n_to_tolerate_one_failure": 50,
+      "current_n": 23,
+      "status": "PASS_AT_PERFECTION_ONLY",
+      "shortfall": 27
+    },
+    {
+      "threshold": "tool_call_schema_validity_pct_min",
+      "limit": 98,
+      "unit": "attempted tool calls",
+      "counted_over": "the tools arm's tool_calls_attempted",
+      "min_n_to_tolerate_one_failure": 50,
+      "current_n": 8,
+      "status": "PASS_AT_PERFECTION_ONLY",
+      "shortfall": 42
+    },
+    {
+      "threshold": "unsupported_claim_rate_pct_max",
+      "limit": 3,
+      "unit": "verifiable claims",
+      "counted_over": "sentences asserting a magnitude, across the rag answers",
+      "min_n_to_tolerate_one_failure": 34,
+      "current_n": 11,
+      "status": "PASS_AT_PERFECTION_ONLY",
+      "shortfall": 23
+    }
+  ],
+  "excluded_continuous": [
+    "model_file_size_gib_max",
+    "peak_rss_8k_gib_max",
+    "generation_tokens_per_sec_min",
+    "time_to_first_token_2k_sec_max"
+  ],
+  "excluded_absolute": [
+    "fabricated_financial_data_count_max",
+    "paper_live_confusion_count_max"
+  ],
+  "proposes_no_threshold_change": true,
+  "note": "Resolution is about whether a future good-but-imperfect result could be distinguished from a bad one. It does not change the 2026-09-05 FAIL, which stands at any n."
+}
