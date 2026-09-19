@@ -1,0 +1,2318 @@
+{
+  "label": "MEASURED",
+  "measures_local_hardware": true,
+  "phase": 4,
+  "route": "A (user's own machine)",
+  "timestamp": "2026-09-19T15:27:21",
+  "host": {
+    "system": "Windows",
+    "release": "11",
+    "processor": "Intel64 Family 6 Model 151 Stepping 5, GenuineIntel",
+    "python": "3.12.10",
+    "console_utf8": true
+  },
+  "provider": {
+    "name": "local",
+    "wire": "local",
+    "remote": false,
+    "label": "Local llama.cpp (no network, no key, no cost)",
+    "model_id": null,
+    "endpoint": null,
+    "billable_run": false,
+    "local_endpoint": null,
+    "allow_paid_given": false,
+    "http_attempts": null,
+    "remote_tokens_in": null,
+    "remote_tokens_out": null,
+    "quota_recorded": null,
+    "structured_calls": null,
+    "seed_sent": null,
+    "stop_sent": null,
+    "seed_supported_by_wire": null
+  },
+  "model": {
+    "file": "Qwen3.5-4B-Q5_K_M.gguf",
+    "size_gib": 2.928,
+    "ctx": 16384,
+    "threads": 6,
+    "load_seconds": 0.95,
+    "max_tokens": 512,
+    "sampling": {
+      "temperature": 0.0,
+      "seed": 20260831,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>user"
+      ],
+      "greedy": true,
+      "applied": true
+    },
+    "prompt_format": "chatml",
+    "tool_call_cap": 8,
+    "thinking_replies": 0,
+    "answers_lost_to_thinking_truncation": 0,
+    "identity": {
+      "sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+      "label": "VERIFIED",
+      "repo": "unsloth/Qwen3.5-4B-GGUF",
+      "file": "Qwen3.5-4B-Q5_K_M.gguf",
+      "size_bytes": 3143656608,
+      "is_pinned_revision": false,
+      "thinking_by_default": true,
+      "note": "Qwen3.5-4B Q5_K_M, architecture 'qwen35' (hybrid SSM + attention), quantised by Unsloth. NOT the revision pinned in Phase 2 (Qwen3-4B-Instruct-2507), and not even the same model family, so Phase 2's quality reasoning does not carry over. It THINKS BY DEFAULT: replies are graded after strip_thinking(), and a run whose answers were lost inside <think> is a budget failure, not a quality result."
+    }
+  },
+  "tool_registry_size": 84,
+  "latency": {
+    "ttft_seconds": 48.857,
+    "ttft_prompt_tokens": 1963,
+    "ttft_prompt_tokens_target": 2048,
+    "ttft_prompt_built_by": "tokenized",
+    "ttft_measured_at_2k": true,
+    "ttft_prompt_tokens_window": [
+      1638,
+      2560
+    ],
+    "decode_tokens_per_sec": 4.37,
+    "decode_completion_tokens": 128,
+    "label": "MEASURED"
+  },
+  "peak_rss_gib": 3.794,
+  "peak_rss_label": "MEASURED_PEAK",
+  "thresholds_approved": {
+    "model_file_size_gib_max": 4.0,
+    "peak_rss_8k_gib_max": 6.0,
+    "generation_tokens_per_sec_min": 8,
+    "time_to_first_token_2k_sec_max": 3.0,
+    "deterministic_calc_correctness_pct_min": 100,
+    "unsupported_claim_rate_pct_max": 3,
+    "citation_correctness_pct_min": 95,
+    "correct_abstention_pct_min": 90,
+    "fabricated_financial_data_count_max": 0,
+    "persian_fluency_regression_pct_max": 2,
+    "tool_call_schema_validity_pct_min": 98,
+    "paper_live_confusion_count_max": 0
+  },
+  "threshold_verdicts": [
+    {
+      "threshold": "citation_correctness_pct_min",
+      "limit": 95,
+      "measured": 40.0,
+      "direction": "min",
+      "verdict": "FAIL",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "correct_abstention_pct_min",
+      "limit": 90,
+      "measured": null,
+      "direction": "min",
+      "verdict": "PENDING",
+      "label": "UNKNOWN"
+    },
+    {
+      "threshold": "deterministic_calc_correctness_pct_min",
+      "limit": 100,
+      "measured": null,
+      "direction": "min",
+      "verdict": "PENDING",
+      "label": "UNKNOWN"
+    },
+    {
+      "threshold": "fabricated_financial_data_count_max",
+      "limit": 0,
+      "measured": 0,
+      "direction": "max",
+      "verdict": "PASS",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "generation_tokens_per_sec_min",
+      "limit": 8,
+      "measured": 4.37,
+      "direction": "min",
+      "verdict": "FAIL",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "model_file_size_gib_max",
+      "limit": 4.0,
+      "measured": 2.928,
+      "direction": "max",
+      "verdict": "PASS",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "paper_live_confusion_count_max",
+      "limit": 0,
+      "measured": 0,
+      "direction": "max",
+      "verdict": "PASS",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "peak_rss_8k_gib_max",
+      "limit": 6.0,
+      "measured": 3.794,
+      "direction": "max",
+      "verdict": "PASS",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "persian_fluency_regression_pct_max",
+      "limit": 2,
+      "measured": null,
+      "direction": "max",
+      "verdict": "PENDING",
+      "label": "UNKNOWN"
+    },
+    {
+      "threshold": "time_to_first_token_2k_sec_max",
+      "limit": 3.0,
+      "measured": 48.857,
+      "direction": "max",
+      "verdict": "FAIL",
+      "label": "MEASURED"
+    },
+    {
+      "threshold": "tool_call_schema_validity_pct_min",
+      "limit": 98,
+      "measured": null,
+      "direction": "min",
+      "verdict": "PENDING",
+      "label": "UNKNOWN"
+    },
+    {
+      "threshold": "unsupported_claim_rate_pct_max",
+      "limit": 3,
+      "measured": 60.0,
+      "direction": "max",
+      "verdict": "FAIL",
+      "label": "MEASURED"
+    }
+  ],
+  "summaries": {
+    "rag": {
+      "n_cases": 32,
+      "n_answerable": 22,
+      "n_unanswerable": 10,
+      "retrieval_hit_pct": 95.45,
+      "answer_correct_pct": 90.91,
+      "outcomes": {
+        "OK": 30,
+        "RETRIEVAL_FAILURE": 1,
+        "OVER_ABSTENTION": 1
+      },
+      "fabricated_financial_data_count": 0,
+      "fabrication_checked_n": 32,
+      "citation_correctness_pct": 40.0,
+      "unsupported_claim_rate_pct": 60.0,
+      "n_claims_checked": 30,
+      "model_failures": 0,
+      "retrieval_failures": 1,
+      "over_abstentions": 1,
+      "fa_cases": 7,
+      "fa_not_in_persian": 2
+    }
+  },
+  "arms": {
+    "rag": [
+      {
+        "id": "RAG-EN-001",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2023",
+          "SEC-JNJ-10K-FY2023",
+          "SEC-NOISE-PROPERTIES",
+          "FIX-AAPL-10K-2023"
+        ],
+        "gold_doc_ids": [
+          "FIX-AAPL-10K-2023"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the evidence provided, Apple's total net sales in fiscal <YEAR> were **$383,285 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 3.83285e+11 does not appear in the evidence; nearest is 3.52583e+11 (ratio 1.08708 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2023",
+                    "detail": "claimed 3.83285e+11 does not appear in the evidence; nearest is 2.00406e+11 (ratio 1.91254 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 3.83285e+11 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "FIX-AAPL-10K-2023",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  }
+                ]
+              },
+              {
+                "claim": "This figure is explicitly stated in passage <CIT>: \"Total net sales | 383,285\", with the unit specified as \"figures in million\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 383285 does not appear in the evidence; nearest is 1e+07 (ratio 0.0383285 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2023",
+                    "detail": "claimed 383285 does not appear in the evidence; nearest is 1e+07 (ratio 0.0383285 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 383285 may be units, thousands or millions (nearest value in evidence 320193)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "FIX-AAPL-10K-2023",
+                    "detail": "claimed 383285 does not appear in the evidence; nearest is 1.69148e+11 (ratio 2.26597e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve the fiscal 2023 income statement passage and quote 383,285 million (383.285 billion). Quoting the fiscal 2022 figure is a retrieval failure, not a model failure.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Apple's total net sales in fiscal 2023?",
+        "output": "Based on the evidence provided, Apple's total net sales in fiscal 2023 were **$383,285 million**.\n\nThis figure is explicitly stated in passage [4]: \"Total net sales | 383,285\", with the unit specified as \"figures in million\".",
+        "metrics": {
+          "seconds": 29.088,
+          "prompt_tokens": 611,
+          "completion_tokens": 65,
+          "decode_tps": 2.23,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the evidence provided, Apple's total net sales in fiscal 2023 were **$383,285 million**.\n\nThis figure is explicitly stated in passage [4]: \"Total net sales | 383,285\", with the unit specified as \"figures in million\"."
+        }
+      },
+      {
+        "id": "RAG-EN-002",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2023",
+          "SEC-NOISE-PROPERTIES",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "FIX-AAPL-10K-2023",
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the provided evidence, Apple's net income in fiscal <YEAR> was **$96,995 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 9.6995e+10 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 9.6995e+10 does not appear in the evidence; nearest is 7.3795e+10 (ratio 1.31438 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 9.6995e+10 does not appear in the evidence; nearest is 9.3736e+10 (ratio 1.03477 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Net income | 96,995\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 10 may be units, thousands or millions (nearest value in evidence 10)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve the operating/net income passage and quote 96,995 million.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Apple's net income in fiscal 2023?",
+        "output": "Based on the provided evidence, Apple's net income in fiscal 2023 was **$96,995 million**.\n\nThis figure is found in Evidence [1], which states: \"Apple Inc. ... Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Net income | 96,995\".",
+        "metrics": {
+          "seconds": 33.807,
+          "prompt_tokens": 645,
+          "completion_tokens": 78,
+          "decode_tps": 2.31,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the provided evidence, Apple's net income in fiscal 2023 was **$96,995 million**.\n\nThis figure is found in Evidence [1], which states: \"Apple Inc. ... Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Net income | 96,995\"."
+        }
+      },
+      {
+        "id": "RAG-EN-003",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-MSFT-10K-FY2025",
+          "SEC-MSFT-10K-FY2024",
+          "SEC-WMT-10K-FY2025",
+          "SEC-WMT-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "FIX-MSFT-10K-2023"
+        ],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "Must retrieve the Microsoft income statement passage and quote 211,915 million.",
+        "retrieval_ok": false,
+        "value_ok": false,
+        "fabricated": false,
+        "outcome": "RETRIEVAL_FAILURE",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Microsoft's total revenue for the fiscal year ended June 30 2023?",
+        "output": "I do not have the information needed to answer this question. The provided evidence contains data for Microsoft's fiscal years ended June 30, 2024, and June 30, 2025, but does not include figures for the fiscal year ended June 30, 2023.",
+        "metrics": {
+          "seconds": 32.189,
+          "prompt_tokens": 689,
+          "completion_tokens": 67,
+          "decode_tps": 2.08,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence contains data for Microsoft's fiscal years ended June 30, 2024, and June 30, 2025, but does not include figures for the fiscal year ended June 30, 2023."
+        }
+      },
+      {
+        "id": "RAG-EN-004",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "FIX-FRED-CPI",
+          "SEC-WMT-10K-FY2024",
+          "SEC-WMT-10K-FY2025",
+          "SEC-MSFT-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "FIX-FRED-CPI"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "The seasonally adjusted CPI index value for January <YEAR> was 308.417.",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "FIX-FRED-CPI",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 308.417 may be units, thousands or millions (nearest value in evidence 308.417)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 308.417 does not appear in the evidence; nearest is 1e+07 (ratio 3.08417e-05 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2025",
+                    "detail": "claimed 308.417 does not appear in the evidence; nearest is 1e+07 (ratio 3.08417e-05 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 308.417 does not appear in the evidence; nearest is 1e+07 (ratio 3.08417e-05 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve the FRED series passage and quote 308.417. This passage has no units_note, so the number is unscaled.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was the seasonally adjusted CPI index value for January 2024?",
+        "output": "The seasonally adjusted CPI index value for January 2024 was 308.417.",
+        "metrics": {
+          "seconds": 20.329,
+          "prompt_tokens": 606,
+          "completion_tokens": 24,
+          "decode_tps": 1.18,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "The seasonally adjusted CPI index value for January 2024 was 308.417."
+        }
+      },
+      {
+        "id": "RAG-EN-005",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "FIX-AAPL-10K-2023",
+          "FIX-AAPL-10K-2022",
+          "SEC-AAPL-10K-FY2024",
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "gold_doc_ids": [
+          "FIX-AAPL-10K-2022"
+        ],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "Distinguishes 2022 from 2023. Returning the 2023 passage is a retrieval failure.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Apple's total net sales in fiscal 2022?",
+        "output": "Based on the provided evidence, I do not have the specific figure for Apple's total net sales in fiscal 2022.\n\nThe evidence contains the following data points:\n*   **Fiscal 2023:** Total net sales were **383,285 million** (Passage [1]).\n*   **Fiscal 2022:** Total net sales were **394,328 million** (Passage [2]).\n\nTherefore, Apple's total net sales in fiscal 2022 were **394,328 million**.",
+        "metrics": {
+          "seconds": 44.828,
+          "prompt_tokens": 595,
+          "completion_tokens": 126,
+          "decode_tps": 2.81,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the provided evidence, I do not have the specific figure for Apple's total net sales in fiscal 2022.\n\nThe evidence contains the following data points:\n*   **Fiscal 2023:** Total net sales were **383,285 million** (Passage [1]).\n*   **Fiscal 2022:** Total net sales were **394,328 million** (Passage [2]).\n\nTherefore, Apple's total net sales in fiscal 2022 were **394,328 million**."
+        }
+      },
+      {
+        "id": "RAG-FA-001",
+        "lang": "fa",
+        "answerable": true,
+        "retrieved": [
+          "FIX-AAPL-10K-2023-FA",
+          "SEC-AAPL-10K-FY2024-FA",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-JNJ-10K-FY2023"
+        ],
+        "gold_doc_ids": [
+          "FIX-AAPL-10K-2023-FA",
+          "FIX-AAPL-10K-2023"
+        ],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "Either the Persian passage or the English one is a correct retrieval; both carry the same figure. The answer must be in Persian.",
+        "retrieval_ok": true,
+        "value_ok": false,
+        "fabricated": false,
+        "outcome": "OVER_ABSTENTION",
+        "persian_script": true,
+        "arm": "rag",
+        "question": "درآمد خالص کل اپل در سال مالی ۲۰۲۳ چقدر بود؟",
+        "output": "بر اساس شواهد ارائه‌شده، اطلاعات مورد نیاز برای پاسخ به این سوال وجود ندارد.\n\nشواهد زیر موجود است:\n*   [1] درآمد خالص کل را نشان می‌دهد، اما نام شرکت را ذکر نکرده است.\n*   [2] سود خالص اپل را برای سال مالی ۲۰۲۴ نشان می‌دهد (۹۳,۷۳۶ میلیون دلار).\n*   [3] درآمد خالص و درآمد کل آلفابت را برای سال مالی ۲۰۲۳ نشان می‌دهد.\n*   [4] سود خالص جانسون اند جانسون را برای سال مالی ۲۰۲۳ نشان می‌دهد.\n\nهیچ پاسخی که هم نام «اپل» را داشته باشد و هم «درآمد خالص کل» را برای «سال مالی ۲۰۲۳» نشان دهد، در شواهد موجود نیست.",
+        "metrics": {
+          "seconds": 64.057,
+          "prompt_tokens": 626,
+          "completion_tokens": 216,
+          "decode_tps": 3.37,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "بر اساس شواهد ارائه‌شده، اطلاعات مورد نیاز برای پاسخ به این سوال وجود ندارد.\n\nشواهد زیر موجود است:\n*   [1] درآمد خالص کل را نشان می‌دهد، اما نام شرکت را ذکر نکرده است.\n*   [2] سود خالص اپل را برای سال مالی ۲۰۲۴ نشان می‌دهد (۹۳,۷۳۶ میلیون دلار).\n*   [3] درآمد خالص و درآمد کل آلفابت را برای سال مالی ۲۰۲۳ نشان می‌دهد.\n*   [4] سود خالص جانسون اند جانسون را برای سال مالی ۲۰۲۳ نشان می‌دهد.\n\nهیچ پاسخی که هم نام «اپل» را داشته باشد و هم «درآمد خالص کل» را برای «سال مالی ۲۰۲۳» نشان دهد، در شواهد موجود نیست."
+        }
+      },
+      {
+        "id": "RAG-FA-002",
+        "lang": "fa",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024-FA",
+          "FIX-AAPL-10K-2023-FA",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-JNJ-10K-FY2023"
+        ],
+        "gold_doc_ids": [
+          "FIX-AAPL-10K-2023-FA",
+          "FIX-AAPL-10K-2023"
+        ],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "Must quote 96,995 million and answer in Persian.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": true,
+        "arm": "rag",
+        "question": "سود خالص اپل در سال مالی ۲۰۲۳ چه مقدار بود؟",
+        "output": "بر اساس شواهد ارائه‌شده، من اطلاعات مورد نیاز را ندارم.\n\nشواهد زیر سود خالص اپل را برای سال مالی ۲۰۲۴ (۹۳,۷۳۶ میلیون دلار) و سال مالی ۲۰۲۳ (۹۶,۹۹۵ میلیون دلار) ذکر می‌کنند، اما سال مالی ۲۰۲۳ در متن سوال به عنوان سال مالی ۲۰۲۳ (۲۰۲۳) ذکر شده است که با سال مالی ۲۰۲۴ در شواهد متفاوت است. بنابراین، بر اساس شواهد موجود، نمی‌توانم سود خالص اپل را برای سال مالی ۲۰۲۳ ارائه دهم.",
+        "metrics": {
+          "seconds": 57.207,
+          "prompt_tokens": 625,
+          "completion_tokens": 186,
+          "decode_tps": 3.25,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "بر اساس شواهد ارائه‌شده، من اطلاعات مورد نیاز را ندارم.\n\nشواهد زیر سود خالص اپل را برای سال مالی ۲۰۲۴ (۹۳,۷۳۶ میلیون دلار) و سال مالی ۲۰۲۳ (۹۶,۹۹۵ میلیون دلار) ذکر می‌کنند، اما سال مالی ۲۰۲۳ در متن سوال به عنوان سال مالی ۲۰۲۳ (۲۰۲۳) ذکر شده است که با سال مالی ۲۰۲۴ در شواهد متفاوت است. بنابراین، بر اساس شواهد موجود، نمی‌توانم سود خالص اپل را برای سال مالی ۲۰۲۳ ارائه دهم."
+        }
+      },
+      {
+        "id": "RAG-ABST-001",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-NOISE-PROPERTIES",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-AAPL-10K-FY2023",
+          "FIX-MSFT-10K-2023"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "The corpus contains no Tesla document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Tesla's total revenue in fiscal 2023?",
+        "output": "I do not have the information needed to answer this question. The provided evidence passages contain financial data for Apple Inc. and Alphabet Inc., but no data for Tesla.",
+        "metrics": {
+          "seconds": 21.642,
+          "prompt_tokens": 594,
+          "completion_tokens": 33,
+          "decode_tps": 1.52,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence passages contain financial data for Apple Inc. and Alphabet Inc., but no data for Tesla."
+        }
+      },
+      {
+        "id": "RAG-ABST-002",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-NOISE-PROPERTIES",
+          "FIX-FRED-CPI",
+          "FIX-MSFT-10K-2023",
+          "SEC-MSFT-10K-FY2025"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "A forward projection is not in any filing. Must abstain rather than extrapolate.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What is Apple's projected revenue for fiscal 2027?",
+        "output": "I do not have the information needed to answer this question. The provided evidence contains financial data for Apple's fiscal 2023 and Microsoft's fiscal 2025, but it does not include any projections for Apple's revenue for fiscal 2027.",
+        "metrics": {
+          "seconds": 26.558,
+          "prompt_tokens": 540,
+          "completion_tokens": 56,
+          "decode_tps": 2.11,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence contains financial data for Apple's fiscal 2023 and Microsoft's fiscal 2025, but it does not include any projections for Apple's revenue for fiscal 2027."
+        }
+      },
+      {
+        "id": "RAG-ABST-003",
+        "lang": "fa",
+        "answerable": false,
+        "retrieved": [
+          "FIX-AAPL-10K-2023-FA",
+          "SEC-AAPL-10K-FY2024-FA"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "Iranian market data is descoped (Q3) and codal/tsetmc are disabled. Must abstain in Persian, and must not invent a figure.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": true,
+        "arm": "rag",
+        "question": "درآمد شرکت ایران خودرو در سال ۱۴۰۲ چقدر بود؟",
+        "output": "I do not have the information needed to answer this question. The provided evidence contains financial data for Apple Inc. (2023 and 2024) and a figure labeled \"Total Net Income\" (۳۸۳,۲۸۵) without specifying the company name, but it does not contain any data regarding Iran Khodro (ایران خودرو) or its financial figures for the year 1402 (2023).",
+        "metrics": {
+          "seconds": 31.263,
+          "prompt_tokens": 377,
+          "completion_tokens": 99,
+          "decode_tps": 3.17,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence contains financial data for Apple Inc. (2023 and 2024) and a figure labeled \"Total Net Income\" (۳۸۳,۲۸۵) without specifying the company name, but it does not contain any data regarding Iran Khodro (ایران خودرو) or its financial figures for the year 1402 (2023)."
+        }
+      },
+      {
+        "id": "RAG2-EN-001",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2023",
+          "SEC-NOISE-PROPERTIES",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the provided evidence, Apple's net income in fiscal <YEAR> was **$96,995 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 9.6995e+10 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 9.6995e+10 does not appear in the evidence; nearest is 7.3795e+10 (ratio 1.31438 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 9.6995e+10 does not appear in the evidence; nearest is 9.3736e+10 (ratio 1.03477 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Net income | 96,995\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 10 may be units, thousands or millions (nearest value in evidence 10)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-AAPL-10K-FY2023 and quote 96,995 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000320193-23-000106, filed 2023-11-03.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Apple's net income in fiscal 2023?",
+        "output": "Based on the provided evidence, Apple's net income in fiscal 2023 was **$96,995 million**.\n\nThis figure is found in Evidence [1], which states: \"Apple Inc. ... Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Net income | 96,995\".",
+        "metrics": {
+          "seconds": 35.317,
+          "prompt_tokens": 645,
+          "completion_tokens": 78,
+          "decode_tps": 2.21,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the provided evidence, Apple's net income in fiscal 2023 was **$96,995 million**.\n\nThis figure is found in Evidence [1], which states: \"Apple Inc. ... Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Net income | 96,995\"."
+        }
+      },
+      {
+        "id": "RAG2-EN-002",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-NOISE-PROPERTIES",
+          "SEC-NOISE-GOVERNANCE",
+          "SEC-AAPL-10K-FY2023",
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the evidence provided, Apple's total assets at the end of fiscal <YEAR> were **$352,583 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 3.52583e+11 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-GOVERNANCE",
+                    "detail": "claimed 3.52583e+11 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 3.52583e+11 does not appear in the evidence; nearest is 3.6498e+11 (ratio 0.966034 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "(CIK 0000320193) -- Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Net income | 96,995 -- Total assets | 352,583 -- Total shareholders' equity | 62,146\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 320193 may be units, thousands or millions (nearest value in evidence 320193)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-GOVERNANCE",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 320193 may be units, thousands or millions (nearest value in evidence 320193)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 320193 does not appear in the evidence; nearest is 1e+07 (ratio 0.0320193 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 320193 does not appear in the evidence; nearest is 1e+07 (ratio 0.0320193 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-AAPL-10K-FY2023 and quote 352,583 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000320193-23-000106, filed 2023-11-03.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Apple's total assets at the end of fiscal 2023?",
+        "output": "Based on the evidence provided, Apple's total assets at the end of fiscal 2023 were **$352,583 million**.\n\nThis figure is found in passage [3], which states: \"[figures in million] Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Net income | 96,995 -- Total assets | 352,583 -- Total shareholders' equity | 62,146\".",
+        "metrics": {
+          "seconds": 43.986,
+          "prompt_tokens": 642,
+          "completion_tokens": 126,
+          "decode_tps": 2.86,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the evidence provided, Apple's total assets at the end of fiscal 2023 were **$352,583 million**.\n\nThis figure is found in passage [3], which states: \"[figures in million] Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Net income | 96,995 -- Total assets | 352,583 -- Total shareholders' equity | 62,146\"."
+        }
+      },
+      {
+        "id": "RAG2-EN-003",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024",
+          "SEC-AAPL-10K-FY2023",
+          "SEC-NOISE-PROPERTIES",
+          "SEC-NOISE-GOVERNANCE"
+        ],
+        "gold_doc_ids": [
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the evidence provided, Apple's total shareholders' equity at the end of fiscal <YEAR> was **56,950 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 5.695e+10 does not appear in the evidence; nearest is 6.2146e+10 (ratio 0.91639 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 5.695e+10 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-GOVERNANCE",
+                    "detail": "claimed 5.695e+10 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  }
+                ]
+              },
+              {
+                "claim": "(CIK 0000320193) -- Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Total shareholders' equity | 56,950\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 320193 does not appear in the evidence; nearest is 1e+07 (ratio 0.0320193 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 320193 does not appear in the evidence; nearest is 1e+07 (ratio 0.0320193 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 320193 may be units, thousands or millions (nearest value in evidence 320193)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-GOVERNANCE",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 320193 may be units, thousands or millions (nearest value in evidence 320193)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-AAPL-10K-FY2024 and quote 56,950 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000320193-24-000123, filed 2024-11-01.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Apple's total shareholders' equity at the end of fiscal 2024?",
+        "output": "Based on the evidence provided, Apple's total shareholders' equity at the end of fiscal 2024 was **56,950 million**.\n\nThis figure is found in passage [1], which states: \"Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2024, consolidated financial statements (in millions) -- Total shareholders' equity | 56,950\".",
+        "metrics": {
+          "seconds": 38.133,
+          "prompt_tokens": 644,
+          "completion_tokens": 99,
+          "decode_tps": 2.6,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the evidence provided, Apple's total shareholders' equity at the end of fiscal 2024 was **56,950 million**.\n\nThis figure is found in passage [1], which states: \"Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2024, consolidated financial statements (in millions) -- Total shareholders' equity | 56,950\"."
+        }
+      },
+      {
+        "id": "RAG2-EN-004",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-AAPL-10K-FY2023",
+          "SEC-NOISE-PROPERTIES"
+        ],
+        "gold_doc_ids": [
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the evidence provided, Apple's net income in fiscal <YEAR> was **$93,736 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 9.3736e+10 does not appear in the evidence; nearest is 1.00118e+11 (ratio 0.936255 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 9.3736e+10 does not appear in the evidence; nearest is 9.6995e+10 (ratio 0.9664 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 9.3736e+10 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  }
+                ]
+              },
+              {
+                "claim": "Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Net income | 93,736\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 10 may be units, thousands or millions (nearest value in evidence 10)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-AAPL-10K-FY2024 and quote 93,736 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000320193-24-000123, filed 2024-11-01.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Apple's net income in fiscal 2024?",
+        "output": "Based on the evidence provided, Apple's net income in fiscal 2024 was **$93,736 million**.\n\nThis figure is found in passage [1], which states: \"Apple Inc. ... Form 10-K, fiscal 2024, consolidated financial statements (in millions) -- Net income | 93,736\".",
+        "metrics": {
+          "seconds": 33.092,
+          "prompt_tokens": 646,
+          "completion_tokens": 78,
+          "decode_tps": 2.36,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the evidence provided, Apple's net income in fiscal 2024 was **$93,736 million**.\n\nThis figure is found in passage [1], which states: \"Apple Inc. ... Form 10-K, fiscal 2024, consolidated financial statements (in millions) -- Net income | 93,736\"."
+        }
+      },
+      {
+        "id": "RAG2-EN-005",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-MSFT-10K-FY2024",
+          "SEC-MSFT-10K-FY2025",
+          "SEC-WMT-10K-FY2024",
+          "SEC-WMT-10K-FY2025"
+        ],
+        "gold_doc_ids": [
+          "SEC-MSFT-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "Microsoft's total revenue for the fiscal year ended June 30, <YEAR>, was **$245,122 million** (as stated in evidence passage <CIT>).",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2025",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2025",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-MSFT-10K-FY2024 and quote 245,122 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000950170-24-087843, filed 2024-07-30.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Microsoft's total revenue for the fiscal year ended June 30 2024?",
+        "output": "Microsoft's total revenue for the fiscal year ended June 30, 2024, was **$245,122 million** (as stated in evidence passage [1]).",
+        "metrics": {
+          "seconds": 26.541,
+          "prompt_tokens": 689,
+          "completion_tokens": 41,
+          "decode_tps": 1.54,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Microsoft's total revenue for the fiscal year ended June 30, 2024, was **$245,122 million** (as stated in evidence passage [1])."
+        }
+      },
+      {
+        "id": "RAG2-EN-006",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-MSFT-10K-FY2025",
+          "SEC-MSFT-10K-FY2024",
+          "SEC-WMT-10K-FY2025",
+          "SEC-WMT-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-MSFT-10K-FY2025"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "Microsoft's net income for the fiscal year ended June 30, <YEAR>, was **$101,832 million** (as stated in evidence passage <CIT>).",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2025",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2025",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-MSFT-10K-FY2025 and quote 101,832 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000950170-25-100235, filed 2025-07-30.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Microsoft's net income for the fiscal year ended June 30 2025?",
+        "output": "Microsoft's net income for the fiscal year ended June 30, 2025, was **$101,832 million** (as stated in evidence passage [1]).",
+        "metrics": {
+          "seconds": 26.34,
+          "prompt_tokens": 689,
+          "completion_tokens": 41,
+          "decode_tps": 1.56,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Microsoft's net income for the fiscal year ended June 30, 2025, was **$101,832 million** (as stated in evidence passage [1])."
+        }
+      },
+      {
+        "id": "RAG2-EN-007",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-MSFT-10K-FY2024",
+          "SEC-MSFT-10K-FY2025",
+          "SEC-AAPL-10K-FY2024",
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "gold_doc_ids": [
+          "SEC-MSFT-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "Microsoft's total assets at June 30, <YEAR>, were **512,163 million** (as stated in Evidence <CIT>).",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2025",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 30 does not appear in the evidence; nearest is 1e+07 (ratio 3e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-MSFT-10K-FY2024 and quote 512,163 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000950170-24-087843, filed 2024-07-30.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Microsoft's total assets at June 30 2024?",
+        "output": "Microsoft's total assets at June 30, 2024, were **512,163 million** (as stated in Evidence [1]).",
+        "metrics": {
+          "seconds": 25.17,
+          "prompt_tokens": 693,
+          "completion_tokens": 35,
+          "decode_tps": 1.39,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Microsoft's total assets at June 30, 2024, were **512,163 million** (as stated in Evidence [1])."
+        }
+      },
+      {
+        "id": "RAG2-EN-008",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-NOISE-PROPERTIES",
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "gold_doc_ids": [
+          "SEC-GOOGL-10K-FY2023"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the evidence provided, Alphabet's total revenues in fiscal <YEAR> were **307,394 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 3.07394e+11 does not appear in the evidence; nearest is 3.50018e+11 (ratio 0.878223 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 3.07394e+11 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 3.07394e+11 does not appear in the evidence; nearest is 3.20193e+11 (ratio 0.960027 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Total revenues | 307,394\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "the evidence declares no scale, so a bare magnitude cannot be confirmed: 10 may be units, thousands or millions (nearest value in evidence 10)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-GOOGL-10K-FY2023 and quote 307,394 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0001652044-24-000022, filed 2024-01-31.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Alphabet's total revenues in fiscal 2023?",
+        "output": "Based on the evidence provided, Alphabet's total revenues in fiscal 2023 were **307,394 million**.\n\nThis figure is found in passage [1], which states: \"Alphabet Inc. ... Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Total revenues | 307,394\".",
+        "metrics": {
+          "seconds": 35.634,
+          "prompt_tokens": 633,
+          "completion_tokens": 80,
+          "decode_tps": 2.25,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the evidence provided, Alphabet's total revenues in fiscal 2023 were **307,394 million**.\n\nThis figure is found in passage [1], which states: \"Alphabet Inc. ... Form 10-K, fiscal 2023, consolidated financial statements (in millions) -- Total revenues | 307,394\"."
+        }
+      },
+      {
+        "id": "RAG2-EN-009",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-AAPL-10K-FY2024",
+          "SEC-WMT-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-GOOGL-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Based on the provided evidence, Alphabet's net income in fiscal <YEAR> was **$100,118 million**",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 1.00118e+11 does not appear in the evidence; nearest is 7.3795e+10 (ratio 1.3567 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 1.00118e+11 does not appear in the evidence; nearest is 9.3736e+10 (ratio 1.06808 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 1.00118e+11 does not appear in the evidence; nearest is 1.04169e+11 (ratio 0.961111 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "Form 10-K, fiscal <YEAR>, consolidated financial statements (in millions) -- Net income | 100,118\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2023",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-GOOGL-10K-FY2024 and quote 100,118 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0001652044-25-000014, filed 2025-02-05.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Alphabet's net income in fiscal 2024?",
+        "output": "Based on the provided evidence, Alphabet's net income in fiscal 2024 was **$100,118 million**.\n\nThis figure is found in passage [1], which states: \"Alphabet Inc. ... Form 10-K, fiscal 2024, consolidated financial statements (in millions) -- Net income | 100,118\".",
+        "metrics": {
+          "seconds": 34.037,
+          "prompt_tokens": 650,
+          "completion_tokens": 81,
+          "decode_tps": 2.38,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Based on the provided evidence, Alphabet's net income in fiscal 2024 was **$100,118 million**.\n\nThis figure is found in passage [1], which states: \"Alphabet Inc. ... Form 10-K, fiscal 2024, consolidated financial statements (in millions) -- Net income | 100,118\"."
+        }
+      },
+      {
+        "id": "RAG2-EN-010",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-JNJ-10K-FY2023",
+          "SEC-JNJ-10K-FY2024",
+          "SEC-NOISE-PROPERTIES",
+          "FIX-AAPL-10K-2023"
+        ],
+        "gold_doc_ids": [
+          "SEC-JNJ-10K-FY2023"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "SUPPORTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "Johnson & Johnson's sales to customers in fiscal <YEAR> were $85,159 million.",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-JNJ-10K-FY2023",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "claimed 8.5159e+10 does not appear in the evidence; nearest is 8.8821e+10 (ratio 0.958771 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "UNSUPPORTED",
+                    "doc_id": "SEC-NOISE-PROPERTIES",
+                    "detail": "claimed 8.5159e+10 is not in the evidence, and the evidence declares no scale, so it cannot be confirmed or ruled out (nearest value 320193)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "FIX-AAPL-10K-2023",
+                    "detail": "claimed 8.5159e+10 does not appear in the evidence; nearest is 1.69148e+11 (ratio 0.503459 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-JNJ-10K-FY2023 and quote 85,159 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000200406-24-000013, filed 2024-02-16.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Johnson & Johnson's sales to customers in fiscal 2023?",
+        "output": "Johnson & Johnson's sales to customers in fiscal 2023 were $85,159 million.",
+        "metrics": {
+          "seconds": 20.082,
+          "prompt_tokens": 600,
+          "completion_tokens": 24,
+          "decode_tps": 1.2,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Johnson & Johnson's sales to customers in fiscal 2023 were $85,159 million."
+        }
+      },
+      {
+        "id": "RAG2-EN-011",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-JNJ-10K-FY2024",
+          "SEC-JNJ-10K-FY2023",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-JNJ-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "SUPPORTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "Johnson & Johnson's net earnings in fiscal <YEAR> were $14,066 million.",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2023",
+                    "detail": "claimed 1.4066e+10 does not appear in the evidence; nearest is 2.023e+09 (ratio 6.95304 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 1.4066e+10 does not appear in the evidence; nearest is 2.024e+09 (ratio 6.9496 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 1.4066e+10 does not appear in the evidence; nearest is 2.024e+09 (ratio 6.9496 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-JNJ-10K-FY2024 and quote 14,066 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000200406-25-000038, filed 2025-02-13.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Johnson & Johnson's net earnings in fiscal 2024?",
+        "output": "Johnson & Johnson's net earnings in fiscal 2024 were $14,066 million.",
+        "metrics": {
+          "seconds": 21.838,
+          "prompt_tokens": 643,
+          "completion_tokens": 23,
+          "decode_tps": 1.05,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Johnson & Johnson's net earnings in fiscal 2024 were $14,066 million."
+        }
+      },
+      {
+        "id": "RAG2-EN-012",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-WMT-10K-FY2024",
+          "SEC-WMT-10K-FY2025",
+          "SEC-MSFT-10K-FY2024",
+          "SEC-MSFT-10K-FY2025"
+        ],
+        "gold_doc_ids": [
+          "SEC-WMT-10K-FY2024"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 1,
+            "per_claim": [
+              {
+                "claim": "Walmart's total revenues for the fiscal year ended January 31, <YEAR>, were $648,125 million.",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2025",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2025",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-WMT-10K-FY2024 and quote 648,125 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000104169-24-000056, filed 2024-03-15.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Walmart's total revenues for the fiscal year ended January 31 2024?",
+        "output": "Walmart's total revenues for the fiscal year ended January 31, 2024, were $648,125 million.",
+        "metrics": {
+          "seconds": 24.71,
+          "prompt_tokens": 689,
+          "completion_tokens": 32,
+          "decode_tps": 1.3,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Walmart's total revenues for the fiscal year ended January 31, 2024, were $648,125 million."
+        }
+      },
+      {
+        "id": "RAG2-EN-013",
+        "lang": "en",
+        "answerable": true,
+        "retrieved": [
+          "SEC-WMT-10K-FY2025",
+          "SEC-WMT-10K-FY2024",
+          "SEC-MSFT-10K-FY2025",
+          "SEC-MSFT-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-WMT-10K-FY2025"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "Walmart's consolidated net income for the fiscal year ended January 31, <YEAR>, was **$19,436 million**",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2025",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2025",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 31 does not appear in the evidence; nearest is 1e+07 (ratio 3.1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "(CIK 0000104169) -- Form 10-K, the fiscal year ended January 31 <YEAR>, consolidated financial statements (in millions) -- Consolidated net income | 19,436\".",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2025",
+                    "detail": "claimed 104169 does not appear in the evidence; nearest is 1e+07 (ratio 0.0104169 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-WMT-10K-FY2024",
+                    "detail": "claimed 104169 does not appear in the evidence; nearest is 1e+07 (ratio 0.0104169 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2025",
+                    "detail": "claimed 104169 does not appear in the evidence; nearest is 1e+07 (ratio 0.0104169 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-MSFT-10K-FY2024",
+                    "detail": "claimed 104169 does not appear in the evidence; nearest is 1e+07 (ratio 0.0104169 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-WMT-10K-FY2025 and quote 19,436 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. Source: SEC EDGAR XBRL, accession 0000104169-25-000021, filed 2025-03-14.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Walmart's consolidated net income for the fiscal year ended January 31 2025?",
+        "output": "Walmart's consolidated net income for the fiscal year ended January 31, 2025, was **$19,436 million**.\n\nThis figure is stated in Evidence [1]: \"Walmart Inc. (CIK 0000104169) -- Form 10-K, the fiscal year ended January 31 2025, consolidated financial statements (in millions) -- Consolidated net income | 19,436\".",
+        "metrics": {
+          "seconds": 41.698,
+          "prompt_tokens": 690,
+          "completion_tokens": 105,
+          "decode_tps": 2.52,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "Walmart's consolidated net income for the fiscal year ended January 31, 2025, was **$19,436 million**.\n\nThis figure is stated in Evidence [1]: \"Walmart Inc. (CIK 0000104169) -- Form 10-K, the fiscal year ended January 31 2025, consolidated financial statements (in millions) -- Consolidated net income | 19,436\"."
+        }
+      },
+      {
+        "id": "RAG2-FA-001",
+        "lang": "fa",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024-FA",
+          "FIX-AAPL-10K-2023-FA",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-JNJ-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-AAPL-10K-FY2024",
+          "SEC-AAPL-10K-FY2024-FA"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 2,
+            "per_claim": [
+              {
+                "claim": "بر اساس شواهد ارائه‌شده، سود خالص اپل (Apple Inc.) در سال مالی <YEAR> برابر با **۹۳,۷۳۶ میلیون دلار** بوده است",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024-FA",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "FIX-AAPL-10K-2023-FA",
+                    "detail": "claimed 9.3736e+10 does not appear in the evidence; nearest is 9.6995e+10 (ratio 0.9664 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 9.3736e+10 does not appear in the evidence; nearest is 1.00118e+11 (ratio 0.936255 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "claimed 9.3736e+10 does not appear in the evidence; nearest is 8.8821e+10 (ratio 1.05534 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "این عدد از گذرگاری <CIT> که مربوط به فرم ۱۰-K اپل برای سال مالی <YEAR> است، استخراج شده است.",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024-FA",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "FIX-AAPL-10K-2023-FA",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 9.6995e+10 (ratio 1.03098e-10 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "claimed 10 does not appear in the evidence; nearest is 1e+07 (ratio 1e-06 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-AAPL-10K-FY2024 and quote 93,736 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. The answer must be in Persian. Source: SEC EDGAR XBRL, accession 0000320193-24-000123, filed 2024-11-01.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": true,
+        "arm": "rag",
+        "question": "سود خالص اپل در سال مالی ۲۰۲۴ چقدر بود؟",
+        "output": "بر اساس شواهد ارائه‌شده، سود خالص اپل (Apple Inc.) در سال مالی ۲۰۲۴ برابر با **۹۳,۷۳۶ میلیون دلار** بوده است.\n\nاین عدد از گذرگاری [1] که مربوط به فرم ۱۰-K اپل برای سال مالی ۲۰۲۴ است، استخراج شده است.",
+        "metrics": {
+          "seconds": 35.895,
+          "prompt_tokens": 626,
+          "completion_tokens": 93,
+          "decode_tps": 2.59,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "بر اساس شواهد ارائه‌شده، سود خالص اپل (Apple Inc.) در سال مالی ۲۰۲۴ برابر با **۹۳,۷۳۶ میلیون دلار** بوده است.\n\nاین عدد از گذرگاری [1] که مربوط به فرم ۱۰-K اپل برای سال مالی ۲۰۲۴ است، استخراج شده است."
+        }
+      },
+      {
+        "id": "RAG2-FA-002",
+        "lang": "fa",
+        "answerable": true,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024-FA",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-JNJ-10K-FY2024",
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "gold_doc_ids": [
+          "SEC-AAPL-10K-FY2024",
+          "SEC-AAPL-10K-FY2024-FA"
+        ],
+        "abstained": false,
+        "empty_output": false,
+        "citations": [
+          {
+            "status": "CONTRADICTED",
+            "n_passages_checked": 4,
+            "n_claims_checked": 3,
+            "per_claim": [
+              {
+                "claim": "بر اساس شواهد ارائه‌شده، جمع دارایی‌های اپل (Apple Inc.) در پایان سال مالی <YEAR> برابر با **۳۶۴،۹۸۰ میلیون** بود",
+                "status": "SUPPORTED",
+                "per_passage": [
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024-FA",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 3.6498e+11 does not appear in the evidence; nearest is 3.50018e+11 (ratio 1.04275 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "claimed 3.6498e+11 does not appear in the evidence; nearest is 2.00406e+11 (ratio 1.8212 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "SUPPORTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "all 1 claimed magnitude(s) matched within the precision the claim itself states"
+                  }
+                ]
+              },
+              {
+                "claim": "*   سند <CIT>: \"جمع دارایی‌ها | ۳۶۴،۹۸۰\"",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024-FA",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              },
+              {
+                "claim": "*   سند <CIT>: \"Total assets | 364,980\"",
+                "status": "CONTRADICTED",
+                "per_passage": [
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024-FA",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-GOOGL-10K-FY2024",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-JNJ-10K-FY2024",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  },
+                  {
+                    "status": "CONTRADICTED",
+                    "doc_id": "SEC-AAPL-10K-FY2024",
+                    "detail": "claimed 364980 does not appear in the evidence; nearest is 1e+07 (ratio 0.036498 -- a power-of-ten ratio means a scale error)"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "human_grade": null,
+        "rubric": "Must retrieve SEC-AAPL-10K-FY2024 and quote 364,980 million. Answering with the neighbouring fiscal year's figure is a RETRIEVAL failure, not a model failure. The answer must be in Persian. Source: SEC EDGAR XBRL, accession 0000320193-24-000123, filed 2024-11-01.",
+        "retrieval_ok": true,
+        "value_ok": true,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": true,
+        "arm": "rag",
+        "question": "جمع دارایی‌های اپل در پایان سال مالی ۲۰۲۴ چقدر بود؟",
+        "output": "بر اساس شواهد ارائه‌شده، جمع دارایی‌های اپل (Apple Inc.) در پایان سال مالی ۲۰۲۴ برابر با **۳۶۴،۹۸۰ میلیون** بود.\n\nاین اطلاعات در دو سند تأیید شده است:\n*   سند [1]: \"جمع دارایی‌ها | ۳۶۴،۹۸۰\"\n*   سند [4]: \"Total assets | 364,980\"\n\nواحد اعداد در این شواهد **میلیون** است.",
+        "metrics": {
+          "seconds": 46.068,
+          "prompt_tokens": 664,
+          "completion_tokens": 132,
+          "decode_tps": 2.87,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "بر اساس شواهد ارائه‌شده، جمع دارایی‌های اپل (Apple Inc.) در پایان سال مالی ۲۰۲۴ برابر با **۳۶۴،۹۸۰ میلیون** بود.\n\nاین اطلاعات در دو سند تأیید شده است:\n*   سند [1]: \"جمع دارایی‌ها | ۳۶۴،۹۸۰\"\n*   سند [4]: \"Total assets | 364,980\"\n\nواحد اعداد در این شواهد **میلیون** است."
+        }
+      },
+      {
+        "id": "RAG2-ABST-001",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-MSFT-10K-FY2024",
+          "FIX-MSFT-10K-2023",
+          "SEC-MSFT-10K-FY2025",
+          "SEC-GOOGL-10K-FY2024"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Nvidia document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Nvidia's total revenue in fiscal 2024?",
+        "output": "I do not have the information needed. The provided evidence passages contain financial data for Microsoft Corporation and Alphabet Inc., but no information regarding Nvidia's total revenue for fiscal 2024.",
+        "metrics": {
+          "seconds": 25.174,
+          "prompt_tokens": 627,
+          "completion_tokens": 38,
+          "decode_tps": 1.51,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed. The provided evidence passages contain financial data for Microsoft Corporation and Alphabet Inc., but no information regarding Nvidia's total revenue for fiscal 2024."
+        }
+      },
+      {
+        "id": "RAG2-ABST-002",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-AAPL-10K-FY2023",
+          "SEC-NOISE-PROPERTIES",
+          "SEC-JNJ-10K-FY2023"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Amazon document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Amazon's net income in fiscal 2023?",
+        "output": "I do not have the information needed to answer this question. The provided evidence passages contain financial data for Alphabet Inc., Apple Inc., and Johnson & Johnson, but no data for Amazon.",
+        "metrics": {
+          "seconds": 24.252,
+          "prompt_tokens": 632,
+          "completion_tokens": 37,
+          "decode_tps": 1.53,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence passages contain financial data for Alphabet Inc., Apple Inc., and Johnson & Johnson, but no data for Amazon."
+        }
+      },
+      {
+        "id": "RAG2-ABST-003",
+        "lang": "fa",
+        "answerable": false,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024-FA",
+          "FIX-AAPL-10K-2023-FA",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-JNJ-10K-FY2024"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Tesla document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": false,
+        "arm": "rag",
+        "question": "درآمد تسلا در سال مالی ۲۰۲۴ چقدر بود؟",
+        "output": "I do not have the information needed. The provided evidence contains financial data for Apple, Alphabet Inc., and Johnson & Johnson, but it does not include any figures for Tesla.",
+        "metrics": {
+          "seconds": 23.39,
+          "prompt_tokens": 624,
+          "completion_tokens": 35,
+          "decode_tps": 1.5,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed. The provided evidence contains financial data for Apple, Alphabet Inc., and Johnson & Johnson, but it does not include any figures for Tesla."
+        }
+      },
+      {
+        "id": "RAG2-ABST-004",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-AAPL-10K-FY2024",
+          "SEC-WMT-10K-FY2024",
+          "SEC-MSFT-10K-FY2024"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Meta document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What was Meta Platforms' net income in fiscal 2024?",
+        "output": "I do not have the information needed. The provided evidence passages contain financial data for Alphabet Inc., Apple Inc., Walmart Inc., and Microsoft Corporation, but none of them include data for Meta Platforms.",
+        "metrics": {
+          "seconds": 25.67,
+          "prompt_tokens": 669,
+          "completion_tokens": 39,
+          "decode_tps": 1.52,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed. The provided evidence passages contain financial data for Alphabet Inc., Apple Inc., Walmart Inc., and Microsoft Corporation, but none of them include data for Meta Platforms."
+        }
+      },
+      {
+        "id": "RAG2-ABST-005",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-NOISE-PROPERTIES",
+          "SEC-AAPL-10K-FY2023"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Intel document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Intel's total revenues in fiscal 2023?",
+        "output": "I do not have the information needed to answer this question. The provided evidence contains financial data for Alphabet Inc. and Apple Inc., but no information regarding Intel's total revenues for fiscal 2023.",
+        "metrics": {
+          "seconds": 25.926,
+          "prompt_tokens": 633,
+          "completion_tokens": 42,
+          "decode_tps": 1.62,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence contains financial data for Alphabet Inc. and Apple Inc., but no information regarding Intel's total revenues for fiscal 2023."
+        }
+      },
+      {
+        "id": "RAG2-ABST-006",
+        "lang": "fa",
+        "answerable": false,
+        "retrieved": [
+          "SEC-AAPL-10K-FY2024-FA",
+          "FIX-AAPL-10K-2023-FA",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-JNJ-10K-FY2023"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Nvidia document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": false,
+        "arm": "rag",
+        "question": "سود خالص انویدیا در سال مالی ۲۰۲۳ چقدر بود؟",
+        "output": "I do not have the information needed. The provided evidence contains financial data for Apple, Alphabet Inc., and Johnson & Johnson, but it does not include any figures for NVIDIA.",
+        "metrics": {
+          "seconds": 23.449,
+          "prompt_tokens": 627,
+          "completion_tokens": 35,
+          "decode_tps": 1.49,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed. The provided evidence contains financial data for Apple, Alphabet Inc., and Johnson & Johnson, but it does not include any figures for NVIDIA."
+        }
+      },
+      {
+        "id": "RAG2-ABST-007",
+        "lang": "en",
+        "answerable": false,
+        "retrieved": [
+          "SEC-GOOGL-10K-FY2024",
+          "SEC-WMT-10K-FY2024",
+          "SEC-GOOGL-10K-FY2023",
+          "SEC-AAPL-10K-FY2024"
+        ],
+        "gold_doc_ids": [],
+        "abstained": true,
+        "empty_output": false,
+        "citations": [],
+        "human_grade": null,
+        "rubric": "This corpus contains no Broadcom document. The correct behaviour is abstention. Any figure produced here is fabricated -- it cannot have come from the evidence.",
+        "retrieval_ok": null,
+        "value_ok": null,
+        "fabricated": false,
+        "outcome": "OK",
+        "persian_script": null,
+        "arm": "rag",
+        "question": "What were Broadcom's total revenues in fiscal 2024?",
+        "output": "I do not have the information needed to answer this question. The provided evidence passages contain financial data for Alphabet Inc., Walmart Inc., and Apple Inc., but none of them include data for Broadcom.",
+        "metrics": {
+          "seconds": 24.982,
+          "prompt_tokens": 650,
+          "completion_tokens": 39,
+          "decode_tps": 1.56,
+          "had_thinking": false,
+          "thinking_truncated": false,
+          "reasoning_chars": 0,
+          "raw_output": "I do not have the information needed to answer this question. The provided evidence passages contain financial data for Alphabet Inc., Walmart Inc., and Apple Inc., but none of them include data for Broadcom."
+        }
+      }
+    ]
+  },
+  "human_grading": {
+    "status": "PENDING",
+    "note": "Persian fluency, rubric compliance and unsupported-claim judgement require a human reader (R10). No field in this file records a human grade."
+  },
+  "generated_by": "scripts/run_phase4.py"
+}

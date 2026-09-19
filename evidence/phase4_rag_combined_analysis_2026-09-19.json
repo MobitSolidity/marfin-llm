@@ -1,0 +1,59 @@
+{
+  "label": "ANALYSIS_OF_MEASURED_RUN",
+  "source": "evidence/phase4_rag_combined_2026-09-19.json",
+  "sha256": "920c326a17af431890ff29c24191c3e8c5c2b6083646710ecc2a11dbd53b747c",
+  "run_timestamp": "2026-09-19T15:27:21",
+  "arms_run": [
+    "rag"
+  ],
+  "is_phase4_verdict": false,
+  "why_not": "plain and tools were not run. grade_merged.py REFUSED to grade, correctly: a verdict over a subset of arms is the error merge_phase4.py exists to prevent.",
+  "measured_and_trustworthy": {
+    "correct_abstention_pct": {
+      "value": 100.0,
+      "limit": 90,
+      "verdict": "PASS",
+      "detail": "10 of 10 abstain cases abstained. v1 alone scored 66.67 on its worst arm."
+    },
+    "fabricated_financial_data_count": {
+      "value": 0,
+      "limit": 0,
+      "verdict": "PASS",
+      "detail": "0 of 32 checked. The 2026-09-03 run had 2."
+    },
+    "retrieval_hit_pct": {
+      "value": 95.45,
+      "detail": "21 of 22; the single miss is RAG-EN-003, the regression PREDICTED and PRE-RECORDED in the D-0098 manifest before the run."
+    },
+    "answer_correct_pct": {
+      "value": 90.91
+    },
+    "peak_rss_gib": {
+      "value": 3.794,
+      "limit": 6.0,
+      "verdict": "PASS"
+    },
+    "model_file_size_gib": {
+      "value": 2.928,
+      "limit": 4.0,
+      "verdict": "PASS"
+    }
+  },
+  "contaminated_do_not_record": {
+    "citation_correctness_pct": 40.0,
+    "unsupported_claim_rate_pct": 60.0,
+    "reason": "14 of the 18 CONTRADICTED claims are grader artefacts, MEASURED and reproduced directly against rag.citations.",
+    "artefact_classes": [
+      "'Form 10-K' -> the form designator 10 read as a financial quantity",
+      "'June 30,' / 'January 31,' -> calendar days read as quantities",
+      "'CIK 0000320193' / '0000104169' -> filer identifiers read as quantities"
+    ],
+    "remaining_4": "all R47: the model QUOTES a table row ('Net income | 96,995') where the scale word precedes the number, so no scale is applied. Known, documented, deliberately unfixed.",
+    "model_fabrications_among_them": 0
+  },
+  "new_findings": {
+    "over_abstention_RAG-FA-001": "A Persian question the model COULD answer, with correct retrieval, was refused. Over-abstention is not counted by correct_abstention_pct_min, which only scores the abstain cases. A model that refuses everything would score 100 there.",
+    "fa_not_in_persian": "2 of 7 Persian cases answered in English -- both are abstain cases (RAG2-ABST-003, RAG2-ABST-006) that refused in English. Relevant to R10, not yet graded."
+  },
+  "r49_outcome": "The combined set delivered what it was built for: correct_abstention now has 10 cases and citation_correctness has 22 answerable -- but the citation number itself is unusable until the extractor is fixed."
+}
