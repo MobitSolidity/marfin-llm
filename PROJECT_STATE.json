@@ -359,7 +359,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0097",
+  "decisions_logged": "D-0001..D-0098",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -1774,16 +1774,15 @@
   },
   "last_verification": {
     "date": "2026-09-07",
-    "regression": "bash tests/run_all.sh -> 3569 assertions across 18 suites, SKIPPED 0, TIMED OUT 0, ALL GREEN",
-    "assertion_trail": "3380 -> 3450 (D-0092/93) -> 3507 (D-0094) -> 3529 (D-0095) -> 3549 (D-0096) -> 3569 (D-0097 +20)",
-    "phase4_suite": "754 -> 781 -> 824 -> 871 -> 881 -> 903 -> 923 -> 943",
-    "mutation": "272 seeded, 263 killed, 0 survived, 9 skipped (pre-existing); source restored and oracle green: True; md5s verified",
-    "mutation_first_pass": "272 seeded, 260 killed, 1 SURVIVED, 11 skipped -- both symptoms diagnosed and repaired before the recorded pass",
+    "regression": "bash tests/run_all.sh -> 3621 assertions across 18 suites, SKIPPED 0, TIMED OUT 0, ALL GREEN",
+    "assertion_trail": "3549 (D-0096) -> 3569 (D-0097) -> 3621 (D-0098 +52)",
+    "phase4_suite": "923 -> 943 -> 995",
+    "mutation": "280 seeded, 271 killed, 0 survived, 9 skipped (pre-existing); source restored and oracle green: True",
+    "mutation_earlier_passes": "4 survived/10 skipped, then 4/9, then 3/9 -- every survivor and skip was MY error (escape-form anchors, an equivalent mutant, assertions grepping source text, an assertion reading the committed manifest instead of the generated one)",
     "runtime_probes": [
-      "grade_persian.py on a nonexistent path -> newest-first candidates",
-      "grade_persian.py on the superseded file -> warning, 15 of 52 empty",
-      "grade_persian.py on the current file -> no warning (control)",
-      "sha256 of evidence/phase4_merged_2026-09-03.json vs the upload -> identical"
+      "combined-index retrieval: v1 alone 0 miss, v2 alone 0 miss, COMBINED 3 miss -> diagnosed to 3 distinct causes",
+      "validator on the combined set (default v2 path re-proven 16/16 unchanged)",
+      "dry run of the RAG arm with the model stubbed out"
     ],
     "gate_invariants_reproven": true
   },
@@ -1943,5 +1942,51 @@
     ],
     "states_plainly": "Grading produces a RECORDED BASELINE for persian_fluency_regression_pct_max, not a PASS. The metric is a regression measure and there is no baseline to regress from yet.",
     "gate": "No model run is involved; this is human reading of recorded output."
+  },
+  "eval_set_combined": {
+    "decision": "D-0098",
+    "date": "2026-09-07",
+    "why": "run_phase4.py takes ONE --gold/--corpus, and D-0096 sized v2 against the COMBINED totals. v2 ALONE reaches NEITHER R49 target (15 answerable vs 20 needed; 7 abstain vs 10).",
+    "files": [
+      "evals/rag_corpus_combined.jsonl",
+      "evals/rag_gold_combined.jsonl",
+      "evals/rag_combined_manifest.json",
+      "tools/build_combined_eval.py"
+    ],
+    "sizes": {
+      "docs": 21,
+      "answerable": 22,
+      "abstain": 10,
+      "gold_rows": 32
+    },
+    "targets_reached": {
+      "citation_correctness_pct_min": "n>=20 needed, 22 reached",
+      "correct_abstention_pct_min": "n>=10 needed, 10 reached",
+      "unsupported_claim_rate_pct_max": "~46 claims ESTIMATED at the MEASURED 1.57 claims/answer -- ESTIMATED, not MEASURED"
+    },
+    "defects_found": {
+      "mine_in_v2_persian_gold": "RAG2-FA-001/002 accepted only the ENGLISH doc; passed v2 validation only because it scraped into top_k at RANK 4 OF 4. A pass one ranking position wide is not a pass. Fixed in the generator.",
+      "mine_in_v2_lang_tag": "RAG2-ABST-006, a Persian question, was tagged lang='en' because the generator keyed on the id suffix. Now detected from the script of the query. 0 mismatches across 32 rows.",
+      "mine_generator_abs_path": "build_eval_v2.py wrote to a hardcoded /home/user/webapp path, so a staged test run OVERWROTE the real fixture. Now relative to the file.",
+      "mine_tests_filled_tmp": "the new behavioural assertions copytree'd tools/+evals/ per call: 286 leaked dirs, /tmp at 100% -- the sandbox-filling hazard (Request 35), caused by my own test. Now copies only what each tool reads.",
+      "merge_duplicate": "RAG-EN-002: v1 synthetic and v2 real SEC doc state the SAME fact (96,995). Widened ONLY after proving agreement; the builder ABORTS on a duplicate that disagrees."
+    },
+    "accepted_regression": {
+      "RAG-EN-003": "Microsoft FY2023 outranked by the FY2024/FY2025 filings v2 adds. A GENUINE retrieval degradation, left failing on purpose: repairing it would tune the eval until it flatters the system."
+    },
+    "dry_run": "ModelRunner stubbed, no model loaded, graders live: 32 rows, 32 generate() calls, all required fields present, retrieval 21/22 with exactly the one accepted regression.",
+    "runtime_estimate": {
+      "label": "COMPUTED",
+      "basis": "RAG-arm mean 29.86 s/case MEASURED over 10 cases in the 2026-09-03 run",
+      "combined_32_cases_minutes": 15.9,
+      "caveat": "COMPUTED, not MEASURED: the combined corpus is larger, so retrieval and prompt length differ."
+    },
+    "does_not": [
+      "changes no verdict -- nothing has been run",
+      "cannot move decode or TTFT",
+      "gives deterministic_calc_correctness_pct_min NO resolution: a 100% floor is zero-tolerance at every n",
+      "the unsupported_claim_rate target is reached by an ESTIMATE, not a measurement"
+    ],
+    "awaiting": "explicit user approval before any model run"
   }
 }

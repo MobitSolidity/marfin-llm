@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0097). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0098). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -33,9 +33,12 @@ paper/live trading controls.
 | `R49_EVAL_SIZE_OPTIONS.md` | Three costed options for R49, with MEASURED costs. Option C (relaxing a threshold) is refused with the reason recorded. |
 | `R10_GRADING_GUIDE_FA.md` | Persian handover for the R10 human grading session: exact commands, three resumable per-arm sessions, the 5-verdict vocabulary, and the honest limit that grading produces a baseline rather than a PASS. |
 | `START_R10_GRADING.md` | The one-page Persian quick start for R10 (D-0097): which folder to run from, a PowerShell search to find it if the path has been forgotten, the backup archive to restore from if it is gone, and — stated once, plainly — **which of the two merged evidence files to grade**. |
+| `RUN_EVAL_COMBINED_FA.md` | Persian handover for the combined eval run (D-0098): why v2 alone is not enough, the exact command, the COMPUTED ~15.9 min runtime, and an explicit warning that `RAG-EN-003` is expected to fail. |
 | `evals/rag_gold_v2.jsonl` / `evals/rag_corpus_v2.jsonl` | **The v2 eval set (D-0096)**: 15 answerable + 7 abstain questions over 13 documents, every magnitude and accession from `data.sec.gov`. Takes the combined totals to 22 checkable answers and 10 abstain cases, clearing two R49 targets without touching a threshold. |
 | `tools/fetch_xbrl.sh` · `tools/extract_xbrl_facts.py` · `tools/build_eval_v2.py` | The v2 build chain, committed so the fixture can be rebuilt and audited rather than trusted. `extract_xbrl_facts.py` keys on the period **end**, never on EDGAR's `fy` — see D-0096 for why that distinction would otherwise have made all 15 questions wrong. |
 | `tools/validate_eval_set.py` | Proves an eval set is usable BEFORE a model run is spent on it: retrievability, gradability, a fabricated-figure negative control, and genuine absence of every abstain entity. It caught 5 of 15 questions failing to retrieve their own gold document. |
+| `evals/rag_gold_combined.jsonl` / `evals/rag_corpus_combined.jsonl` / `evals/rag_combined_manifest.json` | **The combined v1+v2 set (D-0098)** — 21 documents, 22 answerable, 10 abstain. This is what an actual run must use: `run_phase4.py` takes ONE `--gold`, and v2 **alone** reaches neither R49 target. The manifest records the one retrieval regression that is deliberately left failing. |
+| `tools/build_combined_eval.py` | Merges v1 and v2. Widens a question's gold list only for a duplicate it has **proved** states the same magnitude, and **aborts** on one that disagrees. Refuses to repair `RAG-EN-003`, recording it instead — see D-0098. |
 | `evidence/threshold_resolution_2026-09-07.json` | The resolution measurement: 6 of 12 thresholds have none, including one that PASSED. |
 | `evidence/phase4_merged_2026-09-03.json` | **The recorded Phase 4 run — the one to use**, sha256 `a0a625a2…c95e93f`, byte-identical to the user's upload. 52 cases, **0 empty outputs**. Held in the repo because `/tmp` was wiped by a sandbox reset the same day (R40). |
 | `evidence/phase4_merged.json` | **SUPERSEDED** (2026-08-27, `max_tokens` 2048): 15 of its 52 outputs are **empty** and its FAIL was set aside as D-0081. Kept for audit, not for grading. It sits one date suffix from the current file, which is exactly how D-0097 happened. |
@@ -50,7 +53,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,569 assertions across 18 suites, plus 972 seeded defects across 11 mutation batteries. |
+| `tests/` | 3,621 assertions across 18 suites, plus 980 seeded defects across 11 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -269,7 +272,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,569 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,621 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -926,7 +929,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,569
+unique and non-no-op *before* the battery ran. Full regression: **3,621
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1118,7 +1121,7 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,569
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,621
 assertions, 18 suites, 0 failed, 0 skipped.**
 
 ## PHASE 4 VERDICT: FAIL — recorded 2026-09-05
@@ -1315,6 +1318,80 @@ It is still worth doing: the model's Persian quality is recorded **nowhere**
 today, D-0081's FAIL was reached on the **contaminated** run, and the machine's
 unsupported-claim set had **zero overlap** with the human's — the machine does
 not substitute for the reader.
+
+### D-0098: running the v2 eval alone would not have done what v2 was built for
+
+The user chose to proceed with the v2 eval run. Route A obliges me to dry-run
+the exact path before handing it over. Doing that found that the run **as
+described would not have achieved its purpose**, and then found three defects —
+two of them mine, in work I had already called done.
+
+**v2 alone reaches neither R49 target.** D-0096 sized v2 against the *combined*
+v1+v2 totals, but `run_phase4.py` takes one `--gold` and one `--corpus`:
+
+| target | needs | v2 alone | combined |
+|---|---|---|---|
+| `citation_correctness_pct_min` | n ≥ 20 answerable | **15 — MISS** | 22 ok |
+| `correct_abstention_pct_min` | n ≥ 10 abstain | **7 — MISS** | 10 ok |
+
+So "run the v2 eval" would have cost ~11 minutes and bought neither piece of
+resolution it exists to buy.
+
+**Merging broke 3 of 22 questions, for three different reasons.** Each set
+retrieves 100 % of its own gold documents alone. They must not be repaired
+alike:
+
+1. **My defect (`RAG2-FA-001/002`).** The Persian questions accepted only the
+   **English** document. They passed v2 validation solely because that document
+   scraped into `top_k` at **rank 4 of 4**; v1's documents took the slot and
+   both flipped to MISS. v1 already had this right. **A pass one ranking
+   position wide was never a pass** — and my own validator called it green.
+2. **A duplicate the merge created (`RAG-EN-002`).** v1's synthetic Apple
+   FY2023 document and v2's real SEC one state the *same* fact (96,995). The
+   question may now cite either — but only after the builder **proves** they
+   agree, and it **aborts** if they do not. A duplicate that disagrees is a
+   contradiction.
+3. **A real result, left failing (`RAG-EN-003`).** Microsoft FY2023 is
+   outranked by the FY2024/FY2025 filings v2 adds. The fixture is fine; the
+   task got harder. **Repairing it would be tuning the eval until it flatters
+   the system** — the move already refused in R49. It is recorded in the
+   manifest as an accepted regression.
+
+**A third defect, from an oddity in my own dry-run output.** `RAG2-ABST-006`, a
+Persian question, was tagged `lang="en"` because the generator read
+`"fa" if aid.endswith("003")`. Every per-language breakdown would have filed a
+Persian refusal under the English arm. **An id is a label; the text is the
+evidence.** Now read from the script of the query: 0 mismatches across 32 rows.
+
+**The generator wrote to a hardcoded absolute path.** So my new test staged it
+into a temp directory, ran it, and it **overwrote the real fixture** — proving
+nothing about the copy while silently mutating the repository.
+
+**My tests filled `/tmp` to 100 %.** The behavioural assertions `copytree`'d all
+of `tools/` and `evals/` — 286 leaked directories per battery. That is the
+sandbox-filling hazard I was asked never to hit again, caused by my own test.
+**A test that exhausts the machine is a defect even when its assertions are
+right.**
+
+**What the battery caught inside the fix.** First pass: 4 survived, 10 skipped —
+every one my error. Anchors written as `\u` escapes against a file stored as
+literal Persian; one genuinely equivalent mutant; assertions that **grepped the
+builder's source text** instead of running it (*testing that a file contains a
+safety check is not testing that the check works*); and a manifest assertion
+reading the committed file rather than the generated one. Final: **280 seeded,
+271 killed, 0 survived, 9 skipped**.
+
+**Dry run.** `ModelRunner` stubbed, no model loaded, graders live: 32 rows, 32
+`generate()` calls, all required fields present, retrieval 21/22 with exactly
+the one accepted regression.
+
+**Runtime, COMPUTED from MEASURED rates:** the RAG arm averaged 29.86 s/case
+over 10 cases on 2026-09-03 → 32 cases ≈ **15.9 minutes**, not the ~12.4 min
+quoted for the smaller set.
+
+**What this does not do:** it changes no verdict, moves neither decode nor TTFT,
+gives `deterministic_calc_correctness_pct_min` no resolution at any n, and
+reaches the `unsupported_claim_rate` target only by ESTIMATE.
 
 ### D-0097: two evidence files, one date suffix apart, and the tool pointed at the wrong one
 
@@ -1652,7 +1729,7 @@ So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
 attached, and **the number to plan around is the upper bound.** Quoting only a
 central figure is how a "1 hour" run became 1.7 hours earlier in this project.
 
-Full regression: **3,569 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+Full regression: **3,621 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
 **224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
 `None`, and **0 model runs** were launched.
 
@@ -1963,8 +2040,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,569 assertions across 18 suites + 7 probes (~9 s)
-./tests/run_all.sh --mutate     # + 972 seeded defects across 11 batteries (~205 s)
+./tests/run_all.sh              # 3,621 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh --mutate     # + 980 seeded defects across 11 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -2327,7 +2404,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,569 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,621 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -2376,7 +2453,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,569-assertion base is trustworthy.
+3,621-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 

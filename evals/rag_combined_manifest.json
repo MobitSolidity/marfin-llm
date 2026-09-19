@@ -1,0 +1,22 @@
+{
+  "label": "GENERATED_BY_build_combined_eval.py",
+  "inputs": [
+    "rag_corpus_v1.jsonl",
+    "rag_corpus_v2.jsonl",
+    "rag_gold_v1.jsonl",
+    "rag_gold_v2.jsonl"
+  ],
+  "corpus_rows": 21,
+  "gold_rows": 32,
+  "answerable": 22,
+  "abstain": 10,
+  "duplicates_widened": {
+    "RAG-EN-002": [
+      "SEC-AAPL-10K-FY2023"
+    ]
+  },
+  "accepted_regressions": {
+    "RAG-EN-003": "Microsoft FY2023 is outranked by the FY2024/FY2025 filings v2 adds. A genuine retrieval degradation from near-neighbour distractors, not a fixture defect. Left failing on purpose."
+  },
+  "accepted_regressions_note": "These questions are EXPECTED to fail retrieval in the combined corpus. They are not repaired, because repairing them would tune the eval until it flatters the system."
+}

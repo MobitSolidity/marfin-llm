@@ -31,8 +31,20 @@ def note(ok, name, detail=""):
                          ("\n       " + detail) if detail else ""))
 
 
-corpus = RP.load_jsonl(os.path.join(ROOT, "evals", "rag_corpus_v2.jsonl"))
-gold = RP.load_jsonl(os.path.join(ROOT, "evals", "rag_gold_v2.jsonl"))
+# Which set to validate. Defaults to v2 so every previously recorded
+# invocation means exactly what it meant before, but the paths are now
+# arguments: the combined v1+v2 set has to pass the SAME 16 checks, and a
+# validator that can only ever see one fixture silently exempts the other.
+# (This file has already been caught hardcoding one of its own expectations.)
+_c = sys.argv[1] if len(sys.argv) > 1 else "evals/rag_corpus_v2.jsonl"
+_g = sys.argv[2] if len(sys.argv) > 2 else "evals/rag_gold_v2.jsonl"
+print("VALIDATING")
+print("  corpus: %s" % _c)
+print("  gold  : %s" % _g)
+print()
+
+corpus = RP.load_jsonl(os.path.join(ROOT, _c))
+gold = RP.load_jsonl(os.path.join(ROOT, _g))
 index = RP.build_index(corpus)
 TOP_K = 4
 

@@ -97,6 +97,14 @@ RESOL = "scripts/threshold_resolution.py"
 # a single date suffix. A guard with no mutant is an untested guard.
 GRADEFA = "tools/grade_persian.py"
 
+# The COMBINED fixture and the two tools that build/validate it. D-0098.
+# The combined gold file is what an actual run reads, so a silent edit to it
+# changes the measurement itself -- exactly the reason EVAL became a target.
+GOLDC = "evals/rag_gold_combined.jsonl"
+BUILDC = "tools/build_combined_eval.py"
+VALID = "tools/validate_eval_set.py"
+BUILD2 = "tools/build_eval_v2.py"
+
 # The eval fixture is a MUTATION TARGET, not just an input.
 #
 # Added 2026-08-19. Until now every mutation edited code, on the tacit
@@ -1533,6 +1541,34 @@ MUTATIONS = [
     (GRADEFA, "the warning no longer names the later run",
      '            print("    evidence/phase4_merged_2026-09-03.json")',
      '            print("")'),
+
+    # ---- D-0098: the combined eval set ----
+    (GOLDC, "the Persian gold row stops accepting the Persian document",
+     '"query": "\u0633\u0648\u062f \u062e\u0627\u0644\u0635 \u0627\u067e\u0644 \u062f\u0631 \u0633\u0627\u0644 \u0645\u0627\u0644\u06cc \u06f2\u06f0\u06f2\u06f4 \u0686\u0642\u062f\u0631 \u0628\u0648\u062f\u061f", '
+     '"gold_doc_ids": ["SEC-AAPL-10K-FY2024", "SEC-AAPL-10K-FY2024-FA"], ',
+     '"query": "\u0633\u0648\u062f \u062e\u0627\u0644\u0635 \u0627\u067e\u0644 \u062f\u0631 \u0633\u0627\u0644 \u0645\u0627\u0644\u06cc \u06f2\u06f0\u06f2\u06f4 \u0686\u0642\u062f\u0631 \u0628\u0648\u062f\u061f", '
+     '"gold_doc_ids": ["SEC-AAPL-10K-FY2024"], '),
+    (GOLDC, "the duplicated Apple FY2023 question is narrowed again",
+     '"gold_doc_ids": ["FIX-AAPL-10K-2023", "SEC-AAPL-10K-FY2023"]',
+     '"gold_doc_ids": ["FIX-AAPL-10K-2023"]'),
+    (GOLDC, "RAG-EN-003 is quietly widened so the accepted regression passes",
+     '"gold_doc_ids": ["FIX-MSFT-10K-2023"]',
+     '"gold_doc_ids": ["FIX-MSFT-10K-2023", "SEC-MSFT-10K-FY2024"]'),
+    (GOLDC, "the Persian abstain case is mislabelled English again",
+     '"id": "RAG2-ABST-006", "lang": "fa"',
+     '"id": "RAG2-ABST-006", "lang": "en"'),
+    (BUILDC, "a claimed duplicate is accepted without proving it agrees",
+     'if not any(millions in t for t in texts):',
+     'if False:'),
+    (BUILDC, "the accepted regression is dropped from the manifest",
+     '"accepted_regressions": ACCEPTED_REGRESSIONS,',
+     '"accepted_regressions": {},'),
+    (VALID, "the validator ignores its arguments and always reads v2",
+     '_c = sys.argv[1] if len(sys.argv) > 1 else "evals/rag_corpus_v2.jsonl"',
+     '_c = "evals/rag_corpus_v2.jsonl"'),
+    (BUILD2, "lang is keyed off the id again instead of the script",
+     '"lang": ("fa" if any("\\u0600" <= ch <= "\\u06ff" for ch in aq)\n                 else "en"),',
+     '"lang": "fa" if aid.endswith("003") else "en",'),
 ]
 
 

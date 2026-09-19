@@ -6438,6 +6438,274 @@ check_true("the sha256 recorded in the gate matches the evidence file on disk",
            "(D) the user asked whether they had sent the output. This pins "
            "the answer: the committed file IS their upload, byte for byte")
 
+
+# =====================================================================
+# D-0098  THE COMBINED EVAL SET
+#
+# D-0096 sized v2 so that the COMBINED v1+v2 totals reach R49's resolution
+# targets. run_phase4.py takes ONE --gold and ONE --corpus, so running v2
+# alone reaches neither target. Merging two independently-validated fixtures
+# turned out not to be free: 3 of 22 answerable questions stopped retrieving
+# their gold document. These assertions pin each cause separately, because
+# they are NOT the same kind of thing and must not be repaired alike.
+# =====================================================================
+section("D-0098 the combined eval set")
+
+_EV = os.path.join(_ROOT, "evals")
+
+
+def _jl(name):
+    with io.open(os.path.join(_EV, name), encoding="utf-8") as fh:
+        return [json.loads(l) for l in fh if l.strip()]
+
+
+_g1 = _jl("rag_gold_v1.jsonl")
+_g2 = _jl("rag_gold_v2.jsonl")
+_gc = _jl("rag_gold_combined.jsonl")
+_c1 = _jl("rag_corpus_v1.jsonl")
+_c2 = _jl("rag_corpus_v2.jsonl")
+_cc = _jl("rag_corpus_combined.jsonl")
+
+check("combined gold = v1 + v2 rows", len(_gc), len(_g1) + len(_g2))
+check("combined corpus = v1 + v2 rows", len(_cc), len(_c1) + len(_c2))
+
+_ans = [r for r in _gc if r["answerable"] is True]
+_abs = [r for r in _gc if r["answerable"] is False]
+check("combined answerable count", len(_ans), 22)
+check("combined abstain count", len(_abs), 10)
+
+# The whole POINT of combining. If these ever regress, running the combined
+# set stops buying the resolution D-0096 was built to buy.
+check_true("combined reaches n>=20 answerable (citation_correctness)",
+           len(_ans) >= 20)
+check_true("combined reaches n>=10 abstain (correct_abstention)",
+           len(_abs) >= 10)
+check_true("v2 ALONE does NOT reach n>=20 answerable -- which is WHY the "
+           "combined set exists",
+           sum(1 for r in _g2 if r["answerable"] is True) < 20)
+check_true("v2 ALONE does NOT reach n>=10 abstain",
+           sum(1 for r in _g2 if r["answerable"] is False) < 10)
+
+# --- merging must not let one document shadow another ---
+_d1 = set(r["doc_id"] for r in _c1)
+_d2 = set(r["doc_id"] for r in _c2)
+check("no doc_id appears in both corpora", len(_d1 & _d2), 0)
+check("no gold id appears in both sets",
+      len(set(r["id"] for r in _g1) & set(r["id"] for r in _g2)), 0)
+check("combined gold ids are unique",
+      len(set(r["id"] for r in _gc)), len(_gc))
+check("combined doc_ids are unique",
+      len(set(r["doc_id"] for r in _cc)), len(set(r["doc_id"] for r in _c1)) +
+      len(set(r["doc_id"] for r in _c2)))
+
+# --- CAUSE 1: the Persian gold rows accepted only the English document ---
+# They passed v2 validation only because the English doc scraped into top_k
+# at rank 4 of 4. A pass one ranking position wide is not a pass.
+for _qid in ("RAG2-FA-001", "RAG2-FA-002"):
+    _row = [r for r in _gc if r["id"] == _qid][0]
+    check_true("%s accepts the PERSIAN document, not only its English twin"
+               % _qid, "SEC-AAPL-10K-FY2024-FA" in _row["gold_doc_ids"])
+    check_true("%s still accepts the English twin too" % _qid,
+               "SEC-AAPL-10K-FY2024" in _row["gold_doc_ids"])
+
+# v1 already had this convention; that is the precedent the fix followed.
+_v1fa = [r for r in _g1 if r["id"] == "RAG-FA-001"][0]
+check_true("v1's Persian row already accepted BOTH documents (the precedent)",
+           len(_v1fa["gold_doc_ids"]) >= 2)
+
+# --- CAUSE 2: a genuine duplicate, widened only after PROVING agreement ---
+_dup = [r for r in _gc if r["id"] == "RAG-EN-002"][0]
+check_true("RAG-EN-002 may cite either Apple FY2023 document",
+           "FIX-AAPL-10K-2023" in _dup["gold_doc_ids"] and
+           "SEC-AAPL-10K-FY2023" in _dup["gold_doc_ids"])
+# and the two documents really do state the same number
+_sec = [r for r in _cc if r["doc_id"] == "SEC-AAPL-10K-FY2023"][0]
+check_true("the duplicate is REAL: both documents state 96,995",
+           "96,995" in _sec["text"])
+check("the widened question's magnitude is unchanged",
+      _dup["gold_magnitude"], 96995000000.0)
+
+# --- CAUSE 3: a real regression, deliberately NOT repaired ---
+_man = json.load(io.open(os.path.join(_EV, "rag_combined_manifest.json"),
+                         encoding="utf-8"))
+check_true("RAG-EN-003 is recorded as an ACCEPTED regression, not silently "
+           "fixed", "RAG-EN-003" in _man["accepted_regressions"])
+check_true("the manifest says WHY it is left failing",
+           "retrieval degradation" in
+           _man["accepted_regressions"]["RAG-EN-003"])
+_msft = [r for r in _gc if r["id"] == "RAG-EN-003"][0]
+check("RAG-EN-003 gold was NOT widened to make it pass",
+      len(_msft["gold_doc_ids"]), 1)
+check_true("the distractors that outrank it really were added by v2",
+           any(r["doc_id"] == "SEC-MSFT-10K-FY2024" for r in _cc) and
+           any(r["doc_id"] == "SEC-MSFT-10K-FY2025" for r in _cc))
+
+# --- the abstain entities must be absent from the COMBINED corpus ---
+_blob = "\n".join(json.dumps(r, ensure_ascii=False) for r in _cc)
+for _ent in ("Nvidia", "NVIDIA", "Amazon", "Tesla", "Meta", "Intel",
+             "Broadcom", "\u0627\u0646\u0648\u06cc\u062f\u06cc\u0627"):
+    check("abstain entity %r is absent from the COMBINED corpus" % _ent,
+          _blob.count(_ent), 0)
+
+# --- lang must be read from the TEXT, never from the id ---
+# RAG2-ABST-006 is a Persian question that was tagged "en" because the
+# generator keyed on the id suffix. A Persian refusal filed under the
+# English arm corrupts every per-language breakdown.
+_FA = re.compile(u"[\u0600-\u06ff]")
+_mismatch = [r["id"] for r in _gc
+             if r["lang"] != ("fa" if _FA.search(r["query"]) else "en")]
+check("every gold row's lang matches the script of its own query",
+      len(_mismatch), 0)
+_a6 = [r for r in _gc if r["id"] == "RAG2-ABST-006"][0]
+check_true("RAG2-ABST-006 is tagged Persian (it was 'en')",
+           _a6["lang"] == "fa")
+check_true("and it really is Persian text", bool(_FA.search(_a6["query"])))
+check("combined Persian abstain cases", 
+      sum(1 for r in _abs if r["lang"] == "fa"), 3)
+
+# --- the builder must ABORT on a false duplicate, not widen silently ---
+#
+# These were originally written as greps over the builder's SOURCE TEXT, and
+# the mutation battery killed none of them: a mutant can gut the verification
+# (`if not any(...)` -> `if False:`) while every searched-for string is still
+# present in the file. Testing that a file CONTAINS a safety check is not
+# testing that the check WORKS. Rewritten to RUN the builder against a
+# fixture whose "duplicate" disagrees, and require a non-zero exit.
+_BC = os.path.join(_ROOT, "tools", "build_combined_eval.py")
+
+
+def _run_builder(evals_dir):
+    """Run build_combined_eval.py with evals/ pointed at a temp copy."""
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    # Copy ONLY what the builder reads. An earlier version copytree'd all of
+    # tools/ and evals/ -- 3.1 MB per call, ~280 calls during a mutation
+    # battery, which filled /tmp to 100%. A test that exhausts the machine
+    # is a defect even when its assertions are right.
+    stage = _tempdir()
+    os.makedirs(os.path.join(stage, "evals"))
+    os.makedirs(os.path.join(stage, "tools"))
+    for _f in os.listdir(evals_dir):
+        shutil.copy(os.path.join(evals_dir, _f),
+                    os.path.join(stage, "evals", _f))
+    shutil.copy(os.path.join(_ROOT, "tools", "build_combined_eval.py"),
+                os.path.join(stage, "tools", "build_combined_eval.py"))
+    p = _sp97.Popen([sys.executable, os.path.join(stage, "tools",
+                                                       "build_combined_eval.py")],
+                         stdout=_sp97.PIPE, stderr=_sp97.STDOUT,
+                         env=env)
+    out, _ = p.communicate(timeout=120)
+    return p.returncode, out.decode("utf-8", "replace"), stage
+
+
+_ev_ok = _tempdir()
+for _n in ("rag_corpus_v1.jsonl", "rag_corpus_v2.jsonl",
+           "rag_gold_v1.jsonl", "rag_gold_v2.jsonl"):
+    shutil.copy(os.path.join(_ROOT, "evals", _n), os.path.join(_ev_ok, _n))
+
+_rc, _out, _stage_ok = _run_builder(_ev_ok)
+check("the builder succeeds on the real fixtures", _rc, 0)
+check_true("and it says the duplicate was VERIFIED, not assumed",
+           "duplicate VERIFIED" in _out)
+
+# Read the manifest THIS RUN produced, not the committed one. Asserting
+# against the checked-in manifest cannot detect a builder that stopped
+# writing the accepted regression -- the mutant proving exactly that
+# survived the first battery.
+_gen_man = json.load(io.open(
+    os.path.join(_stage_ok, "evals", "rag_combined_manifest.json"),
+    encoding="utf-8"))
+check_true("the FRESHLY GENERATED manifest records the accepted regression",
+           "RAG-EN-003" in _gen_man.get("accepted_regressions", {}))
+check("and records exactly one",
+      len(_gen_man.get("accepted_regressions", {})), 1)
+
+# Now poison the duplicate: change the SEC document so it no longer states
+# the same magnitude. A "duplicate" that disagrees is a contradiction, and
+# the builder must refuse rather than widen the gold list.
+_ev_bad = _tempdir()
+for _n in ("rag_corpus_v1.jsonl", "rag_corpus_v2.jsonl",
+           "rag_gold_v1.jsonl", "rag_gold_v2.jsonl"):
+    shutil.copy(os.path.join(_ROOT, "evals", _n), os.path.join(_ev_bad, _n))
+_p = os.path.join(_ev_bad, "rag_corpus_v2.jsonl")
+_txt = io.open(_p, encoding="utf-8").read().replace("96,995", "11,111")
+io.open(_p, "w", encoding="utf-8").write(_txt)
+
+_rc2, _out2, _ = _run_builder(_ev_bad)
+check_true("the builder REFUSES a duplicate that does not agree", _rc2 != 0)
+check_true("and it says why", "does not contain" in _out2)
+
+# A duplicate must never be discovered automatically: an auto-detector would
+# silently widen what counts as correct retrieval the next time two documents
+# happen to share a number.
+_bc_src = io.open(_BC, encoding="utf-8").read()
+check_true("duplicates are declared explicitly", "KNOWN_DUPLICATES" in _bc_src)
+
+# The manifest must carry the accepted regression. Pinned by READING the
+# generated manifest, not by grepping the generator.
+check_true("the generated manifest records the accepted regression",
+           "RAG-EN-003" in json.dumps(_man.get("accepted_regressions", {})))
+check("exactly one regression is accepted -- adding another must be a "
+      "deliberate act", len(_man.get("accepted_regressions", {})), 1)
+
+# --- the validator must be able to see a set other than v2 ---
+# Also behavioural: run it against the COMBINED set and require that it
+# actually read those files. A validator hardcoded to v2 would report v2's
+# 13 documents no matter what it was handed.
+_vp = os.path.join(_ROOT, "tools", "validate_eval_set.py")
+_env = dict(os.environ)
+_env["PYTHONDONTWRITEBYTECODE"] = "1"
+_pv = _sp97.Popen(
+    [sys.executable, _vp, "evals/rag_corpus_combined.jsonl",
+     "evals/rag_gold_combined.jsonl"],
+    cwd=_ROOT, stdout=_sp97.PIPE, stderr=_sp97.STDOUT, env=_env)
+_vout = _pv.communicate(timeout=300)[0].decode("utf-8", "replace")
+check_true("the validator echoes the paths it was actually given",
+           "rag_gold_combined.jsonl" in _vout)
+check_true("and it reports the COMBINED corpus size, not v2's",
+           "got 21" in _vout)
+check_true("the combined set's answerable count is seen as 22",
+           "got 22" in _vout)
+
+
+# --- the GENERATOR must derive lang from the script, not the id ---
+# A mutant that reverts build_eval_v2.py to `"fa" if aid.endswith("003")`
+# survived, because every other assertion here reads the GENERATED file and
+# never re-runs the generator. Testing a fixture does not test the thing that
+# produces it: the file could be correct today and be regenerated wrong
+# tomorrow with the suite still green.
+_b2 = os.path.join(_ROOT, "tools", "build_eval_v2.py")
+_stage = _tempdir()
+os.makedirs(os.path.join(_stage, "tools"))
+os.makedirs(os.path.join(_stage, "evals"))
+shutil.copy(os.path.join(_ROOT, "tools", "build_eval_v2.py"),
+            os.path.join(_stage, "tools", "build_eval_v2.py"))
+for _f in ("xbrl_facts.json",):
+    _src = os.path.join(_ROOT, "evals", _f)
+    if os.path.exists(_src):
+        shutil.copy(_src, os.path.join(_stage, "evals", _f))
+_e2 = dict(os.environ)
+_e2["PYTHONDONTWRITEBYTECODE"] = "1"
+_pg = _sp97.Popen([sys.executable, os.path.join(_stage, "tools",
+                                                "build_eval_v2.py")],
+                  cwd=_stage, stdout=_sp97.PIPE, stderr=_sp97.STDOUT, env=_e2)
+_gout = _pg.communicate(timeout=300)[0].decode("utf-8", "replace")
+check("the v2 generator runs cleanly", _pg.returncode, 0)
+
+_regen = []
+_gp = os.path.join(_stage, "evals", "rag_gold_v2.jsonl")
+if os.path.exists(_gp):
+    with io.open(_gp, encoding="utf-8") as _fh:
+        _regen = [json.loads(_l) for _l in _fh if _l.strip()]
+check("the generator emits the same number of gold rows", len(_regen), 22)
+_wrong = [r["id"] for r in _regen
+          if r["lang"] != ("fa" if _FA.search(r["query"]) else "en")]
+check("REGENERATED from source, every lang still matches its own script",
+      len(_wrong), 0)
+_r6 = [r for r in _regen if r["id"] == "RAG2-ABST-006"]
+check_true("and the regenerated RAG2-ABST-006 is Persian",
+           bool(_r6) and _r6[0]["lang"] == "fa")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

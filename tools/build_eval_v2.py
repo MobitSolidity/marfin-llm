@@ -22,6 +22,7 @@ DESIGN RULES, each with a reason:
 5. IDS ARE NEW, NOT REUSED. v1 ids stay meaningful in the recorded evidence;
    reusing one would make two different questions share an id across runs.
 """
+import os
 import json
 
 F = json.load(open("/tmp/r20/facts2.json", encoding="utf-8"))
@@ -203,13 +204,25 @@ for did, txt in (
     })
 
 # ---- the gold questions ----------------------------------------------------
-def q(qid, lang, query, doc, label, rubric_extra=""):
+def q(qid, lang, query, doc, label, rubric_extra="", also_docs=()):
     info = lookup[(doc, label)]
     other = ("Answering with the neighbouring fiscal year's figure is a "
              "RETRIEVAL failure, not a model failure. ")
+    # A Persian question must accept the Persian rendering of the filing AS
+    # WELL AS its English twin. They carry the SAME fact; which one the
+    # retriever ranks first is not something the model controls, so scoring
+    # the Persian document as a miss measures the fixture, not the model.
+    #
+    # v1 already did this -- RAG-FA-001 accepts both FIX-AAPL-10K-2023-FA and
+    # FIX-AAPL-10K-2023. v2 initially accepted only the English one. That
+    # passed validation ONLY because the English doc scraped into top_k at
+    # rank 4 of 4; adding v1's documents to the index took that slot and the
+    # question flipped to a retrieval MISS while the model was doing nothing
+    # wrong. A pass that depends on one ranking position is not a pass.
+    docs = [doc] + [d for d in also_docs if d != doc]
     return {
         "id": qid, "lang": lang, "query": query,
-        "gold_doc_ids": [doc],
+        "gold_doc_ids": docs,
         "gold_magnitude": info["exact"],
         "answerable": True,
         "rubric": ("Must retrieve %s and quote %s million. %s%s"
@@ -268,14 +281,16 @@ gold = [
       "\u0633\u0627\u0644 \u0645\u0627\u0644\u06cc \u06f2\u06f0\u06f2\u06f4 "
       "\u0686\u0642\u062f\u0631 \u0628\u0648\u062f\u061f",
       "SEC-AAPL-10K-FY2024", "Net income",
-      "The answer must be in Persian. "),
+      "The answer must be in Persian. ",
+      also_docs=("SEC-AAPL-10K-FY2024-FA",)),
     q("RAG2-FA-002", "fa",
       "\u062c\u0645\u0639 \u062f\u0627\u0631\u0627\u06cc\u06cc\u200c\u0647\u0627\u06cc "
       "\u0627\u067e\u0644 \u062f\u0631 \u067e\u0627\u06cc\u0627\u0646 "
       "\u0633\u0627\u0644 \u0645\u0627\u0644\u06cc \u06f2\u06f0\u06f2\u06f4 "
       "\u0686\u0642\u062f\u0631 \u0628\u0648\u062f\u061f",
       "SEC-AAPL-10K-FY2024", "Total assets",
-      "The answer must be in Persian. "),
+      "The answer must be in Persian. ",
+      also_docs=("SEC-AAPL-10K-FY2024-FA",)),
 ]
 
 # Abstain cases: companies with NO document in this corpus. R49's cheapest
@@ -315,7 +330,14 @@ for aid, aq, ent in (
      "What were Broadcom's total revenues in fiscal 2024?", "Broadcom"),
 ):
     gold.append({
-        "id": aid, "lang": "fa" if aid.endswith("003") else "en",
+        # Detect the script from the QUESTION, never from the id. The first
+        # version read `"fa" if aid.endswith("003") else "en"`, which tagged
+        # the Persian RAG2-ABST-006 ("سود خالص انویدیا ...") as English and
+        # would have filed a Persian refusal under the English arm in every
+        # per-language breakdown. An id is a label; the text is the evidence.
+        "id": aid,
+        "lang": ("fa" if any("\u0600" <= ch <= "\u06ff" for ch in aq)
+                 else "en"),
         "query": aq, "gold_doc_ids": [], "gold_magnitude": None,
         "answerable": False,
         "rubric": ("This corpus contains no %s document. The correct "
@@ -324,11 +346,22 @@ for aid, aq, ent in (
                    % ent),
     })
 
-with open("/home/user/webapp/evals/rag_corpus_v2.jsonl", "w",
+# Write relative to THIS FILE, not to a hardcoded absolute path.
+#
+# These two paths used to read "/home/user/webapp/evals/...". That is not a
+# style issue: a test that stages the generator into a temp directory and
+# runs it there still overwrote the REAL fixture, so the test proved nothing
+# about the copy and silently mutated the repository while doing it. A
+# generator that can only write to one machine's absolute path cannot be
+# exercised in isolation, which is the same reason it went untested at all.
+_OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "evals")
+
+with open(os.path.join(_OUT, "rag_corpus_v2.jsonl"), "w",
           encoding="utf-8") as f:
     for r in corpus:
         f.write(json.dumps(r, ensure_ascii=False) + "\n")
-with open("/home/user/webapp/evals/rag_gold_v2.jsonl", "w",
+with open(os.path.join(_OUT, "rag_gold_v2.jsonl"), "w",
           encoding="utf-8") as f:
     for r in gold:
         f.write(json.dumps(r, ensure_ascii=False) + "\n")

@@ -5131,3 +5131,124 @@ Regression **3569, 0 skipped, 0 timed out, ALL GREEN**.
 One assertion pins the answer to the user's second question directly: the
 sha256 recorded in `phase_4/measurements_recorded` must equal the hash of the
 file on disk. **The committed evidence IS their upload, byte for byte.**
+
+
+## D-0098 — running the v2 eval alone would not have done what v2 was built for
+
+**Date:** 2026-09-07 · **Status:** RESOLVED — combined set built, validated,
+dry-run · **Trigger:** the user chose step 2, the v2 eval run
+
+Route A obliges me to prove the path works before handing it over. Doing that
+found that the run as described would not have achieved its purpose, and then
+found three defects — two of them mine, in work I had already called done.
+
+### The v2 set alone reaches neither R49 target
+
+D-0096 sized v2 against the **combined** v1+v2 totals. `run_phase4.py` takes
+one `--gold` and one `--corpus`. MEASURED:
+
+| target | needs | v2 alone | combined |
+|---|---|---|---|
+| `citation_correctness_pct_min` | n ≥ 20 answerable | **15 — MISS** | 22 ok |
+| `correct_abstention_pct_min` | n ≥ 10 abstain | **7 — MISS** | 10 ok |
+
+So "run the v2 eval" would have cost ~11 minutes and bought **neither** piece
+of resolution it was built to buy. The sets have to be merged, and merging two
+independently-validated fixtures is not free.
+
+### Merging broke 3 of 22 questions — three different causes
+
+Each set retrieves **100 %** of its own gold documents alone. Combined, 3 of 22
+answerable questions failed to retrieve theirs. They are not the same kind of
+thing and must not be repaired alike.
+
+**1. My defect, in v2 (`RAG2-FA-001`, `RAG2-FA-002`).** The Persian questions
+accepted only the **English** document. They passed v2 validation solely
+because that English doc scraped into `top_k` at **rank 4 of 4**; adding v1's
+documents took the slot and both flipped to MISS. v1 already had this right —
+`RAG-FA-001` accepts the Persian doc *and* its English twin. **A pass one
+ranking position wide was never a pass**, and my validator reported it green.
+Fixed in the generator, not the output file.
+
+**2. A duplicate created by the merge (`RAG-EN-002`).** `FIX-AAPL-10K-2023`
+(v1, synthetic) and `SEC-AAPL-10K-FY2023` (v2, real SEC data) state the **same
+fact**: Apple FY2023 net income 96,995 million. A model retrieving the v2
+document and quoting 96,995 is exactly right, so scoring it a miss measures the
+fixture. The question may now cite either — but `build_combined_eval.py`
+**proves** the two agree on the magnitude first and **aborts** if they do not.
+A "duplicate" that disagrees is a contradiction, not a duplicate.
+
+**3. A real result, deliberately left failing (`RAG-EN-003`).** Microsoft
+FY2023 is outranked by the FY2024/FY2025 filings v2 adds. Nothing is wrong with
+the fixture: the corpus now contains near neighbours, which is what a harder
+retrieval task looks like. **Repairing this would be tuning the eval until it
+flatters the system** — the same move as relaxing a threshold after seeing the
+numbers, refused in R49. It is recorded in the manifest as an accepted
+regression so the failure is expected and explained, never discovered later and
+rationalised.
+
+### A third defect, found by an oddity in my own dry-run output
+
+`RAG2-ABST-006` — a **Persian** question — was tagged `lang="en"`. The
+generator read `"fa" if aid.endswith("003") else "en"`: a hardcoded id suffix
+instead of the text. Every per-language breakdown would have filed a Persian
+refusal under the English arm. **An id is a label; the text is the evidence.**
+Now detected from the script of the query itself; 0 mismatches across all 32
+rows, and Persian abstain cases go 2 → 3.
+
+### The generator wrote to a hardcoded absolute path
+
+`build_eval_v2.py` wrote to `/home/user/webapp/evals/...`. Not a style issue: my
+new test staged it into a temp directory, ran it, and it **overwrote the real
+fixture** — so the test proved nothing about the copy while silently mutating
+the repository. A generator that can only write to one machine's absolute path
+cannot be exercised in isolation, which is why it had gone untested at all.
+
+### My tests filled /tmp to 100 %
+
+The behavioural assertions `copytree`'d all of `tools/` and `evals/` — 3.1 MB
+per call, ~280 calls per mutation battery, **286 leaked directories, `/tmp` at
+100 %**. That is the sandbox-filling hazard the user asked me never to hit
+again (Request 35), caused by my own test. Now copies only the files each tool
+reads. **A test that exhausts the machine is a defect even when its assertions
+are right.**
+
+### What the mutation battery caught, again, in the fix
+
+First battery: **4 survived, 10 skipped**. Every one was my error, not a code
+gap:
+- 2 survivors and 1 skip: anchors written against `\u` escapes, but the file is
+  written with `ensure_ascii=False` and holds **literal Persian**.
+- 1 survivor: a mutant adding an unused key — genuinely equivalent, so it was
+  **retargeted to widen the gold list**, which an assertion pins.
+- 1 survivor: my assertions grepped the builder's **source text**, which the
+  mutants leave matching. **Testing that a file contains a safety check is not
+  testing that the check works.** Rewritten to *run* the builder against a
+  poisoned fixture and require a non-zero exit.
+- 1 survivor: the manifest assertion read the **committed** file rather than the
+  one the run produced.
+
+Final: **280 seeded, 271 killed, 0 survived, 9 skipped** (pre-existing),
+`oracle green: True`.
+
+### Dry run, as Route A requires
+
+The exact path was executed with `ModelRunner` replaced by a stub — no model
+loaded, every grader live: **32 rows, 32 generate() calls, all required fields
+present, retrieval 21/22 with exactly the one accepted regression.**
+
+### Runtime, COMPUTED from MEASURED rates
+
+The recorded 2026-09-03 run gives a RAG-arm mean of **29.86 s/case** over 10
+cases. 32 cases → **~15.9 minutes**, not the ~12.4 min quoted earlier for the
+smaller set. COMPUTED, not MEASURED: the combined corpus is larger, so retrieval
+and prompt length differ.
+
+### What this does NOT do
+
+Changes no verdict — nothing has been run. Cannot move decode or TTFT. Cannot
+give `deterministic_calc_correctness_pct_min` any resolution: a 100 % floor is
+zero-tolerance at every n. The `unsupported_claim_rate` target is still reached
+by an **ESTIMATE** (~46 claims at the MEASURED 1.57 claims/answer), not a
+measurement.
+
