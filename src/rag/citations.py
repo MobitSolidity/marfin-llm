@@ -129,7 +129,27 @@ def _evidence_magnitudes(evidence: Any) -> List[Tuple[float, str]]:
             scale = SCALE_WORDS.get(evidence.units_note, 1.0)
             how = "passage:%s" % evidence.units_note
         mags = []
-        for cn in extract_numbers(evidence.text):
+        # MASK THE EVIDENCE TOO, not only the claim.
+        #
+        # D-0092 masked the claim side and stopped there, on the reasoning
+        # that the evidence is fixture text and therefore clean. The
+        # 2026-09-19 run disproved that. An Apple passage reads
+        #
+        #     "... (CIK 0000320193) -- Form 10-K, fiscal 2023 ... (in
+        #      millions) -- Net income | 96,995 ..."
+        #
+        # and the section note is units_note='million'. So the form number 10
+        # became 10 * 1e6 = 1e7 and the CIK became 3.2e11 -- two fabricated
+        # magnitudes sitting in the evidence, competing to be the "nearest"
+        # figure. MEASURED: every one of the 12 remaining failures reported
+        # "nearest is 1e+07", which is the string "Form 10-K" wearing a
+        # million-dollar scale.
+        #
+        # An identifier is not an amount on either side of the comparison.
+        # Masking only one side meant the grader compared a cleaned claim
+        # against dirty evidence, which is worse than masking neither: it
+        # looks correct and is not.
+        for cn in extract_numbers(mask_non_quantities(evidence.text)):
             # A number inside the passage may carry its own scale word, which
             # wins over the section note.
             eff = cn.scale if cn.scale_word else scale

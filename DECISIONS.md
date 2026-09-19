@@ -5252,3 +5252,101 @@ zero-tolerance at every n. The `unsupported_claim_rate` target is still reached
 by an **ESTIMATE** (~46 claims at the MEASURED 1.57 claims/answer), not a
 measurement.
 
+
+
+## D-0099 — R43's fifth recurrence, and the half of D-0092 I never finished
+
+**Date:** 2026-09-19 · **Status:** FIXED · **Trigger:** the user chose step 1 —
+fix the number extractor and re-grade the recorded run without re-running the
+model
+
+### What the run reported, and why it was not a measurement
+
+The combined RAG run scored `citation_correctness 40.0` and
+`unsupported_claim_rate 60.0`. Reproducing the grader directly against
+`rag.citations` showed **14 of the 18 CONTRADICTED claims were identifiers
+read as money**:
+
+| artefact | source text | what the grader claimed |
+|---|---|---|
+| form designator | `Form 10-K` | the quantity **10** |
+| calendar day | `June 30,` / `January 31,` | **30** / **31** |
+| filer identifier | `CIK 0000320193` | **320193** |
+
+MEASURED in the run's own text: `10-K` ×8, the Persian `۱۰-K` ×1, `June` ×6,
+`January` ×4, two distinct CIKs. **R43 for the fifth time**, and the third
+time the fix has had to be made script-agnostic.
+
+### The deeper defect: I masked one side of a comparison
+
+D-0092 masked the **claim** and stopped there, on the reasoning that evidence
+is fixture text and therefore clean. That reasoning was wrong, and the run
+disproved it. The Apple passage reads
+
+```
+Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2023 ... (in millions)
+ -- Net income | 96,995 -- Total assets | 352,583
+```
+
+with `units_note='million'`. So the **evidence** contributed
+`10 × 1e6 = 1e7` and `320193 × 1e6 = 3.2e11` — two fabricated magnitudes
+sitting in the evidence, competing to be the "nearest" figure. Every one of
+the twelve remaining failures reported `nearest is 1e+07`, which is the string
+`Form 10-K` wearing a million-dollar scale.
+
+**Masking only one side is worse than masking neither: it looks correct and is
+not.** An identifier is not an amount on either side of a comparison.
+
+### What the re-grade actually changed, honestly
+
+The identifier artefacts are gone — every `1e+07` disappeared from the
+details. But the headline numbers barely moved (40.0 → 38.89), and I am not
+going to dress that up. The reason is that the remaining failures are a
+**different defect**, and after classification:
+
+| cause | count |
+|---|---|
+| **R47** — the model quotes a table row (`Net income \| 96,995`) whose scale word **precedes** the number, so no scale is applied | **11** |
+| the CPI passage genuinely declares no scale (documented, RAG-EN-004) | 1 |
+| anything else | **0** |
+| **the model inventing a figure** | **0** |
+
+Every remaining failure shows `ratio 1e-06` — the *same number*, off by
+exactly 10⁶. So `citation_correctness` still is **not** a measurement of the
+model; it is now a measurement of R47 alone. Recording 38.89 as the model's
+citation quality would be as wrong as recording 40.0 was.
+
+### Why R47 is still not fixed here
+
+Accepting a scale word that precedes a number would also make the grader
+accept a real 10⁶ error, which is the single most consequential mistake this
+system can make in a financial answer. That trade needs its own decision, not
+a quiet widening inside a fix for something else.
+
+### Verification
+
+- Every artefact form masked, including the Persian `۱۰-K`.
+- **Controls**: `96,995`, `364,980`, `308.417`, `30 percent`, `31 million`
+  and the range `10-15 million` all survive untouched. A mask that ate real
+  figures would be a worse defect than the one being fixed.
+- End to end through the real `verify_claim` against the real fixture
+  passage: a correct claim is SUPPORTED, a wrong figure is CONTRADICTED.
+- **No model was run.** The answer text is the recorded one, byte for byte.
+
+### My own error, caught by my own assertion
+
+My first control expected `revenue rose 31 million` to yield `3.1e7` and it
+FAILED. The code was right and the assertion was wrong: `ClaimNumber.value`
+is the number **as written**, with the scale carried separately in `.scale`.
+I had asserted a contract that does not exist. Corrected to pin the real one.
+
+Two of the six new mutants SKIPPED at first — my anchors interpreted `\\s`
+and `\u0600` that the file stores literally. Rebuilt from the file's own
+bytes. Final: **286 seeded, 277 killed, 0 survived, 9 skipped** (pre-existing).
+
+### Status of the numbers
+
+`citation_correctness_pct` and `unsupported_claim_rate_pct` remain
+**NOT RECORDED** against the thresholds. Two graders have now been fixed
+underneath them and they still do not measure the model.
+

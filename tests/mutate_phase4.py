@@ -73,6 +73,11 @@ RUN = "scripts/run_phase4.py"
 # line, which this battery hit on 2026-09-01.
 NORM = "src/rag/normalize.py"
 
+# D-0099: the evidence side of the citation verifier. D-0092 masked only
+# the CLAIM, and the 2026-09-19 run showed the passage's own "Form 10-K"
+# becoming 1e7 under units_note=million. A guard with no mutant is untested.
+CITE = "src/rag/citations.py"
+
 # The two scripts that DECIDE the phase verdict became mutation targets on
 # 2026-09-05 (D-0094), the same day their output was recorded into
 # phase_4/measurements_recorded.
@@ -1569,6 +1574,26 @@ MUTATIONS = [
     (BUILD2, "lang is keyed off the id again instead of the script",
      '"lang": ("fa" if any("\\u0600" <= ch <= "\\u06ff" for ch in aq)\n                 else "en"),',
      '"lang": "fa" if aid.endswith("003") else "en",'),
+
+    # ---- D-0099 ----
+    (NORM, "form designators stop being masked",
+     'text = _FORM_DESIGNATOR_RE.sub("<FORM>", text)',
+     'pass'),
+    (NORM, "calendar days stop being masked",
+     'text = _CALENDAR_DAY_RE.sub("<DATE>", text)',
+     'pass'),
+    (NORM, "filer identifiers stop being masked",
+     'text = _FILER_ID_RE.sub("<ID>", text)',
+     'pass'),
+    (NORM, "the form pattern forgets Persian digits",
+     '"(?<![%(d)s])[%(d)s]{1,2}\\\\s*-\\\\s*[A-Za-z\\u0600-\\u06ff]{1,3}\\\\b" % {"d": _D})',
+     '"(?<![0-9])[0-9]{1,2}\\\\s*-\\\\s*[A-Za-z]{1,3}\\\\b")'),
+    (NORM, "the leading-zero safety net for ids is removed",
+     '"(?:CIK\\\\s*[%(d)s]+|(?<![%(d)s])0{2,}[%(d)s]+)" % {"d": _D},',
+     '"(?:CIK\\\\s*[%(d)s]+)" % {"d": _D},'),
+    (CITE, "the EVIDENCE side goes back to being graded unmasked",
+     'for cn in extract_numbers(mask_non_quantities(evidence.text)):',
+     'for cn in extract_numbers(evidence.text):'),
 ]
 
 

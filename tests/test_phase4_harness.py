@@ -6706,6 +6706,106 @@ _r6 = [r for r in _regen if r["id"] == "RAG2-ABST-006"]
 check_true("and the regenerated RAG2-ABST-006 is Persian",
            bool(_r6) and _r6[0]["lang"] == "fa")
 
+
+# =====================================================================
+# D-0099  THREE MORE NON-QUANTITIES, AND THE EVIDENCE SIDE
+#
+# The 2026-09-19 combined run scored citation_correctness 40.0. MEASURED by
+# reproducing the grader: 14 of 18 CONTRADICTED claims were identifiers read
+# as money -- "Form 10-K" as the quantity 10, "June 30," as 30, and CIK
+# numbers as magnitudes. R43's fifth recurrence.
+#
+# The deeper half: D-0092 masked only the CLAIM. The evidence passage was
+# left raw, so with units_note='million' the form number 10 became 1e7 and
+# sat in the evidence competing to be the "nearest" figure. Masking one side
+# is worse than masking neither -- it looks correct and is not.
+# =====================================================================
+section("D-0099 form designators, calendar days, filer ids, and the evidence side")
+
+from rag.normalize import mask_non_quantities as _M99          # noqa: E402
+from rag.citations import extract_numbers as _E99              # noqa: E402
+
+# ---- the artefacts MEASURED in the run must be masked ----
+_ART = [
+    ("Form 10-K",                    "<FORM>", "form designator"),
+    ("Form \u06f1\u06f0-K",          "<FORM>", "form designator, PERSIAN digits"),
+    ("filed an 8-K yesterday",       "<FORM>", "a different form number"),
+    ("CIK 0000320193",               "<ID>",   "filer id with keyword"),
+    ("cik 0000104169",               "<ID>",   "filer id, lowercase keyword"),
+    ("0000320193",                   "<ID>",   "bare id, by its leading zeros"),
+    ("ended June 30, 2024",          "<DATE>", "month then day"),
+    ("ended January 31 2025",        "<DATE>", "month then day, no comma"),
+]
+for _txt, _tok, _why in _ART:
+    check_true("masked: %s (%s)" % (_txt[:28], _why), _tok in _M99(_txt))
+
+# The point of masking is that NO number survives to be graded as money.
+for _txt, _tok, _why in _ART:
+    _nums = _E99(_M99(_txt))
+    check("no magnitude extracted from %r" % _txt[:26], len(_nums), 0)
+
+# ---- CONTROL: genuine figures must SURVIVE. A mask that eats real
+# numbers would turn a correct answer into an ungradable one, which is a
+# worse failure than the one being fixed.
+_KEEP = [
+    ("Net income | 96,995",        96995.0),
+    ("total assets of 364,980",    364980.0),
+    ("the index was 308.417",      308.417),
+    ("30 percent growth",          30.0),
+]
+for _txt, _want in _KEEP:
+    _got = [n.value for n in _E99(_M99(_txt))]
+    check_true("SURVIVES masking: %r -> %s" % (_txt[:26], _want),
+               _want in _got)
+check_true("a hyphenated RANGE is not mistaken for a form number",
+           "<FORM>" not in _M99("a range of 10-15 million dollars"))
+# NOTE ON WHAT .value MEANS. My first version of this assertion expected
+# 3.1e7 and FAILED. The code was right and the assertion was wrong:
+# ClaimNumber.value is the number AS WRITTEN, with the scale carried
+# separately in .scale_word / .scale so the caller can decide. Asserting a
+# pre-multiplied value tested a contract that does not exist.
+_n99 = _E99(_M99("revenue rose 31 million"))
+check("'revenue rose 31 million' still yields one number", len(_n99), 1)
+check("and it is 31, unscaled, as written", _n99[0].value, 31.0)
+check_true("with the scale carried alongside, not folded in",
+           _n99[0].scale_word == "million" and _n99[0].scale == 1e6)
+
+# ---- THE EVIDENCE SIDE, which is the half D-0092 missed ----
+# This is the exact Apple passage from the combined corpus.
+_EV99 = ("Apple Inc. (CIK 0000320193) -- Form 10-K, fiscal 2023, "
+         "consolidated financial statements (in millions) -- "
+         "Net income | 96,995 -- Total assets | 352,583")
+_scaled = [n.value * 1e6 for n in _E99(_M99(_EV99))]
+check("the masked passage yields exactly its two real magnitudes",
+      len(_scaled), 2)
+check_true("96,995 million is present", 96995e6 in _scaled)
+check_true("352,583 million is present", 352583e6 in _scaled)
+check_true("and 1e7 -- 'Form 10-K' wearing a million scale -- is GONE",
+           1e7 not in _scaled)
+check_true("the CIK is not a magnitude either",
+           320193e6 not in _scaled)
+
+# Prove the citation module itself masks the evidence, not just the claim.
+_csrc = io.open(os.path.join(_ROOT, "src", "rag", "citations.py"),
+                encoding="utf-8").read()
+check("extract_numbers is never called on RAW evidence text",
+      _csrc.count("extract_numbers(evidence.text)"), 0)
+check_true("it is called on the MASKED evidence text",
+           "extract_numbers(mask_non_quantities(evidence.text))" in _csrc)
+
+# ---- end to end through the real verifier, on the real fixture ----
+from rag.citations import verify_claim as _V99                 # noqa: E402
+from rag.documents import Passage as _P99, Provenance as _PR99  # noqa: E402
+
+_p99 = _P99(text=_EV99, provenance=_PR99(source="test"),
+            units_note="million", doc_id="T", lang="en")
+_r99 = _V99("Apple's net income was 96,995 million.", _p99)
+check_true("a correct claim against this passage is SUPPORTED",
+           _r99.status == "SUPPORTED")
+_r99b = _V99("Apple's net income was 11,111 million.", _p99)
+check_true("a WRONG figure is still not supported (negative control)",
+           _r99b.status != "SUPPORTED")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

@@ -263,13 +263,77 @@ _YEAR_ANY_SCRIPT_RE = re.compile(
        "23": _dig(2, 3), "4": _dig(4), "89": _dig(8, 9), "01": _dig(0, 1)})
 
 
+# ---------------------------------------------------------------------------
+# D-0099: three MORE kinds of non-quantity, MEASURED in the 2026-09-19 run.
+#
+# The combined RAG run scored citation_correctness 40.0 / unsupported_claim
+# 60.0. Reproducing the grader directly showed 14 of the 18 CONTRADICTED
+# claims were not the model's fault at all -- the extractor was reading
+# identifiers as money. This is R43's fifth recurrence, and the third time
+# the fix has had to be made script-agnostic.
+#
+# 1. FORM DESIGNATORS.  "Form 10-K" -> the claim asserted the quantity 10.
+#    MEASURED in this run: "10-K" x8 and the Persian "۱۰-K" x1. A digit
+#    bound to a letter by a hyphen is a NAME, not an amount. Deliberately
+#    narrow: it requires the hyphen AND a following letter, so "10-15
+#    million" (a range) is untouched.
+#
+# 2. CALENDAR DAYS.  "June 30, 2024" -> 30. "January 31 2025" -> 31.
+#    MEASURED: June x6, January x4. The month name is what makes the number
+#    a day; a bare 30 elsewhere is left alone, because it could be a real
+#    figure. Persian month names are included -- a Persian answer writing
+#    "۳۱ ژانویه" has the same problem and none of these runs would show it
+#    until one did.
+#
+# 3. FILER IDENTIFIERS.  "CIK 0000320193" -> 320193 treated as a magnitude.
+#    Two guards, either sufficient: the CIK keyword, or the run of leading
+#    zeros that no real financial figure carries. The leading-zero rule is
+#    the safety net for the accession numbers and ticker ids that will
+#    appear in later corpora under some other keyword I have not seen yet.
+#
+# Each is masked, not deleted, for the same reason as the year rule: the
+# human auditor in R10 still has to read the sentence.
+_MONTHS_EN = ("January|February|March|April|May|June|July|August"
+              "|September|October|November|December")
+_MONTHS_FA = ("\u0698\u0627\u0646\u0648\u06cc\u0647"          # ژانویه
+              "|\u0641\u0648\u0631\u06cc\u0647"               # فوریه
+              "|\u0645\u0627\u0631\u0633"                     # مارس
+              "|\u0622\u0648\u0631\u06cc\u0644"               # آوریل
+              "|\u0645\u0647"                                 # مه
+              "|\u0698\u0648\u0626\u0646"                     # ژوئن
+              "|\u0698\u0648\u0626\u06cc\u0647"               # ژوئیه
+              "|\u0627\u0648\u062a"                           # اوت
+              "|\u0633\u067e\u062a\u0627\u0645\u0628\u0631"   # سپتامبر
+              "|\u0627\u06a9\u062a\u0628\u0631"               # اکتبر
+              "|\u0646\u0648\u0627\u0645\u0628\u0631"         # نوامبر
+              "|\u062f\u0633\u0627\u0645\u0628\u0631")        # دسامبر
+
+# "10-K", "۱۰-K", "8-K", "10-Q". Digits in ANY script, hyphen, then a letter.
+_FORM_DESIGNATOR_RE = re.compile(
+    "(?<![%(d)s])[%(d)s]{1,2}\\s*-\\s*[A-Za-z\u0600-\u06ff]{1,3}\\b" % {"d": _D})
+
+# A month name followed by a day, or a day followed by a month name.
+_CALENDAR_DAY_RE = re.compile(
+    "(?:(?:%(en)s|%(fa)s)\\s+[%(d)s]{1,2}(?![%(d)s])"
+    "|(?<![%(d)s])[%(d)s]{1,2}\\s+(?:%(en)s|%(fa)s))"
+    % {"en": _MONTHS_EN, "fa": _MONTHS_FA, "d": _D})
+
+# "CIK 0000320193", and any integer wearing two or more leading zeros.
+_FILER_ID_RE = re.compile(
+    "(?:CIK\\s*[%(d)s]+|(?<![%(d)s])0{2,}[%(d)s]+)" % {"d": _D},
+    re.IGNORECASE)
+
+
 def mask_non_quantities(text):
     """
     Blank out the things in a sentence that LOOK numeric but assert no amount.
 
-    Two kinds, both of which were MEASURED corrupting the citation grader:
+    Five kinds, every one of them MEASURED corrupting the citation grader:
       - citation markers  [1] [2] [3]
       - year-like bare integers, in ASCII, Arabic-Indic or Persian digits
+      - form designators  "Form 10-K", "۱۰-K"        (D-0099)
+      - calendar days     "June 30", "۳۱ ژانویه"      (D-0099)
+      - filer identifiers "CIK 0000320193"            (D-0099)
 
     Markers are removed first. I ORIGINALLY DOCUMENTED THIS AS ORDER-CRITICAL,
     claiming a marker's digits would otherwise be consumed by the year
@@ -295,4 +359,11 @@ def mask_non_quantities(text):
         raise TypeError("mask_non_quantities expects str or None, got %s"
                         % type(text).__name__)
     text = _CITATION_MARKER_RE.sub("<CIT>", text)
+    # Filer ids FIRST: "CIK 0000320193" must be consumed whole, before the
+    # year rule can bite the "0193" tail or the form rule sees anything.
+    text = _FILER_ID_RE.sub("<ID>", text)
+    # Form designators before calendar days: "10-K" carries no month, and
+    # leaving it for later lets the year rule see a bare 10.
+    text = _FORM_DESIGNATOR_RE.sub("<FORM>", text)
+    text = _CALENDAR_DAY_RE.sub("<DATE>", text)
     return _YEAR_ANY_SCRIPT_RE.sub("<YEAR>", text)

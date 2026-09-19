@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0098). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0099). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -53,7 +53,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,621 assertions across 18 suites, plus 980 seeded defects across 11 mutation batteries. |
+| `tests/` | 3,654 assertions across 18 suites, plus 986 seeded defects across 11 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -272,7 +272,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,621 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,654 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -929,7 +929,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,621
+unique and non-no-op *before* the battery ran. Full regression: **3,654
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1121,7 +1121,7 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,621
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,654
 assertions, 18 suites, 0 failed, 0 skipped.**
 
 ## PHASE 4 VERDICT: FAIL — recorded 2026-09-05
@@ -1318,6 +1318,47 @@ It is still worth doing: the model's Persian quality is recorded **nowhere**
 today, D-0081's FAIL was reached on the **contaminated** run, and the machine's
 unsupported-claim set had **zero overlap** with the human's — the machine does
 not substitute for the reader.
+
+### D-0099: R43's fifth recurrence, and the half of D-0092 I never finished
+
+The combined RAG run scored `citation_correctness 40.0`. Reproducing the
+grader showed **14 of 18 CONTRADICTED claims were identifiers read as money**:
+`Form 10-K` became the quantity **10**, `June 30,` became **30**, and
+`CIK 0000320193` became a magnitude. MEASURED in the run's own text: `10-K`
+×8, the Persian `۱۰-K` ×1, `June` ×6, `January` ×4.
+
+**The deeper defect was mine.** D-0092 masked the **claim** and stopped, on
+the reasoning that evidence is fixture text and therefore clean. The Apple
+passage carries `units_note='million'`, so the evidence itself contributed
+`10 × 1e6 = 1e7` — and every one of the remaining failures reported
+`nearest is 1e+07`, which is the string `Form 10-K` wearing a million-dollar
+scale. **Masking one side of a comparison is worse than masking neither: it
+looks correct and is not.**
+
+**What the re-grade honestly changed.** The identifier artefacts are gone, but
+the headline barely moved (40.0 → 38.89), because the remaining failures are a
+different defect entirely:
+
+| cause | count |
+|---|---|
+| **R47** — the model quotes a table row whose scale word **precedes** the number | **11** |
+| the CPI passage genuinely declares no scale (RAG-EN-004) | 1 |
+| anything else | **0** |
+| **the model inventing a figure** | **0** |
+
+Every remaining detail shows `ratio 1e-06` — the same number, off by exactly
+10⁶. So the metric still is **not** a measurement of the model, and 38.89 is
+**not recorded** against the threshold. R47 stays unfixed here on purpose:
+accepting a preceding scale word would also make the grader accept a real 10⁶
+error, and that trade needs its own decision.
+
+**Controls**: `96,995`, `364,980`, `308.417`, `30 percent`, `31 million` and
+the range `10-15 million` all survive masking untouched. **No model was run** —
+the answer text is the recorded one, byte for byte.
+
+**My own assertion was wrong first.** A control expected `31 million` to yield
+`3.1e7`; `ClaimNumber.value` is the number *as written*, with the scale in
+`.scale`. I had pinned a contract that does not exist.
 
 ### D-0098: running the v2 eval alone would not have done what v2 was built for
 
@@ -1729,7 +1770,7 @@ So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
 attached, and **the number to plan around is the upper bound.** Quoting only a
 central figure is how a "1 hour" run became 1.7 hours earlier in this project.
 
-Full regression: **3,621 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+Full regression: **3,654 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
 **224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
 `None`, and **0 model runs** were launched.
 
@@ -2040,8 +2081,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,621 assertions across 18 suites + 7 probes (~9 s)
-./tests/run_all.sh --mutate     # + 980 seeded defects across 11 batteries (~205 s)
+./tests/run_all.sh              # 3,654 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh --mutate     # + 986 seeded defects across 11 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -2404,7 +2445,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,621 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,654 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -2453,7 +2494,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,621-assertion base is trustworthy.
+3,654-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 
