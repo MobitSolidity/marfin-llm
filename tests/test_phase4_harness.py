@@ -6289,6 +6289,155 @@ check_true("...and cannot give a 100%% floor resolution either",
            "(E) deterministic_calc_correctness_pct_min stays "
            "zero-tolerance at any n")
 
+
+# ===========================================================================
+section("D-0097: grading the WRONG evidence file is now caught")
+# ===========================================================================
+#
+# The user asked where to run the R10 command from, and whether they had sent
+# the phase-4 output. Checking turned up a trap of my own making.
+#
+# TWO merged evidence files now sit in evidence/, and their names differ by one
+# date suffix. MEASURED:
+#
+#   phase4_merged.json             2026-08-27  max_tokens 2048  15 of 52 EMPTY
+#   phase4_merged_2026-09-03.json  2026-09-03  max_tokens  512   0 of 52 EMPTY
+#
+# grade_persian.py's file-not-found message named the OLD one unconditionally.
+# That was correct when it was the only merged file and became a trap when the
+# newer run was committed beside it on 2026-09-05 -- by me, in the same commit
+# that recorded the verdict.
+#
+# The cost of that trap is an hour of the user's time reading 15 blank pages,
+# grading the contaminated run whose superseded FAIL (D-0081) this project has
+# already set aside, with nothing in the output to reveal the mistake.
+
+import io as _io97                                            # noqa: E402
+import subprocess as _sp97                                    # noqa: E402
+
+_GP97 = os.path.join(_ROOT, "tools", "grade_persian.py")
+_EV97 = os.path.join(_ROOT, "evidence")
+_OLD97 = os.path.join(_EV97, "phase4_merged.json")
+_NEW97 = os.path.join(_EV97, "phase4_merged_2026-09-03.json")
+
+# The premise: both files exist and differ in exactly the way that matters.
+# Without this, every assertion below could pass vacuously.
+check_true("both merged evidence files are present",
+           os.path.exists(_OLD97) and os.path.exists(_NEW97),
+           "(A) ANTI-VACUITY: the guard being tested only matters because "
+           "there are two files to confuse")
+_o97 = json.load(_io97.open(_OLD97, encoding="utf-8"))
+_n97 = json.load(_io97.open(_NEW97, encoding="utf-8"))
+
+
+def _empty97(d):
+    return sum(1 for a in d["arms"] for r in d["arms"][a]
+               if not (r.get("output") or "").strip())
+
+
+check("the superseded run really has 15 empty outputs", _empty97(_o97), 15, 0,
+      "(D) those cases cannot be graded for fluency at all -- a human would "
+      "be reading blank pages")
+check("the current run really has 0", _empty97(_n97), 0, 0,
+      "(D) the D-0091 prefill is why this task became worth a human's time")
+
+# ---------------------------------------------------------------------------
+# GUARD 1: the not-found message must name the NEWER file, and say what the
+#          older one is.
+# ---------------------------------------------------------------------------
+_r97 = _sp97.run([sys.executable, _GP97, "--input",
+                  os.path.join(_EV97, "definitely_absent.json"),
+                  "--output", os.path.join(_tempdir(), "g.json")],
+                 capture_output=True, text=True, cwd=_ROOT, timeout=120)
+_msg97 = _r97.stdout + _r97.stderr
+check_true("a missing --input suggests the 2026-09-03 file",
+           "phase4_merged_2026-09-03.json" in _msg97,
+           "(D) THE FIX. This message previously named phase4_merged.json, "
+           "which is now the superseded run")
+check_true("...and says plainly that it is the one to use",
+           "USE THIS ONE" in _msg97, "(A)")
+check_true("...and warns what the other file is",
+           "SUPERSEDED" in _msg97 and "EMPTY" in _msg97,
+           "(C) naming the right file is not enough: the wrong one is still "
+           "sitting in the same directory with a very similar name")
+check_true("...and states which directory the path resolved against",
+           "CURRENT directory" in _msg97,
+           "(B) the user's actual question was WHICH FOLDER, and a bare "
+           "'file not found' answers it only for someone who already knows")
+
+# ---------------------------------------------------------------------------
+# GUARD 2: a VALID path to the superseded file must warn too. The message
+#          above only helps someone who typed a wrong path.
+# ---------------------------------------------------------------------------
+_r97b = _sp97.run([sys.executable, _GP97, "--input", _OLD97,
+                   "--output", os.path.join(_tempdir(), "g2.json"),
+                   "--report"],
+                  capture_output=True, text=True, cwd=_ROOT, timeout=120)
+_msg97b = _r97b.stdout + _r97b.stderr
+check_true("grading the superseded file prints a loud warning",
+           "WARNING" in _msg97b and "15 of 52" in _msg97b,
+           "(D) THE HALF THAT MATTERS MORE. The two filenames differ by one "
+           "date suffix, so a valid path to the wrong file is the likelier "
+           "mistake, and no path message can catch it")
+check_true("...and names the later run as the alternative",
+           "phase4_merged_2026-09-03.json" in _msg97b, "(A)")
+check_true("...and reports the timestamp so the file is identifiable",
+           "2026-08-27" in _msg97b, "(A)")
+check("...but it still RUNS, because grading an old run is legitimate",
+      _r97b.returncode, 0, 0,
+      "(C) re-reading a past run or auditing an old verdict are real tasks. "
+      "This tool has no business deciding which run the user meant -- it "
+      "only refuses to let the choice happen SILENTLY")
+
+# ---------------------------------------------------------------------------
+# GUARD 3: NO FALSE ALARM on the correct file. A warning that fires always is
+#          a warning nobody reads.
+# ---------------------------------------------------------------------------
+_r97c = _sp97.run([sys.executable, _GP97, "--input", _NEW97,
+                   "--output", os.path.join(_tempdir(), "g3.json"),
+                   "--report"],
+                  capture_output=True, text=True, cwd=_ROOT, timeout=120)
+_msg97c = _r97c.stdout + _r97c.stderr
+check_true("the CURRENT file produces no warning at all",
+           "WARNING" not in _msg97c,
+           "(C) THE NON-VACUITY CONTROL. If the warning fired on both files "
+           "it would carry no information, and the assertion above would be "
+           "passing for the wrong reason")
+check_true("...and reports 0 not-gradeable cases",
+           "not gradeable (no output)   0" in _msg97c,
+           "(D) this is the line the user should check to confirm they have "
+           "the right file open")
+
+# ---------------------------------------------------------------------------
+# The handover documents must point at the same file the tool does. A guide
+# and a tool disagreeing about which file to use would reintroduce the whole
+# problem somewhere else.
+# ---------------------------------------------------------------------------
+for _doc97 in ("START_R10_GRADING.md", "R10_GRADING_GUIDE_FA.md"):
+    _p97 = os.path.join(_ROOT, _doc97)
+    check_true("%s exists" % _doc97, os.path.exists(_p97), "(A)")
+    if os.path.exists(_p97):
+        _t97 = _io97.open(_p97, encoding="utf-8").read()
+        check_true("%s names the 2026-09-03 file" % _doc97,
+                   "phase4_merged_2026-09-03.json" in _t97,
+                   "(D) a guide pointing at the superseded file would "
+                   "recreate the trap the tool now guards against")
+        check_true("%s records that grading yields a BASELINE, not a PASS"
+                   % _doc97,
+                   ("\u0631\u06af\u0631\u0633\u06cc\u0648\u0646" in _t97
+                    or "regression" in _t97.lower()),
+                   "(C) persian_fluency_regression has no baseline to "
+                   "regress against, so completing R10 cannot turn it green. "
+                   "Letting the user discover that after an hour of reading "
+                   "would be the ESTIMATED-as-MEASURED error in slow motion")
+
+check_true("the sha256 recorded in the gate matches the evidence file on disk",
+           _st94["phase_4"]["measurements_recorded"]["run_sha256"] ==
+           __import__("hashlib").sha256(
+               open(_NEW97, "rb").read()).hexdigest(),
+           "(D) the user asked whether they had sent the output. This pins "
+           "the answer: the committed file IS their upload, byte for byte")
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0096). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0097). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -32,11 +32,13 @@ paper/live trading controls.
 | `scripts/threshold_resolution.py` | Reports whether each percentage threshold has any **resolution** at the current eval size — the smallest n at which it can tolerate ONE failure. Continuous quantities and counts-of-zero are excluded, not force-fitted. **Proposes no threshold change**, and never writes `PROJECT_STATE.json`. |
 | `R49_EVAL_SIZE_OPTIONS.md` | Three costed options for R49, with MEASURED costs. Option C (relaxing a threshold) is refused with the reason recorded. |
 | `R10_GRADING_GUIDE_FA.md` | Persian handover for the R10 human grading session: exact commands, three resumable per-arm sessions, the 5-verdict vocabulary, and the honest limit that grading produces a baseline rather than a PASS. |
+| `START_R10_GRADING.md` | The one-page Persian quick start for R10 (D-0097): which folder to run from, a PowerShell search to find it if the path has been forgotten, the backup archive to restore from if it is gone, and — stated once, plainly — **which of the two merged evidence files to grade**. |
 | `evals/rag_gold_v2.jsonl` / `evals/rag_corpus_v2.jsonl` | **The v2 eval set (D-0096)**: 15 answerable + 7 abstain questions over 13 documents, every magnitude and accession from `data.sec.gov`. Takes the combined totals to 22 checkable answers and 10 abstain cases, clearing two R49 targets without touching a threshold. |
 | `tools/fetch_xbrl.sh` · `tools/extract_xbrl_facts.py` · `tools/build_eval_v2.py` | The v2 build chain, committed so the fixture can be rebuilt and audited rather than trusted. `extract_xbrl_facts.py` keys on the period **end**, never on EDGAR's `fy` — see D-0096 for why that distinction would otherwise have made all 15 questions wrong. |
 | `tools/validate_eval_set.py` | Proves an eval set is usable BEFORE a model run is spent on it: retrievability, gradability, a fabricated-figure negative control, and genuine absence of every abstain entity. It caught 5 of 15 questions failing to retrieve their own gold document. |
 | `evidence/threshold_resolution_2026-09-07.json` | The resolution measurement: 6 of 12 thresholds have none, including one that PASSED. |
-| `evidence/phase4_merged_2026-09-03.json` | **The recorded Phase 4 run**, sha256 `a0a625a2…c95e93f`, byte-identical to the user's upload. Held in the repo because `/tmp` was wiped by a sandbox reset the same day (R40). |
+| `evidence/phase4_merged_2026-09-03.json` | **The recorded Phase 4 run — the one to use**, sha256 `a0a625a2…c95e93f`, byte-identical to the user's upload. 52 cases, **0 empty outputs**. Held in the repo because `/tmp` was wiped by a sandbox reset the same day (R40). |
+| `evidence/phase4_merged.json` | **SUPERSEDED** (2026-08-27, `max_tokens` 2048): 15 of its 52 outputs are **empty** and its FAIL was set aside as D-0081. Kept for audit, not for grading. It sits one date suffix from the current file, which is exactly how D-0097 happened. |
 | `evidence/phase4_threshold_verdicts_2026-09-05.json` | The graded verdict: 3 PASS, 7 FAIL, 2 UNMEASURED, **OVERALL FAIL**. |
 | `evidence/phase4_citations_recomputed_2026-09-05.json` | The corrected citation metrics: 42.86 % and 45.45 %, both still FAIL. |
 | `docs/guides/phase-4-windows-setup-fa.md` | **Persian** setup guide for running Phase 4 on Windows 11. |
@@ -48,7 +50,7 @@ paper/live trading controls.
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
 | `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
-| `tests/` | 3,549 assertions across 18 suites, plus 984 seeded defects across 12 mutation batteries. |
+| `tests/` | 3,569 assertions across 18 suites, plus 972 seeded defects across 11 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
 | `.gitignore` | Prevents committing secrets, credentials, audit state, and model weights. |
 
@@ -267,7 +269,7 @@ tolerance that accepted a **wrong number**, and access terms that were
 
 ### Why the mutation count is the number that matters
 
-**3,549 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
+**3,569 assertions pass across 18 suites, and 0 are SKIPPED. That is not the
 claim.** A passing suite proves nothing on its own. The claim is that every
 guard was deliberately broken and the suite caught it — plus **153 adversarial
 attempts, 153 refused, 0 allowed, 0 crashed.**
@@ -924,7 +926,7 @@ everything. `test_phase4_harness.py` printed **709 passed, 0 failed** instead of
 including the three-week-green under-prediction guard. Mutation battery: **21
 seeded, 21 killed, 0 survived**, source restored to md5
 `35705e179916f3234665f039c655908a`. A pre-flight check proved all 21 anchors
-unique and non-no-op *before* the battery ran. Full regression: **3,549
+unique and non-no-op *before* the battery ran. Full regression: **3,569
 assertions, 0 failed, 0 skipped** — baseline 3,334 + 3 new, fully accounted for;
 skip behaviour verified in both directions.
 
@@ -1116,7 +1118,7 @@ its anchor in the pre-edit and current files (51 are 1→1; every skipped one is
 2→2 or 0→0). **0 skips are mine.**
 
 All **5** pinned-defect assertions were inverted in the same commit as the fix;
-`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,549
+`INVERT WHEN FIXED` markers remaining: **0**. Full regression: **3,569
 assertions, 18 suites, 0 failed, 0 skipped.**
 
 ## PHASE 4 VERDICT: FAIL — recorded 2026-09-05
@@ -1313,6 +1315,76 @@ It is still worth doing: the model's Persian quality is recorded **nowhere**
 today, D-0081's FAIL was reached on the **contaminated** run, and the machine's
 unsupported-claim set had **zero overlap** with the human's — the machine does
 not substitute for the reader.
+
+### D-0097: two evidence files, one date suffix apart, and the tool pointed at the wrong one
+
+The user asked two ordinary questions — *which folder do I run the command
+from, and didn't I already send you the Phase 4 output?* Both had simple
+answers. Verifying them turned up a trap I had built two commits earlier.
+
+The answers first. **Yes, the output was sent**, on 2026-09-03; it is in the
+repository as `evidence/phase4_merged_2026-09-03.json`, sha256
+`a0a625a2…c95e93f`, **VERIFIED byte-identical** to the upload. And the folder
+is the **repository root** — the directory holding `PROJECT_STATE.json`.
+`START_R10_GRADING.md` now carries both answers, plus a PowerShell search for
+the folder if the path has been forgotten and the backup archive to restore
+from if it is gone.
+
+Then the problem. There are **two** merged files in `evidence/`, and they
+differ by a date suffix:
+
+```
+-- evidence/phase4_merged.json
+   ts: 2026-08-27 | max_tokens: 2048 | cases: 52 | EMPTY outputs: 15
+-- evidence/phase4_merged_2026-09-03.json
+   ts: 2026-09-03 | max_tokens: 512  | cases: 52 | EMPTY outputs: 0
+```
+
+`tools/grade_persian.py`'s not-found message named the **old** one,
+unconditionally:
+
+```python
+        guess = os.path.join(os.path.dirname(here), "evidence",
+                             "phase4_merged.json")
+```
+
+That line was correct when it was written — `phase4_merged.json` was then the
+only merged file. It became a trap the moment I committed the newer run beside
+it in `ea758fe` and did not revisit the tool that reads it. **A correct
+statement can be turned false by a file added next to it.** The cost, had the
+user followed it: an hour reading 15 blank pages and grading the contaminated,
+superseded run whose FAIL (D-0081) had already been set aside.
+
+Two guards, because the two mistakes are different:
+
+1. **Not-found** now enumerates the merged files that actually exist,
+   **newest first**, each with a description saying which to use and which is
+   superseded. It reports what is on disk instead of reciting a filename
+   frozen at authoring time.
+2. **A valid path to the wrong file** — the likelier mistake, and one no
+   path-not-found message can ever catch. If the chosen file contains empty
+   outputs the tool prints a loud warning naming the count and the current
+   file. It **warns, it does not refuse**: re-reading a superseded run is a
+   legitimate thing to want. Only the silence about it was not.
+
+The **non-vacuity control** matters as much as the guard: grading the current
+file must produce **no** warning. A warning that always fires is noise, and
+noise is ignored. Verified on all three paths — wrong path, superseded file,
+current file.
+
+Two of the four seeded mutants **SKIPPED** on the first battery and one
+**SURVIVED**. The skips were mine: I wrote the mutation anchors at 8-space
+indentation while the code sits at 4, so they matched nothing. The survivor was
+anchored on a heading line that no assertion read. The skip count rising from 9
+to 11 is what surfaced it — **a mutant that cannot be applied is not a mutant
+that was killed**, and a battery reporting `survived: 0` while quietly skipping
+is the same false green this project keeps finding. After repair: **272 seeded,
+263 killed, 0 survived, 9 skipped** (the 9 pre-existing).
+
+What this does **not** do: it changes no measurement and no verdict, it does
+not make the superseded run gradable — 15 outputs are still empty — and it
+detects *empties*, not wrongness in general. A different-but-populated wrong
+file would still pass quietly.
 
 ### A mutant survived, and the assertion was at fault, not the code
 
@@ -1580,7 +1652,7 @@ So ~22–32 minutes was not wrong, but it was the optimistic end with no ceiling
 attached, and **the number to plan around is the upper bound.** Quoting only a
 central figure is how a "1 hour" run became 1.7 hours earlier in this project.
 
-Full regression: **3,549 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
+Full regression: **3,569 assertions, 18 suites, 0 failed, 0 skipped.** Mutation:
 **224 killed, 0 survived, 9 skipped.** `phase_4/measurements_recorded` is still
 `None`, and **0 model runs** were launched.
 
@@ -1891,8 +1963,8 @@ See `docs/phase-reports/phase-2a.md` and `docs/phase-reports/phase-3.md`.
 ### Running the tests
 
 ```bash
-./tests/run_all.sh              # 3,549 assertions across 18 suites + 7 probes (~9 s)
-./tests/run_all.sh --mutate     # + 984 seeded defects across 12 batteries (~205 s)
+./tests/run_all.sh              # 3,569 assertions across 18 suites + 7 probes (~9 s)
+./tests/run_all.sh --mutate     # + 972 seeded defects across 11 batteries (~205 s)
 
 python3 tests/test_valuation.py       # or any single suite
 python3 tests/probe_broker_tools.py   # adversarial: try to reach a broker write
@@ -2255,7 +2327,7 @@ It reads only — no socket, no quota, no file written — and is deliberately
   survive *against a suite printing "195 passed, 0 failed"* — including a mutant
   that relabelled the user's MEASURED hardware failure as `PASS`, and one that
   shortened a border by one column, the exact defect that had already shipped.
-- Full regression: **18 suites, 3,549 assertions, 0 failed, 0 skipped.**
+- Full regression: **18 suites, 3,569 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
 
@@ -2304,7 +2376,7 @@ assumption rather than on the AST.
 That finding led to probing `tests/_harness.py`, the highest-fan-in module in the
 tree, which had no test and no mutation battery. **No false-pass mode exists**:
 `check(nan, nan)` fails, and `check_raises` on a non-raising function fails. The
-3,549-assertion base is trustworthy.
+3,569-assertion base is trustworthy.
 
 ### `tools/grade_persian.py` — R10 human grading
 
@@ -2314,33 +2386,46 @@ root** so the relative paths below resolve:
 
 ```bash
 # start / resume interactive grading
-python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json
+python3 tools/grade_persian.py \
+    --input evidence/phase4_merged_2026-09-03.json --output grades.json
 
 # progress report only, no prompts
-python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json --report
+python3 tools/grade_persian.py \
+    --input evidence/phase4_merged_2026-09-03.json --output grades.json --report
 
 # one arm at a time
 # (NOTE: an earlier version of this line called rag "the only arm with 0
 #  fabrications". That rested on the harness `fabricated` field and is
 #  WITHDRAWN -- human grading found 2 UNSUPPORTED cases in rag, which scored
 #  ZERO GOOD across its 10 cases. See D-0081 / R29.)
-python3 tools/grade_persian.py --input evidence/phase4_merged.json --output grades.json --arm rag
+python3 tools/grade_persian.py \
+    --input evidence/phase4_merged_2026-09-03.json --output grades.json --arm rag
 ```
 
 Windows PowerShell, from the repo root, is identical apart from `python`:
 
 ```powershell
-python tools\grade_persian.py --input evidence\phase4_merged.json --output grades.json
+python tools\grade_persian.py --input evidence\phase4_merged_2026-09-03.json --output grades.json
 ```
 
-The evidence file lives at **`evidence/phase4_merged.json`** and is committed,
-because it was previously only an out-of-tree upload: the tool shipped in the
-repo while the one file it cannot run without did not, so a fresh clone or
+**Grade `evidence/phase4_merged_2026-09-03.json`, not
+`evidence/phase4_merged.json`.** Two merged files sit in `evidence/` one date
+suffix apart, and the older one has 15 empty outputs. The commands above named
+the wrong one until D-0097.
+
+| file | date | `max_tokens` | cases | empty | use |
+|---|---|---|---|---|---|
+| `evidence/phase4_merged_2026-09-03.json` | 2026-09-03 | 512 | 52 | **0** | **this one** |
+| `evidence/phase4_merged.json` | 2026-08-27 | 2048 | 52 | **15** | superseded (D-0081) |
+
+Both are committed rather than left as out-of-tree uploads: the tool shipped in
+the repo while the one file it cannot run without did not, so a fresh clone or
 backup could not use it. *A tool is not usable until its input travels with it.*
 
-MEASURED end-to-end before documenting: 52 cases load (rag 10 / tools 21 /
-plain 21), 15 pre-marked `no_output`, **37 awaiting a human verdict**; grading
-two cases and quitting leaves 17 recorded / 35 remaining on resume.
+MEASURED end-to-end on the current file: 52 cases load (rag 10 / tools 21 /
+plain 21), **0 pre-marked `no_output`, 52 awaiting a human verdict** — the whole
+run is gradable, which was the point of re-running it. The same command on the
+superseded file loads 52 and pre-marks 15.
 
 R10 (Persian generation quality) is the one Phase 4 threshold no automated check
 can decide. **This tool grades nothing.** It shows each case's question, rubric
@@ -2353,8 +2438,13 @@ and R10 would drift from UNKNOWN to a fabricated PASS.
 - Grades are keyed `arm::id`, because the `tools` and `plain` arms ask the **same
   21 questions** — 52 cases hold only 31 distinct ids, so keying by `id` alone
   let one arm's verdict silently overwrite another's.
-- The 15 cases with empty output are marked `no_output`, counted separately and
-  **never as passes**.
+- Cases with empty output are marked `no_output`, counted separately and
+  **never as passes** — 0 of them in the 2026-09-03 run, 15 in the superseded one.
+- Since D-0097 the tool **warns loudly** when the file it was handed contains
+  empty outputs, naming the count and pointing at the current file. It warns
+  rather than refuses: re-reading an old run is legitimate, and only the silence
+  about it was not. A not-found path now lists the merged files that actually
+  exist, **newest first**, each labelled with which to use.
 - It does **not** set the R10 verdict, and never touches
   `phase_4/measurements_recorded`.
 

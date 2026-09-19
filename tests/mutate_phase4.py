@@ -91,6 +91,12 @@ REGRADE = "scripts/regrade_citations.py"
 # NEGATIVE one: it must never propose relaxing a threshold.
 RESOL = "scripts/threshold_resolution.py"
 
+# tools/grade_persian.py became a target on 2026-09-07 (D-0097). Its new
+# guards are the only thing standing between the user and an hour spent
+# grading the SUPERSEDED run, whose filename differs from the current one by
+# a single date suffix. A guard with no mutant is an untested guard.
+GRADEFA = "tools/grade_persian.py"
+
 # The eval fixture is a MUTATION TARGET, not just an input.
 #
 # Added 2026-08-19. Until now every mutation edited code, on the tacit
@@ -1507,6 +1513,26 @@ MUTATIONS = [
      '    "citation_correctness_pct_min": {',
      '    "generation_tokens_per_sec_min": {"unit": "x", "where": "y", '
      '"dir": "min"},\n    "citation_correctness_pct_min": {'),
+
+    # -- DEFECT 9: the wrong-evidence-file guards (D-0097) -------------------
+    (GRADEFA, "the not-found message points back at the SUPERSEDED run",
+     '        candidates = [\n'
+     '            ("phase4_merged_2026-09-03.json",',
+     '        candidates = [\n'
+     '            ("phase4_merged.json",'),
+    # RE-INDENTED 2026-09-07: these two SKIPPED on the first battery because
+    # I wrote 8-space indentation where grade_persian.py uses 4. The skip
+    # count moving 9 -> 11 is what surfaced it; a skipped mutant is worse
+    # than a deleted one because the killed total still looks healthy.
+    (GRADEFA, "the empty-output warning is silenced",
+     "    if empty:",
+     "    if False:"),
+    (GRADEFA, "the warning fires on EVERY file, so it carries no information",
+     "    empty = sum(1 for c in out if not (c.get(\"output\") or \"\").strip())",
+     "    empty = 1"),
+    (GRADEFA, "the warning no longer names the later run",
+     '            print("    evidence/phase4_merged_2026-09-03.json")',
+     '            print("")'),
 ]
 
 

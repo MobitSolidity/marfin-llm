@@ -5032,3 +5032,102 @@ out, ALL GREEN**.
 and `tools/validate_eval_set.py` are committed rather than left in `/tmp` —
 R40 wiped `/tmp` twice this week, and a fixture whose build script has vanished
 cannot be audited.
+
+
+## D-0097 — two evidence files, one date suffix apart, and the tool pointed at the wrong one
+
+**Date:** 2026-09-07 · **Status:** FIXED · **Trigger:** the user asked which
+folder to run the R10 command from, and whether they had already sent the
+phase-4 output
+
+Both questions had simple answers. Checking them turned up a trap I had
+created two commits earlier.
+
+### What the user asked, and the answers
+
+**"Did I send you the phase-4 output?"** Yes — uploaded 2026-09-03, analysed,
+graded and recorded. It now lives in the repository as
+`evidence/phase4_merged_2026-09-03.json`, sha256 `a0a625a2…c95e93f`,
+byte-identical to the upload. It was put there deliberately because `/tmp` was
+wiped twice this week by sandbox resets (R40): **a measurement whose evidence
+file can vanish is not recorded.**
+
+**"Which folder?"** The repository root — the directory holding `README.md`
+and `evidence/`. That answer is now in `START_R10_GRADING.md`, together with a
+PowerShell search for anyone who has lost the checkout, and the backup link as
+a fallback.
+
+### The trap the question exposed
+
+`evidence/` now holds two merged files whose names differ by one date suffix:
+
+| file | timestamp | max_tokens | empty outputs |
+|---|---|---|---|
+| `phase4_merged.json` | 2026-08-27 | 2048 | **15 of 52** |
+| `phase4_merged_2026-09-03.json` | 2026-09-03 | 512 | **0 of 52** |
+
+And `grade_persian.py`'s file-not-found message **named the older one
+unconditionally**. That was correct when it was the only merged file. It became
+wrong on 2026-09-05, when I committed the newer run beside it — in the same
+commit that recorded the verdict.
+
+The cost is concrete: an hour of the user's time reading **15 blank pages out
+of 52**, grading the contaminated run whose superseded FAIL (D-0081) this
+project has already set aside, with nothing in the output to reveal the
+mistake. The empty cases are marked `no_output` and skipped, so the session
+would simply have felt short.
+
+### Two guards, because one was not enough
+
+**Guard 1 — the not-found message.** Candidates are now tried **newest first**,
+and the message says what each file is: *"the 2026-09-03 run: 52 cases, 0 empty
+outputs. USE THIS ONE"* and *"the SUPERSEDED 2026-08-27 run: 15 of 52 outputs
+are EMPTY… Do not grade this by mistake."* It also states which directory the
+path resolved against, since that was the user's actual question.
+
+**Guard 2 — a warning on a VALID path to the wrong file.** Guard 1 only helps
+someone who typed a *wrong* path. With two names a single suffix apart, the
+likelier mistake is a perfectly valid path to the superseded run, and no
+path-resolution message can catch that. So the loader now counts empty outputs
+in whatever file it was given and prints a boxed warning naming the timestamp,
+the count and the later run.
+
+**It warns; it does not refuse.** Re-reading an old run or auditing a past
+verdict are legitimate tasks, and this tool has no business deciding which run
+the user meant. It only refuses to let the choice happen **silently**.
+
+### The non-vacuity control matters as much as the warning
+
+A warning that fires on every file carries no information. So there is an
+assertion that the **current** file produces no warning at all — and a mutant
+(`empty = 1`) that makes it fire always. Without that pair, the warning
+assertion could pass for the wrong reason.
+
+### Three mistakes of my own in this change
+
+**Two mutants SKIPPED.** I wrote 8-space indentation in the mutant anchors
+where `grade_persian.py` uses 4, so neither applied. The skip count moving
+**9 → 11** is what surfaced it. A skipped mutant is worse than a deleted one,
+because the killed total still looks healthy — this is the third time that
+detection has earned its place.
+
+**One mutant SURVIVED.** `the warning no longer names the later run` was
+anchored on a heading line that no assertion checked. Retargeted onto the line
+that actually carries the filename, which the suite does assert.
+
+**The guide had to agree with the tool.** A handover document pointing at the
+superseded file would have recreated the trap somewhere else, so both
+`START_R10_GRADING.md` and `R10_GRADING_GUIDE_FA.md` are asserted to name the
+2026-09-03 file *and* to record that grading produces a **baseline, not a
+PASS**.
+
+### Coverage
+
+20 new assertions (`test_phase4_harness` 923 → 943) and 4 new mutants;
+`tools/grade_persian.py` became a mutation target. Final battery: **272
+seeded, 263 killed, 0 survived, 9 skipped** (back to the pre-existing 9).
+Regression **3569, 0 skipped, 0 timed out, ALL GREEN**.
+
+One assertion pins the answer to the user's second question directly: the
+sha256 recorded in `phase_4/measurements_recorded` must equal the hash of the
+file on disk. **The committed evidence IS their upload, byte for byte.**

@@ -132,31 +132,65 @@ def load_cases(path):
     # also the SECOND error a user hits: they fix the argparse complaint, then
     # land here. Both need to name the fix, not just the fault.
     if not os.path.exists(path):
+        # WHICH FILE TO SUGGEST, AND WHY THE ORDER MATTERS.
+        #
+        # This block used to name evidence/phase4_merged.json unconditionally.
+        # That was right when it was the only merged file; it became a TRAP on
+        # 2026-09-05, when the 2026-09-03 run was committed alongside it.
+        # MEASURED difference between the two:
+        #
+        #   phase4_merged.json             2026-08-27  max_tokens 2048  15 EMPTY
+        #   phase4_merged_2026-09-03.json  2026-09-03  max_tokens  512   0 EMPTY
+        #
+        # A human who followed the old suggestion would have spent an hour
+        # reading 15 blank pages out of 52, grading the CONTAMINATED run that
+        # D-0081's superseded FAIL came from -- and nothing would have told
+        # them. So candidates are tried NEWEST FIRST, and the message says
+        # plainly what each file is.
         here = os.path.dirname(os.path.abspath(__file__))
-        guess = os.path.join(os.path.dirname(here), "evidence",
-                             "phase4_merged.json")
+        ev = os.path.join(os.path.dirname(here), "evidence")
+        candidates = [
+            ("phase4_merged_2026-09-03.json",
+             "the 2026-09-03 run: 52 cases, 0 empty outputs. USE THIS ONE."),
+            ("phase4_merged.json",
+             "the SUPERSEDED 2026-08-27 run: 15 of 52 outputs are EMPTY and "
+             "cannot be graded for fluency. Do not grade this by mistake."),
+        ]
+        found = [(n, d) for n, d in candidates
+                 if os.path.exists(os.path.join(ev, n))]
         msg = [
             "ERROR: --input file not found: %s" % path,
             "",
             "  (the path is resolved against the CURRENT directory, which is",
             "   %s)" % os.getcwd(),
         ]
-        if os.path.exists(guess):
+        if found:
+            name, desc = found[0]
             msg += [
                 "",
-                "  The evidence file IS present in this checkout. Use:",
+                "  Run this from the repository root -- the folder holding",
+                "  README.md and the .git directory:",
                 "",
-                "    python %s --input %s --output grades.json" % (
-                    os.path.relpath(os.path.abspath(__file__)),
-                    os.path.relpath(guess)),
+                "    python %s --input %s --output grades.json"
+                % (os.path.join("tools", os.path.basename(__file__)),
+                   os.path.join("evidence", name)),
+                "",
+                "  %s" % desc,
             ]
+            if len(found) > 1:
+                msg += [
+                    "",
+                    "  ALSO PRESENT, and NOT the one to use:",
+                ]
+                for n, d in found[1:]:
+                    msg += ["    evidence/%s -- %s" % (n, d)]
         else:
             msg += [
                 "",
-                "  evidence/phase4_merged.json is NOT in this copy of the",
-                "  project. Backups made before 2026-08-31 shipped this tool",
-                "  without the one file it cannot run without. Download a",
-                "  current backup, or fetch the file from the repository.",
+                "  No merged evidence file is present in this copy of the",
+                "  project, so this tool has nothing to read. Backups made",
+                "  before 2026-08-31 shipped it without one. Download a",
+                "  current backup, or fetch evidence/ from the repository.",
             ]
         raise SystemExit("\n".join(msg))
     with open(path, encoding="utf-8") as fh:
@@ -173,6 +207,48 @@ def load_cases(path):
             case = dict(case)
             case.setdefault("arm", arm)
             out.append(case)
+
+    # WARN ON A FILE WITH EMPTY OUTPUTS, whatever its name.
+    #
+    # The path-not-found message above can only help someone who typed a wrong
+    # path. It cannot help someone who typed a valid path to the SUPERSEDED
+    # file -- and the two names differ by one date suffix.
+    #
+    # MEASURED: the 2026-08-27 run has 15 of 52 outputs empty, because the
+    # model spent its whole budget inside an unterminated <think> block. Those
+    # cases are not gradeable for fluency at all; a human would be reading
+    # blank pages and would have no way to know the newer run exists. The
+    # 2026-09-03 run has 0.
+    #
+    # This is a WARNING, not a refusal. Grading an old run is a legitimate
+    # thing to want -- re-reading it, or auditing a past verdict -- and this
+    # tool has no business deciding which run the user meant. It only refuses
+    # to let that happen SILENTLY.
+    empty = sum(1 for c in out if not (c.get("output") or "").strip())
+    if empty:
+        ts = str(data.get("timestamp") or "")[:10] or "unknown date"
+        print("")
+        print("  " + "!" * 68)
+        print("  WARNING: %d of %d cases in this file have EMPTY output."
+              % (empty, len(out)))
+        print("  Run timestamp: %s   max_tokens: %s"
+              % (ts, (data.get("model") or {}).get("max_tokens")))
+        print("")
+        print("  Those cases cannot be graded for Persian fluency -- there is")
+        print("  no text to read. They are marked %r and skipped." % NO_OUTPUT)
+        print("")
+        here = os.path.dirname(os.path.abspath(__file__))
+        newer = os.path.join(os.path.dirname(here), "evidence",
+                             "phase4_merged_2026-09-03.json")
+        if os.path.exists(newer) and os.path.abspath(newer) != \
+                os.path.abspath(path):
+            print("  A LATER RUN IS PRESENT AND HAS NO EMPTY OUTPUTS:")
+            print("    evidence/phase4_merged_2026-09-03.json")
+            print("")
+            print("  If you meant to grade the current run, stop now and")
+            print("  point --input at that file instead.")
+        print("  " + "!" * 68)
+        print("")
     if not out:
         raise SystemExit("ERROR: %s contains no cases." % path)
     return data, out

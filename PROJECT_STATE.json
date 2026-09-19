@@ -359,7 +359,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0096",
+  "decisions_logged": "D-0001..D-0097",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -1773,17 +1773,19 @@
     ]
   },
   "last_verification": {
-    "date": "2026-09-05",
-    "regression": "bash tests/run_all.sh -> 3450 assertions across 18 suites, SKIPPED 0, TIMED OUT 0, ALL GREEN",
-    "assertion_trail": "3380 -> 3450 (D-0092 +27, D-0093 +43)",
-    "phase4_suite": "754 -> 824",
-    "mutation": "251 seeded, 242 killed, 0 survived, 9 skipped (pre-existing); source restored and oracle green: True",
+    "date": "2026-09-07",
+    "regression": "bash tests/run_all.sh -> 3569 assertions across 18 suites, SKIPPED 0, TIMED OUT 0, ALL GREEN",
+    "assertion_trail": "3380 -> 3450 (D-0092/93) -> 3507 (D-0094) -> 3529 (D-0095) -> 3549 (D-0096) -> 3569 (D-0097 +20)",
+    "phase4_suite": "754 -> 781 -> 824 -> 871 -> 881 -> 903 -> 923 -> 943",
+    "mutation": "272 seeded, 263 killed, 0 survived, 9 skipped (pre-existing); source restored and oracle green: True; md5s verified",
+    "mutation_first_pass": "272 seeded, 260 killed, 1 SURVIVED, 11 skipped -- both symptoms diagnosed and repaired before the recorded pass",
     "runtime_probes": [
-      "citation regrade of the 10 recorded rag rows",
-      "wire probe across all 3 dialects, 28/28"
+      "grade_persian.py on a nonexistent path -> newest-first candidates",
+      "grade_persian.py on the superseded file -> warning, 15 of 52 empty",
+      "grade_persian.py on the current file -> no warning (control)",
+      "sha256 of evidence/phase4_merged_2026-09-03.json vs the upload -> identical"
     ],
-    "R40_recurred": "a sandbox reset wiped /tmp, taking the Qwen tokenizer files and the XBRL payload. The run went green with SKIPPED: 5 and the suite's own SKIP lines named what had stopped running. All four re-fetched; SKIPPED is 0 again. A green run with skips is not a green run.",
-    "false_alarm_diagnosed": "the first post-change run reported FAILURES PRESENT with test_selector.py timing out at 300 s and the total DROPPING to 3343. It has 0 references to any changed module and, run alone, finished in under a second with 104 passed. The cause was CPU contention with the mutation battery, not a defect."
+    "gate_invariants_reproven": true
   },
   "q8_decision": {
     "question": "decode came out below the approved minimum: prefer (a) fall back to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower?",
@@ -1878,5 +1880,68 @@
     ],
     "validator_result": "16 of 16 checks pass",
     "run_status": "NOT RUN. Using v2 requires a model run on the user's machine and their explicit approval. ESTIMATED ~12.4 min for a 22-row rag arm at the MEASURED 29.9 s per case, plus the 49 s TTFT probe and model load (UNKNOWN)."
+  },
+  "evidence_file_guard": {
+    "decision": "D-0097",
+    "date": "2026-09-07",
+    "trigger": "The user asked which folder to run the R10 grading command from, and whether they had already sent the phase-4 output. Both had simple answers; verifying them exposed a trap created by commit ea758fe.",
+    "defect": {
+      "what": "Two merged evidence files sit side by side, one date suffix apart, and tools/grade_persian.py named the WRONG one in its not-found message, unconditionally.",
+      "measured": {
+        "evidence/phase4_merged.json": {
+          "timestamp": "2026-08-27",
+          "max_tokens": 2048,
+          "cases": 52,
+          "empty_outputs": 15,
+          "status": "SUPERSEDED -- its FAIL was set aside as D-0081"
+        },
+        "evidence/phase4_merged_2026-09-03.json": {
+          "timestamp": "2026-09-03",
+          "max_tokens": 512,
+          "cases": 52,
+          "empty_outputs": 0,
+          "status": "CURRENT -- the run graded into the phase-4 gate",
+          "sha256": "a0a625a2b153e28350b57fe1ba8843fd5e75ff3e82f27fc480e8080a1c95e93f"
+        }
+      },
+      "label": "MEASURED",
+      "why_it_was_not_a_defect_when_written": "When grade_persian.py was written, phase4_merged.json was the only merged file. It became a trap the moment I committed the newer run beside it in ea758fe without revisiting the tool that reads it.",
+      "cost": "About an hour reading 15 blank pages and grading a contaminated, superseded run."
+    },
+    "fix": {
+      "guard_1": "The not-found message now enumerates the merged files that actually exist, NEWEST FIRST, each with a description saying which to use and which is superseded.",
+      "guard_2": "A warning fires on a VALID path when the chosen file contains empty outputs -- the likelier mistake, which no path-not-found message can ever catch. It counts the empty cases, names the current file, and WARNS rather than refusing: re-reading an old run is legitimate; only the silence about it is refused.",
+      "non_vacuity_control": "Grading the CURRENT file must produce NO warning. Verified.",
+      "files": [
+        "tools/grade_persian.py"
+      ]
+    },
+    "verification": {
+      "paths_exercised": [
+        "nonexistent path -> lists both files, newest first, correct advice",
+        "superseded file -> loud warning naming 15 of 52 empty",
+        "current file -> NO warning (non-vacuity control)"
+      ],
+      "assertions_added": 20,
+      "mutants_added": 4,
+      "mutants_repaired": "2 SKIPPED (anchors written at 8-space indent; the code is at 4) and 1 SURVIVED (anchored on a heading line nothing asserted). Both fixed."
+    },
+    "what_this_does_not_do": [
+      "Changes no measurement and no verdict.",
+      "Does not make the superseded run gradable -- 15 outputs are still empty.",
+      "Does not detect a wrong-but-non-empty file; it detects empties only."
+    ]
+  },
+  "r10_handover": {
+    "document": "START_R10_GRADING.md",
+    "language": "Persian",
+    "answers": [
+      "which folder: the repository root (the folder holding PROJECT_STATE.json)",
+      "how to find it on Windows: a PowerShell Get-ChildItem search by filename",
+      "what to do if the folder is gone: restore from the latest backup archive",
+      "which evidence file to grade: evidence/phase4_merged_2026-09-03.json"
+    ],
+    "states_plainly": "Grading produces a RECORDED BASELINE for persian_fluency_regression_pct_max, not a PASS. The metric is a regression measure and there is no baseline to regress from yet.",
+    "gate": "No model run is involved; this is human reading of recorded output."
   }
 }
