@@ -4829,6 +4829,103 @@ check("mask_years DOES handle U+060C, so the knowledge existed",
       "function and never to the numeric path")
 
 # ===========================================================================
+# D-0101: THE EVIDENCE NEVER NAMED THE COMPANY EITHER.
+#
+# RAG-FA-001, the 2026-09-19 combined run: a Persian question about Apple's
+# FY2023 net income, the correct document retrieved at rank 1, and the model
+# abstained anyway -- its own stated reason was that no passage named the
+# company. MEASURED against the actual rendered prompt: that was true. The
+# same defect shape as D-0089a (units), one field over. FIXED 2026-09-23.
+# ===========================================================================
+section("D-0101: the RAG prompt never named the company either, FIXED")
+
+_d101_gold = [r for r in RP.load_jsonl(
+    os.path.join(_ROOT, "evals", "rag_gold_combined.jsonl"))
+    if r["id"] == "RAG-FA-001"][0]
+_d101_corpus = RP.load_jsonl(
+    os.path.join(_ROOT, "evals", "rag_corpus_combined.jsonl"))
+_d101_hits = list(RP.build_index(_d101_corpus)
+                   .search(_d101_gold["query"], top_k=4).hits)
+check_true("RAG-FA-001 reproduces: the right document retrieved at rank 1",
+           bool(_d101_hits) and _d101_hits[0].doc_id == "FIX-AAPL-10K-2023-FA",
+           "(A) reproduces the 2026-09-19 evidence file's own retrieved list")
+check_true("the retrieved passage DOES carry entity in the corpus",
+           _d101_hits[0].entity == "Apple Inc.",
+           "(A) the information exists in the corpus row, same as D-0089a")
+
+_d101_prompt = RP.build_rag_prompt(_d101_gold["query"], _d101_hits)
+check_true("BEFORE the fix this failed: the prompt now names the company",
+           "Apple Inc." in _d101_prompt,
+           "(D) build_rag_prompt rendered only provenance.citation() plus "
+           "units, and citation() has no entity field, so nothing in [1] "
+           "named Apple. RAG-FA-001's own stated reason for abstaining was "
+           "VERIFIED TRUE of what it was actually shown.")
+check_true("...and different passages keep DIFFERENT entities, not one "
+           "bled across all four",
+           "Alphabet Inc." in _d101_prompt
+           and "Johnson & Johnson" in _d101_prompt
+           and _d101_prompt.count("[entity: Apple Inc.]") == 2,
+           "(A) the real case retrieves two Apple filings, one Alphabet, "
+           "one J&J -- attribution has to be per-passage or it is worse "
+           "than none")
+check_true("...and the existing units clause is BYTE-IDENTICAL to before",
+           "[figures in million]" in _d101_prompt,
+           "(C) D-0089a/D-0090's own pinned substring, unaffected by a "
+           "second bracket -- see the comment in build_rag_prompt for why "
+           "entity is not merged into the units bracket")
+check_true("...and entity renders BEFORE units when a passage has both",
+           "[entity: Apple Inc.] [figures in million]" in _d101_prompt,
+           "(A) company, then scale, then the figures -- pinned so a "
+           "future edit cannot silently reorder the two")
+
+
+class _D101Bare(object):
+    __slots__ = ("provenance", "text", "units_note", "entity")
+
+    def __init__(self, provenance, text, units_note=None, entity=None):
+        self.provenance = provenance
+        self.text = text
+        self.units_note = units_note
+        self.entity = entity
+
+
+# A passage that declares NO entity must still render NO entity clause: the
+# fix had to state an entity it was GIVEN, never invent one it was not.
+# Same refusal rule D-0090 already set for units, applied to the new field.
+for _e in (None, "", "   "):
+    check_true("a passage with entity=%r renders no entity clause" % (_e,),
+               "[entity:" not in RP.build_rag_prompt(
+                   "q", [_D101Bare(_d101_hits[0].provenance,
+                                   "Revenue | 100", entity=_e)]),
+               "(D) inventing an entity would be a worse defect than "
+               "omitting one: it would let the model attribute a figure "
+               "to a company the evidence never named")
+
+# A passage object with no entity attribute AT ALL -- the shape D-0089's own
+# _D89Bare fixture already is -- must not crash build_rag_prompt.
+check_true("a passage object with NO entity attribute at all still renders",
+           "[entity:" not in RP.build_rag_prompt(
+               "q", [_D89Bare(_d101_hits[0].provenance, "Revenue | 100",
+                              "million")])
+           and "[figures in million]" in RP.build_rag_prompt(
+               "q", [_D89Bare(_d101_hits[0].provenance, "Revenue | 100",
+                              "million")]),
+           "(D) getattr(ps, \"entity\", None) is what makes this safe; a "
+           "plain ps.entity would raise AttributeError on D-0089's own "
+           "fixture class, which predates this field")
+
+check_true("the RAG system prompt asks the model to use a stated entity",
+           "attribute a figure from that passage to that entity"
+           in RP.SYSTEM_RAG,
+           "(D) an instruction to USE a given entity, never to infer one "
+           "that is not given -- mirrors D-0090's own units sentence")
+
+# What this does NOT claim: that the model, re-run, now answers RAG-FA-001
+# correctly. No model is available in this environment. This only verifies
+# that what RAG-FA-001 said was missing is missing no longer -- the prompt
+# now contains what the model's own stated refusal said it lacked.
+
+# ===========================================================================
 # D-0091: THE CURE WAS WRITTEN, TESTED, AND NOT CONNECTED.
 #
 # MEASURED 2026-09-01, while costing item 7: chatml_prompt_no_think() existed,

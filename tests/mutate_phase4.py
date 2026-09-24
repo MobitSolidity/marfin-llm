@@ -192,6 +192,41 @@ MUTATIONS = [
     (RUN, "the completion budget returns to the runaway-think 2048",
      'DEFAULT_MAX_TOKENS = 512',
      'DEFAULT_MAX_TOKENS = 2048'),
+
+    # -- RAG evidence rendering: entity attribution (D-0101) -----------------
+    # RAG-FA-001 (2026-09-19) abstained on an answerable question with the
+    # right document retrieved at rank 1, because build_rag_prompt rendered
+    # source/accession/date and never the passage's entity -- the model was
+    # never shown which company [1] was about. Same shape as D-0089a/D-0090's
+    # units omission, one field over. These mutants restore that defect and
+    # its mirror image (inventing an entity for a passage that declares
+    # none), the same pairing D-0089's units mutants would use if this file
+    # tested that line -- it does not; see the note in DECISIONS.md D-0102.
+    (RUN, "the entity clause is dropped even when the passage declares one",
+     '        if entity and str(entity).strip():\n'
+     '            tag += "[entity: %s] " % str(entity).strip()',
+     '        if False:\n'
+     '            tag += "[entity: %s] " % str(entity).strip()'),
+    # str(None) is the literal text "None", not an exception, so this mutant
+    # does not crash -- it silently renders "[entity: None]" for every
+    # passage that declares no entity. Exactly the shape of fabrication
+    # D-0090's own comment warns against for units, one field over.
+    (RUN, "an entity is invented ('[entity: None]') for a passage with none",
+     '        if entity and str(entity).strip():\n'
+     '            tag += "[entity: %s] " % str(entity).strip()',
+     '        if True:\n'
+     '            tag += "[entity: %s] " % str(entity).strip()'),
+    (RUN, "the entity clause is rendered AFTER the units clause, not before",
+     '        tag = ""\n'
+     '        if entity and str(entity).strip():\n'
+     '            tag += "[entity: %s] " % str(entity).strip()\n'
+     '        if units and str(units).strip():\n'
+     '            tag += "[figures in %s] " % str(units).strip()',
+     '        tag = ""\n'
+     '        if units and str(units).strip():\n'
+     '            tag += "[figures in %s] " % str(units).strip()\n'
+     '        if entity and str(entity).strip():\n'
+     '            tag += "[entity: %s] " % str(entity).strip()'),
     # Retargeted 2026-08-15: this logic used to be duplicated in both
     # extractors and now lives once in _normalise_separators -- which is the
     # fix that killed the "_DECIMAL_SEPARATORS is dead" survivor.

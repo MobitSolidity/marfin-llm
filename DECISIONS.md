@@ -5554,3 +5554,98 @@ D-0094 recorded it. Does not claim this is the only place `entity` is
 missing from rendered evidence -- only RAG-FA-001 was traced end to end;
 whether other retrieved passages in the 2026-09-19 run had the same gap is
 unverified and would need checking before the fix above is written.
+
+## D-0102 — D-0101 implemented: the company name is now in the evidence, at D-0090's own bar
+
+**Date:** 2026-09-23 · **Status:** FIXED, approved by the user before any
+line was touched · **Trigger:** explicit approval to proceed with D-0101's
+sketch.
+
+### What changed
+
+`scripts/run_phase4.py`, `build_rag_prompt()`: each passage now renders
+`ps.entity` in its own bracket, `[entity: %s]`, placed **before** the
+existing `[figures in %s]` bracket. The units bracket is untouched --
+literally the same characters as before, in the same position relative to
+the citation and the passage text -- because the two are never merged into
+one clause. Every assertion pinned since D-0089a/D-0090 checks for the exact
+substring `"[figures in %s]"`; a merged clause like `[entity: X; figures in
+Y]` would have silently stopped matching it. Kept as two brackets, nothing
+that already passed had to be touched to make this pass.
+
+`SYSTEM_RAG` gained one sentence, mirroring D-0090's own:
+
+> When a passage identifies the company or entity it is about, you may
+> attribute a figure from that passage to that entity.
+
+An instruction to USE a stated entity, never to infer one that is not
+stated -- the same rule D-0090 set for units, applied to the new field.
+
+### Verification
+
+Re-derived RAG-FA-001's own case through the real retrieval index, not a
+synthetic example:
+
+```python
+gold = [r for r in load_jsonl("evals/rag_gold_combined.jsonl")
+        if r["id"] == "RAG-FA-001"][0]
+hits = build_index(load_jsonl("evals/rag_corpus_combined.jsonl")) \
+    .search(gold["query"], top_k=4).hits
+```
+
+Same four documents, same order, as the 2026-09-19 evidence file
+(`FIX-AAPL-10K-2023-FA` first). The rendered `[1]` now reads:
+
+```
+[1] (sec_edgar_xbrl | FIXTURE-0000320193-23-000106 | 2023-11-03)
+    [entity: Apple Inc.] [figures in million] ...
+```
+
+-- the company name RAG-FA-001's own stated reason said was missing.
+
+**What this does NOT claim:** that the model, re-run, now answers this
+question correctly. No model is available in this sandbox to re-run against
+the fix (D-0100's capability note: no GPU, no `llama-cpp-python`,
+`data.sec.gov` unreachable). This verifies the *prompt* changed, not the
+model's reply to it -- that verification can only happen on the user's
+machine, as it always has for anything measuring the model itself.
+
+11 new pinned assertions added to `tests/test_phase4_harness.py`:
+retrieval reproduces the real case; the corpus row carries `entity`; the
+fixed prompt names Apple; attribution does not bleed across passages (the
+real case retrieves 2 Apple filings, 1 Alphabet, 1 J&J, and each keeps its
+own company); the units bracket is byte-identical to before; entity renders
+before units when a passage has both; `entity` of `None`, `""`, `"   "`, and
+an object with no `entity` attribute at all (the shape D-0089's own
+`_D89Bare` fixture already is) all render **no** entity clause -- nothing is
+invented for a passage that does not declare one.
+
+3 new mutants added to `tests/mutate_phase4.py`: the entity clause dropped
+even when declared; an entity invented (`"[entity: None]"`, since
+`str(None)` does not raise) for a passage with none; entity and units
+rendered in swapped order.
+
+```
+BEFORE  tests/run_all.sh:      3615 passed, 0 failed, 6 skipped
+AFTER   tests/run_all.sh:      3626 passed, 0 failed, 6 skipped  (+11, exactly the new assertions)
+        tests/mutate_phase4.py: 289 seeded (+3), 279 killed (+3, all new
+                                mutants killed), 1 survived, 9 skipped
+```
+
+The 1 survivor is the same one D-0100 already reported and explained (the
+`build_eval_v2.py` lang-from-id mutant, caused by this sandbox's missing
+`/tmp/r20/facts2.json`) -- not a new one. Nothing about this fix introduced
+a new gap in coverage.
+
+### What this does not do
+
+Does not touch `phase_4/measurements_recorded`. D-0094's recorded FAIL
+verdict, and everything measured on 2026-09-19, are unchanged -- this
+changes what a *future* prompt contains, not how a past reply is read. Does
+not itself advance the Phase 4 gate: a full re-run (all three arms, on the
+combined eval set, on the user's own machine) is still required for an
+updated verdict, and now that re-run would also be testing this fix, not
+only the eval-set and grader work D-0090 through D-0099 already covered.
+Does not claim `entity` was the only field ever missing from rendered
+evidence -- only that this one, found by tracing RAG-FA-001 to its root,
+is now supplied where the corpus provides it.

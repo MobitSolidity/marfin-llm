@@ -209,7 +209,8 @@
     "D-0095",
     "D-0096",
     "D-0100",
-    "D-0101"
+    "D-0101",
+    "D-0102"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -2038,8 +2039,8 @@
         "status": "STILL NOT A MEASUREMENT OF THE MODEL"
       }
     },
-    "open_finding_over_abstention": "RAG-FA-001 refused a Persian question it could answer, with correct retrieval. correct_abstention_pct_min cannot see this: it scores only the abstain cases, so a model that refused everything would score 100.",
-    "root_cause_found_2026_09_23": "D-0101: Provenance.citation() and build_rag_prompt() never render passage.entity. The rendered evidence line for FIX-AAPL-10K-2023-FA contains no company name at all -- only source_key='sec_edgar_xbrl', an accession string and a date. The model's stated reason for abstaining ('does not mention the company name') is VERIFIED TRUE of what it was actually shown. Same defect shape as D-0089a (units omission); NOT fixed -- see D-0101, awaiting approval."
+    "open_finding_over_abstention": "RAG-FA-001 refused a Persian question it could answer, with correct retrieval. correct_abstention_pct_min cannot see this: it scores only the abstain cases, so a model that refused everything would score 100. ROOT CAUSE FIXED 2026-09-23 -- see D-0101/D-0102; the model has not been re-run against the fix.",
+    "root_cause_found_2026_09_23": "D-0101: Provenance.citation() and build_rag_prompt() never render passage.entity. The rendered evidence line for FIX-AAPL-10K-2023-FA contains no company name at all -- only source_key='sec_edgar_xbrl', an accession string and a date. The model's stated reason for abstaining ('does not mention the company name') is VERIFIED TRUE of what it was actually shown. Same defect shape as D-0089a (units omission). FIXED 2026-09-23 -- see D-0102."
   },
   "test_harness_verification_2026_09_23": {
     "decision": "D-0100",
@@ -2055,6 +2056,23 @@
     },
     "sandbox_capability_note": "MEASURED this session: bash network reaches github.com/pypi.org/npm etc. but data.sec.gov returns 403 x-deny-reason:host_not_allowed; no GPU; llama-cpp-python not installed; 1 vCPU, 3.9 GiB RAM. Cannot run the model or regenerate the v2 eval set from raw XBRL here -- unchanged from the project's existing Route A design (model always runs on the user's own i5-12400), now confirmed rather than assumed.",
     "scope": "Test-harness and tooling only. No source logic changed. No model run. Does not touch phase_4/measurements_recorded or any MEASURED evidence file.",
-    "not_done": "D-0101 (RAG-FA-001 root cause) is diagnosed but NOT fixed -- it touches build_rag_prompt(), which shapes what gets MEASURED in future Phase 4 evidence, so it is recorded for approval rather than applied."
+    "not_done_as_of_D0100": "D-0101 (RAG-FA-001 root cause) was diagnosed but not yet fixed at this point -- see D-0101_D-0102_entity_rendering_fix_2026_09_23 for the approved implementation."
+  },
+  "D-0101_D-0102_entity_rendering_fix_2026_09_23": {
+    "decisions": ["D-0101", "D-0102"],
+    "approved_by_user": "2026-09-23, explicit instruction to proceed with the entity-rendering fix",
+    "what_changed": {
+      "scripts/run_phase4.py:build_rag_prompt()": "now renders passage.entity in its own '[entity: %s]' bracket, placed BEFORE the existing '[figures in %s]' bracket, which is untouched -- the two are never merged into one bracket, so every substring pinned since D-0089a/D-0090 stays byte-identical.",
+      "scripts/run_phase4.py:SYSTEM_RAG": "one sentence added: the model may attribute a figure to an entity a passage states, mirroring D-0090's own units sentence. Never instructs inferring an entity that is not given.",
+      "tests/test_phase4_harness.py": "11 new pinned assertions: reproduces RAG-FA-001 through the real retrieval index, confirms the corpus row carries entity, confirms the fixed prompt now names Apple, confirms per-passage attribution does not bleed across the 4 retrieved docs (2 Apple, 1 Alphabet, 1 J&J), confirms the units bracket is unaffected, confirms entity-before-units ordering, confirms entity=None/''/'   ' and a missing attribute all render no clause (no invention).",
+      "tests/mutate_phase4.py": "3 new mutants: entity clause dropped, entity invented ('[entity: None]') for a passage with none, entity/units order swapped."
+    },
+    "verification": {
+      "prompt_rerendered_for_the_real_case": "RAG-FA-001's own query, run through the real retrieval index against evals/rag_corpus_combined.jsonl: same 4 docs at the same ranks as the 2026-09-19 evidence file (FIX-AAPL-10K-2023-FA first). The rendered [1] now reads '[entity: Apple Inc.] [figures in million] ...' -- the company name RAG-FA-001 said was missing.",
+      "not_claimed": "That the model, re-run, now answers correctly. No model is available in this sandbox (no GPU, llama-cpp-python not installed, data.sec.gov unreachable -- see D-0100's capability note). This verifies the PROMPT changed, not the model's reply to it.",
+      "tests_run_all_sh": "3615 -> 3626 passed (+11, exactly the new assertions), 0 failed, 6 skipped -- ALL GREEN, unchanged from D-0100's clean state",
+      "tests_mutate_phase4_py": "286 -> 289 seeded (+3), 276 -> 279 killed (+3, all new mutants killed), 1 survived (same pre-existing facts2.json-caused survivor from D-0100, not a new one), 9 skipped (unchanged baseline)"
+    },
+    "scope": "Changes what future Phase 4 runs show the model. Does not touch phase_4/measurements_recorded -- D-0094's recorded FAIL verdict is unchanged. Does not itself advance the Phase 4 gate: a new full re-run is still required for an updated verdict, and this fix has not been exercised against a live model."
   }
 }

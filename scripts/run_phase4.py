@@ -634,6 +634,13 @@ SYSTEM_RAG = SYSTEM_BASE + (
     # invited to guess.
     "\n\nWhen a passage declares the unit its figures are in, state that unit "
     "with any figure you quote from it."
+    # ADDED 2026-09-23 (D-0101). An instruction to USE a stated entity for
+    # attribution, never to supply one that is not there: a passage with no
+    # entity renders no entity clause, so there is nothing to attribute to
+    # and the model is not being invited to guess which company a figure
+    # belongs to.
+    "\n\nWhen a passage identifies the company or entity it is about, you "
+    "may attribute a figure from that passage to that entity."
 )
 
 
@@ -788,14 +795,32 @@ def build_rag_prompt(question, passages):
     ev = []
     for i, ps in enumerate(passages, 1):
         units = getattr(ps, "units_note", None)
-        # An empty or whitespace-only note is treated as absent, not as a
-        # declared unit: rendering "figures in " would be worse than silence.
+        entity = getattr(ps, "entity", None)
+        # Empty/whitespace-only is treated as absent for BOTH fields, not as
+        # a declared value: rendering "entity: " or "figures in " would be
+        # worse than silence -- the same rule D-0090 set for units_note.
+        #
+        # D-0101, 2026-09-23. RAG-FA-001 (2026-09-19 combined run) abstained
+        # on an answerable question with the correct document retrieved at
+        # rank 1, stating no passage named the company. MEASURED: that was
+        # true of the rendered prompt -- Provenance.citation() emits source,
+        # accession and date, never entity, so the model was never shown the
+        # company a passage was about even though the corpus row carries it.
+        # Same shape as D-0089a, one field over.
+        #
+        # entity gets its OWN bracket, placed BEFORE the units one, rather
+        # than being merged into it: every assertion pinned since D-0089a/
+        # D-0090 checks for the exact substring "[figures in %s]", and a
+        # merged clause like "[entity: X; figures in Y]" would silently stop
+        # matching that substring. Kept separate, the units bracket stays
+        # byte-identical whether or not an entity clause is present.
+        tag = ""
+        if entity and str(entity).strip():
+            tag += "[entity: %s] " % str(entity).strip()
         if units and str(units).strip():
-            ev.append("[%d] (%s) [figures in %s] %s"
-                      % (i, ps.provenance.citation(), str(units).strip(),
-                         ps.text))
-        else:
-            ev.append("[%d] (%s) %s" % (i, ps.provenance.citation(), ps.text))
+            tag += "[figures in %s] " % str(units).strip()
+        ev.append("[%d] (%s) %s%s"
+                  % (i, ps.provenance.citation(), tag, ps.text))
     return _prompt(
         SYSTEM_RAG,
         "Evidence:\n%s\n\nQuestion: %s"
