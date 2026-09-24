@@ -207,7 +207,9 @@
     "D-0093",
     "D-0094",
     "D-0095",
-    "D-0096"
+    "D-0096",
+    "D-0100",
+    "D-0101"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -2036,6 +2038,23 @@
         "status": "STILL NOT A MEASUREMENT OF THE MODEL"
       }
     },
-    "open_finding_over_abstention": "RAG-FA-001 refused a Persian question it could answer, with correct retrieval. correct_abstention_pct_min cannot see this: it scores only the abstain cases, so a model that refused everything would score 100."
+    "open_finding_over_abstention": "RAG-FA-001 refused a Persian question it could answer, with correct retrieval. correct_abstention_pct_min cannot see this: it scores only the abstain cases, so a model that refused everything would score 100.",
+    "root_cause_found_2026_09_23": "D-0101: Provenance.citation() and build_rag_prompt() never render passage.entity. The rendered evidence line for FIX-AAPL-10K-2023-FA contains no company name at all -- only source_key='sec_edgar_xbrl', an accession string and a date. The model's stated reason for abstaining ('does not mention the company name') is VERIFIED TRUE of what it was actually shown. Same defect shape as D-0089a (units omission); NOT fixed -- see D-0101, awaiting approval."
+  },
+  "test_harness_verification_2026_09_23": {
+    "decision": "D-0100",
+    "trigger": "resuming work in a fresh sandbox checkout; verified the harness before touching anything else",
+    "pre_existing_defects_found": {
+      "tools/validate_eval_set.py": "ROOT hardcoded to \"/home/user/webapp\" (the original authoring sandbox); ModuleNotFoundError in any other checkout. Same defect class D-0096 fixed in build_eval_v2.py's output path, missed in this file. Fixed: ROOT now derived from __file__.",
+      "tests/test_phase4_harness.py": "4 assertions regenerating the v2 eval set crashed on FileNotFoundError when /tmp/r20/facts2.json (a live SEC EDGAR fetch cache, never committed) is absent, instead of SKIPping like the Qwen-tokenizer checks already in the same file. Fixed with the same SKIP-guard pattern."
+    },
+    "verification": {
+      "before": "tests/run_all.sh: 3613 passed, 6 failed, 5 skipped -- FAILURES PRESENT",
+      "after": "tests/run_all.sh: 3615 passed, 0 failed, 6 skipped -- ALL GREEN",
+      "mutation": "tests/mutate_phase4.py: 286 seeded, 276 killed, 1 survived, 9 skipped (9 matches the established pre-existing baseline). The 1 survivor (build_eval_v2.py lang-from-id mutant) is caused by the same missing facts2.json, not a new regression -- previously masked by the old crash; now honestly reported instead of hidden."
+    },
+    "sandbox_capability_note": "MEASURED this session: bash network reaches github.com/pypi.org/npm etc. but data.sec.gov returns 403 x-deny-reason:host_not_allowed; no GPU; llama-cpp-python not installed; 1 vCPU, 3.9 GiB RAM. Cannot run the model or regenerate the v2 eval set from raw XBRL here -- unchanged from the project's existing Route A design (model always runs on the user's own i5-12400), now confirmed rather than assumed.",
+    "scope": "Test-harness and tooling only. No source logic changed. No model run. Does not touch phase_4/measurements_recorded or any MEASURED evidence file.",
+    "not_done": "D-0101 (RAG-FA-001 root cause) is diagnosed but NOT fixed -- it touches build_rag_prompt(), which shapes what gets MEASURED in future Phase 4 evidence, so it is recorded for approval rather than applied."
   }
 }

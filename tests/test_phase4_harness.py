@@ -6674,37 +6674,54 @@ check_true("the combined set's answerable count is seen as 22",
 # never re-runs the generator. Testing a fixture does not test the thing that
 # produces it: the file could be correct today and be regenerated wrong
 # tomorrow with the suite still green.
-_b2 = os.path.join(_ROOT, "tools", "build_eval_v2.py")
-_stage = _tempdir()
-os.makedirs(os.path.join(_stage, "tools"))
-os.makedirs(os.path.join(_stage, "evals"))
-shutil.copy(os.path.join(_ROOT, "tools", "build_eval_v2.py"),
-            os.path.join(_stage, "tools", "build_eval_v2.py"))
-for _f in ("xbrl_facts.json",):
-    _src = os.path.join(_ROOT, "evals", _f)
-    if os.path.exists(_src):
-        shutil.copy(_src, os.path.join(_stage, "evals", _f))
-_e2 = dict(os.environ)
-_e2["PYTHONDONTWRITEBYTECODE"] = "1"
-_pg = _sp97.Popen([sys.executable, os.path.join(_stage, "tools",
-                                                "build_eval_v2.py")],
-                  cwd=_stage, stdout=_sp97.PIPE, stderr=_sp97.STDOUT, env=_e2)
-_gout = _pg.communicate(timeout=300)[0].decode("utf-8", "replace")
-check("the v2 generator runs cleanly", _pg.returncode, 0)
+_facts2 = "/tmp/r20/facts2.json"
+if os.path.exists(_facts2):
+    _b2 = os.path.join(_ROOT, "tools", "build_eval_v2.py")
+    _stage = _tempdir()
+    os.makedirs(os.path.join(_stage, "tools"))
+    os.makedirs(os.path.join(_stage, "evals"))
+    shutil.copy(os.path.join(_ROOT, "tools", "build_eval_v2.py"),
+                os.path.join(_stage, "tools", "build_eval_v2.py"))
+    for _f in ("xbrl_facts.json",):
+        _src = os.path.join(_ROOT, "evals", _f)
+        if os.path.exists(_src):
+            shutil.copy(_src, os.path.join(_stage, "evals", _f))
+    _e2 = dict(os.environ)
+    _e2["PYTHONDONTWRITEBYTECODE"] = "1"
+    _pg = _sp97.Popen([sys.executable, os.path.join(_stage, "tools",
+                                                    "build_eval_v2.py")],
+                      cwd=_stage, stdout=_sp97.PIPE, stderr=_sp97.STDOUT,
+                      env=_e2)
+    _gout = _pg.communicate(timeout=300)[0].decode("utf-8", "replace")
+    check("the v2 generator runs cleanly", _pg.returncode, 0)
 
-_regen = []
-_gp = os.path.join(_stage, "evals", "rag_gold_v2.jsonl")
-if os.path.exists(_gp):
-    with io.open(_gp, encoding="utf-8") as _fh:
-        _regen = [json.loads(_l) for _l in _fh if _l.strip()]
-check("the generator emits the same number of gold rows", len(_regen), 22)
-_wrong = [r["id"] for r in _regen
-          if r["lang"] != ("fa" if _FA.search(r["query"]) else "en")]
-check("REGENERATED from source, every lang still matches its own script",
-      len(_wrong), 0)
-_r6 = [r for r in _regen if r["id"] == "RAG2-ABST-006"]
-check_true("and the regenerated RAG2-ABST-006 is Persian",
-           bool(_r6) and _r6[0]["lang"] == "fa")
+    _regen = []
+    _gp = os.path.join(_stage, "evals", "rag_gold_v2.jsonl")
+    if os.path.exists(_gp):
+        with io.open(_gp, encoding="utf-8") as _fh:
+            _regen = [json.loads(_l) for _l in _fh if _l.strip()]
+    check("the generator emits the same number of gold rows", len(_regen), 22)
+    _wrong = [r["id"] for r in _regen
+              if r["lang"] != ("fa" if _FA.search(r["query"]) else "en")]
+    check("REGENERATED from source, every lang still matches its own script",
+          len(_wrong), 0)
+    _r6 = [r for r in _regen if r["id"] == "RAG2-ABST-006"]
+    check_true("and the regenerated RAG2-ABST-006 is Persian",
+               bool(_r6) and _r6[0]["lang"] == "fa")
+else:
+    # /tmp/r20/facts2.json is produced by tools/fetch_xbrl.sh (a live SEC
+    # EDGAR fetch) + tools/extract_xbrl_facts.py -- same category as the
+    # Qwen tokenizer prerequisites above: environment-local, never committed,
+    # and gone after a sandbox reset (R40). Without it build_eval_v2.py
+    # cannot run at all (FileNotFoundError on import), which is a missing
+    # prerequisite, not a defect in the generator or in what it produced --
+    # evals/rag_corpus_v2.jsonl and evals/rag_gold_v2.jsonl are committed and
+    # unaffected; this block only re-derives them from raw source to catch a
+    # future regeneration going wrong.
+    print("  SKIP  %s absent: 4 assertions regenerating the v2 eval set "
+          "from source did NOT run. Fetch it via tools/fetch_xbrl.sh + "
+          "tools/extract_xbrl_facts.py (see README, D-0096) before "
+          "believing a green run of this suite." % _facts2)
 
 
 # =====================================================================

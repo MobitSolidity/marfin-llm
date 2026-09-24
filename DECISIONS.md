@@ -5350,3 +5350,207 @@ bytes. Final: **286 seeded, 277 killed, 0 survived, 9 skipped** (pre-existing).
 **NOT RECORDED** against the thresholds. Two graders have now been fixed
 underneath them and they still do not measure the model.
 
+
+## D-0100 — resuming in a fresh checkout found two real defects before any model question was even asked
+
+**Date:** 2026-09-23 · **Status:** FIXED · **Trigger:** resuming the project in
+a new environment; the harness was verified before anything else was touched.
+
+### What a fresh checkout found, immediately
+
+`tests/run_all.sh` (no `--mutate`) on the current HEAD (`6d62ad8`), never run
+before in this environment: **1016 passed, 6 failed** in
+`test_phase4_harness.py`. Every other suite was clean. Diagnosed before
+touching anything, per the project's own standing rule.
+
+### Defect 1 — `tools/validate_eval_set.py`: the same hardcoded-path class D-0096 already fixed once, missed here
+
+```
+ROOT = "/home/user/webapp"
+```
+
+`/home/user/webapp` was the original authoring sandbox. Anywhere else,
+`sys.path.insert(0, os.path.join(ROOT, "src"))` inserts a path that does not
+exist, and `import phase4_lib` fails with `ModuleNotFoundError` before a
+single check runs. MEASURED: `grep -rn "/home/user/webapp"` across the whole
+tree found exactly one other live occurrence, and it was already a *comment*
+documenting that `build_eval_v2.py`'s own version of this bug (D-0096,
+`mine_generator_abs_path`) had been fixed. This file's `ROOT` was not part of
+that pass.
+
+Fixed identically to that precedent:
+
+```
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+```
+
+Verified directly: `python3 tools/validate_eval_set.py` now runs (16 passed,
+0 failed against v2's own expectations), and against the combined set it
+correctly echoes `rag_gold_combined.jsonl`, reports `got 21` documents and
+`got 22` answerable — which is exactly what `test_phase4_harness.py`'s three
+"validator must be able to see a set other than v2" assertions check for.
+Its structural checks (13 documents, 15 answerable, 7 abstain) still read
+FAIL against the combined set, correctly: those are v2-only expectations by
+design, and the combined set's own known-accepted regression (`RAG-EN-003`,
+D-0098) is exactly the kind of thing this validator exists to keep visible.
+
+### Defect 2 — `tests/test_phase4_harness.py`: an external prerequisite crashed instead of skipping
+
+Four assertions stage `build_eval_v2.py` and re-run it to prove the v2 eval
+set can be *regenerated* from source, not merely that the committed file is
+correct today. The generator reads a hardcoded absolute path,
+`/tmp/r20/facts2.json` -- populated by `tools/fetch_xbrl.sh` (a live
+`data.sec.gov` fetch) + `tools/extract_xbrl_facts.py`, and never committed,
+by design, since it is raw fetched data. In a fresh sandbox that file does
+not exist, so the staged subprocess raised an uncaught `FileNotFoundError`,
+and every downstream check read that as a plain FAIL:
+
+```
+FAIL  the v2 generator runs cleanly                  got 1 want 0
+FAIL  the generator emits the same number of gold rows got 0 want 22
+```
+
+This is the same category as the Qwen-tokenizer prerequisites already
+guarded earlier in this same file (`/tmp/q35_tokcfg.json`, etc.) -- an
+environment-local file that a sandbox reset removes (R40) -- but this one
+had no guard. Added the identical `SKIP` pattern: if `/tmp/r20/facts2.json`
+is absent, print one line naming what did not run and why, and skip the
+block; otherwise run exactly the same checks as before, unchanged.
+
+**Not touched:** `tools/build_eval_v2.py` itself, and the committed
+`evals/rag_corpus_v2.jsonl` / `rag_gold_v2.jsonl` / combined files. Nothing
+about the v2 eval set's *content* was in question -- only whether the test
+that reproduces it from source degrades honestly when its input is missing.
+
+### Verification
+
+```
+BEFORE  tests/run_all.sh:      3613 passed, 6 failed, 5 skipped -- FAILURES PRESENT
+AFTER   tests/run_all.sh:      3615 passed, 0 failed, 6 skipped -- ALL GREEN
+        tests/mutate_phase4.py: 286 seeded, 276 killed, 1 survived, 9 skipped
+```
+
+The 9 skipped matches the established pre-existing baseline exactly (see
+D-0090 onward). The 1 survivor -- `tools/build_eval_v2.py: lang is keyed off
+the id again instead of the script`, the exact mutation D-0098's
+`mine_in_v2_lang_tag` fix defends against -- is caused by the SAME missing
+`/tmp/r20/facts2.json`: with the regeneration block skipped, no code path
+exercises that mutant in this environment. **This is not a new coverage
+loss.** Before this fix, the identical mutant would have "survived" just as
+silently, masked behind the crash's own FAILs rather than reported as what
+it actually is. The battery now says so honestly instead of hiding it behind
+an unrelated-looking failure -- which is the same principle D-0062 and D-0075
+were written to enforce.
+
+### A capability difference worth recording, MEASURED rather than assumed
+
+This session's sandbox cannot reach `data.sec.gov`:
+
+```
+curl -sS -H "User-Agent: marfin-llm/0.1 (contact@example.com)" \
+  https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/NetIncomeLoss.json
+-> HTTP/2 403, x-deny-reason: host_not_allowed
+```
+
+No GPU, `llama-cpp-python` not installed, 1 vCPU / 3.9 GiB RAM. This changes
+nothing about the project's design -- Route A already puts every model run
+and every live XBRL fetch on the user's own i5-12400, never in a sandbox --
+but it is now a MEASURED fact about *this* environment rather than an
+inherited assumption from a previous one, consistent with D-0002 (capability
+manifest is probe-derived only, per session).
+
+### What this does not do
+
+No model was run. No source logic changed -- only a hardcoded path and a
+test's failure-handling. `phase_4/measurements_recorded` and every MEASURED
+evidence file are untouched. This does not advance the Phase 4 gate; it
+verifies that everything already built still stands on a clean floor before
+anyone decides what to run next.
+
+
+## D-0101 — RAG-FA-001's abstention root-caused: the evidence never carries the company name, the same shape as D-0089a
+
+**Date:** 2026-09-23 · **Status:** OPEN -- fix requires approval, matching
+D-0089a/b's own standing until D-0090 · **Trigger:** investigating the
+`open_finding_over_abstention` note left in `PROJECT_STATE.json` after the
+2026-09-19 combined RAG run, at zero run cost (no model available in this
+sandbox; read from recorded evidence only).
+
+### What RAG-FA-001 actually showed the model
+
+`evidence/phase4_rag_combined_2026-09-19.json`, arm `rag`: `retrieval_ok`
+`true`, the correct gold document (`FIX-AAPL-10K-2023-FA`) retrieved at rank
+1 of 4. The model answered, in Persian: evidence [1] states a total net
+income figure but does not name the company, so no passage confirms both
+"Apple" and "fiscal 2023 total net income" together, and it abstained.
+`outcome: "OVER_ABSTENTION"`.
+
+That reasoning is not a model weakness. It is **VERIFIED TRUE** of what the
+model was actually given.
+
+### MEASURED: the source document, and what the model was shown of it
+
+The corpus row (`evals/rag_corpus_v1.jsonl`) carries the company on the
+document itself:
+
+```
+doc_id: FIX-AAPL-10K-2023-FA
+entity: "Apple Inc."
+text:   "درآمد خالص کل | ۳۸۳٬۲۸۵ -- سود خالص | ۹۶٬۹۹۵"
+```
+
+But `Provenance.citation()` (`src/rag/documents.py`) renders only `source`,
+`accession`, `effective_date` and `url` -- `entity` is not one of its
+`__slots__` at all. `build_rag_prompt()` (`scripts/run_phase4.py:750`)
+renders each item as `"[%d] (%s) [figures in %s] %s" %
+(i, ps.provenance.citation(), units, ps.text)`. Reconstructed exactly:
+
+```
+[1] (sec_edgar_xbrl | FIXTURE-0000320193-23-000106 | 2023-11-03)
+    [figures in million] درآمد خالص کل | ۳۸۳٬۲۸۵ -- سود خالص | ۹۶٬۹۹۵
+```
+
+No "Apple" or "اپل" appears anywhere in that line. `source_key` is a
+generic connector name, not the filer; the accession embeds the CIK
+(`0000320193`) but not in a form anything would read as a company. With
+Alphabet, Johnson & Johnson and a second Apple passage also retrieved in the
+same call, the model had no textual way to attribute [1] to Apple
+specifically -- and, correctly per its own grounding rule, declined to.
+
+### The same shape as D-0089a, not yet the same fix
+
+D-0089a (2026-08-31): `citation()` never rendered `units_note`, so the model
+was punished for omitting a unit the prompt never gave it. D-0090 fixed the
+*prompt*, not the grader, specifically because inventing a defensible answer
+out of thin evidence would have been worse than the honest FAIL. This is
+structurally identical, one field over: `citation()` never renders `entity`.
+
+**Not fixed here**, for the same reason D-0089a/b were left OPEN rather than
+patched on the spot: `build_rag_prompt()` shapes what is MEASURED in every
+future Phase 4 run, and D-0090's own fix needed matching updates to
+`SYSTEM_RAG`'s instructions, new pinned assertions, and new mutants in
+`tests/mutate_phase4.py` before it was trusted -- not a one-line patch. A
+sketch, costed at zero run time:
+
+1. Render `ps.entity` in the evidence line, the same way `units_note` is
+   rendered -- present only when the field is present, never invented for a
+   passage that lacks one (the exact rule D-0090 already applies to units).
+2. Extend `SYSTEM_RAG` to say a stated entity in the evidence may be used to
+   attribute a figure to it -- an instruction to USE what is given, not to
+   infer one that is not.
+3. New pinned assertions in `test_phase4_harness.py`, and new mutants in
+   `tests/mutate_phase4.py`, matching D-0090's own bar, including a check
+   that a passage with `entity=None` still renders no company clause at all.
+4. Re-grade the 10 already-recorded rag rows against the new renderer, the
+   way D-0090 re-graded all 10 under its own fix, to state plainly whether
+   any recorded verdict would change -- expected: none, since this changes
+   what a *future* run is shown, not how a past reply is read.
+
+### What this does not do
+
+Does not touch `Provenance`, `build_rag_prompt`, `SYSTEM_RAG`, or any test.
+Does not change `phase_4/measurements_recorded`, which stays exactly as
+D-0094 recorded it. Does not claim this is the only place `entity` is
+missing from rendered evidence -- only RAG-FA-001 was traced end to end;
+whether other retrieved passages in the 2026-09-19 run had the same gap is
+unverified and would need checking before the fix above is written.

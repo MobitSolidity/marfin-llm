@@ -10,7 +10,11 @@ import json
 import os
 import sys
 
-ROOT = "/home/user/webapp"
+# Derived from THIS FILE, not a hardcoded absolute path (the same class of
+# defect D-0096 fixed in build_eval_v2.py's output path -- this constant was
+# missed in that pass). "/home/user/webapp" was the original authoring
+# sandbox; the validator could only ever run there.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
