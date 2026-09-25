@@ -181,6 +181,78 @@ def _tolerance_for(cn: "ClaimNumber", rel_floor: float = REL_TOL) -> float:
     return max(half_ulp, abs(cn.magnitude) * rel_floor)
 
 
+def _row_quoted_scale(claim_masked: str, evidence_text_masked: str,
+                      cn: "ClaimNumber", units_note: str) -> Optional[str]:
+    """
+    D-0103, 2026-09-23. A bare number -- no trailing scale word of its own --
+    may still take the evidence's declared scale, IF the claim is quoting
+    this specific evidence's own row, not merely mentioning a scale word
+    somewhere nearby.
+
+    R47: the model quoting a table row verbatim --
+
+        "Form 10-K, fiscal 2023, consolidated financial statements (in
+         millions) -- Net income | 96,995"
+
+    -- reads as a bare 96,995 against million-scaled evidence, the 10^6
+    error, because the scale phrase sits many characters before the number
+    and _CLAIM_SCALE_RE only ever looks at the tail AFTER a number. MEASURED
+    on the 2026-09-19 combined run: 11 of 12 remaining CONTRADICTED claims
+    were exactly this, every one reporting ratio 1e-06.
+
+    TWO DESIGNS WERE MEASURED AND REJECTED before this one:
+
+      1. Widen the trailing window backward too (scan N chars before the
+         number). MEASURED to fix nothing: the real gap between "(in
+         millions)" and the row it governs is often 60-100+ characters,
+         spanning an intervening row label and a "|", not a fixed few.
+
+      2. Let a scale word, once seen, persist FORWARD to every later bare
+         number in the claim -- the same whole-block semantics units_note
+         already has for a passage. MEASURED to work (citation_correctness
+         38.89% -> 83.33% on the recorded run) but MEASURED to also be
+         unsafe: "Revenue, stated in millions, grew steadily; a separate
+         unrelated tracking figure of 96995 was also logged." is SUPPORTED
+         under that rule, because an early, contextually unconnected scale
+         word bleeds onto a later, unrelated number that merely happens to
+         agree with the evidence by coincidence. Rejected: this module
+         exists specifically to refuse that kind of coincidence.
+
+    THIS DESIGN ties the inheritance to the number itself, not to anything
+    elsewhere in the claim: the row convention every corpus passage already
+    uses is "label | value", so a claim that quotes "| 96,995" verbatim --
+    the SAME characters, in the SAME row form, drawn from THIS evidence's
+    OWN text -- has proven it is reading that row, not merely re-using a
+    unit word. A coincidental match on digits alone (no "|") or on a
+    differently-formatted number (a dropped comma, say) does not qualify,
+    on purpose: better to leave a genuine quote unrecognised (it stays
+    CONTRADICTED, exactly today's behaviour) than to invent a connection
+    the claim never actually made.
+
+    Once the row is proven quoted, a scale word ANYWHERE in the claim is
+    sufficient to supply the unit -- not because scale words are trusted
+    broadly, but because the row match already proves this number came from
+    this passage; the scale word only has to say which unit that passage
+    declares, and units_note already states that with certainty. Re-deriving
+    the word from the claim's own prose position would be redundant, not
+    safer.
+
+    MEASURED on the 2026-09-19 combined run: citation_correctness_pct
+    38.89% -> 88.89% (higher than design 2's 83.33%, and with the coincidence
+    above staying CONTRADICTED). unsupported_claim_rate_pct 41.38% -> 10.34%.
+    Neither crosses its threshold (95% min / 3% max) -- this does not change
+    the Phase 4 verdict, and is not claimed to.
+    """
+    if cn.scale_word or not units_note:
+        return None
+    row = re.compile(r"\|\s*" + re.escape(cn.raw) + r"\b")
+    if not (row.search(claim_masked) and row.search(evidence_text_masked)):
+        return None
+    if not _CLAIM_SCALE_RE.search(claim_masked):
+        return None
+    return units_note
+
+
 class Citation(object):
     """A claim bound to the evidence that supports it."""
 
@@ -268,6 +340,25 @@ def verify_claim(claim: str, evidence: Any,
     if not claimed:
         return Citation(claim, evidence, "UNSUPPORTED",
                         "claim asserts no numeric magnitude to verify")
+
+    # D-0103: a bare number that QUOTES this evidence's own "label | value"
+    # row may take the row's declared scale. See _row_quoted_scale for why
+    # this is anchored to the row itself and not to "a scale word appears
+    # somewhere in the claim" -- the latter was MEASURED to accept a
+    # coincidental, unrelated number and was rejected for exactly that.
+    if isinstance(evidence, Passage) and evidence.units_note:
+        claim_masked = mask_non_quantities(claim)
+        evidence_masked = mask_non_quantities(evidence.text)
+        upgraded = []
+        for cn in claimed:
+            sw = _row_quoted_scale(claim_masked, evidence_masked, cn,
+                                   evidence.units_note)
+            if sw:
+                upgraded.append(ClaimNumber(cn.raw, cn.value, sw,
+                                            _CLAIM_SCALES.get(sw, 1.0)))
+            else:
+                upgraded.append(cn)
+        claimed = upgraded
 
     available = _evidence_magnitudes(evidence)
     if not available:

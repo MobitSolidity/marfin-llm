@@ -23,8 +23,8 @@ from _harness import check, check_raises, check_true, section, summary
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from rag.answer import answer_gate                                 # noqa: E402
-from rag.citations import (_tolerance_for, extract_numbers,         # noqa: E402
-                           verify_answer, verify_claim)
+from rag.citations import (_row_quoted_scale, _tolerance_for,       # noqa: E402
+                           extract_numbers, verify_answer, verify_claim)
 from rag.conflicts import (detect_period_mixing, resolve_facts,     # noqa: E402
                            resolve_result, staleness)
 from rag.documents import (Fact, Passage, Provenance,               # noqa: E402
@@ -34,7 +34,8 @@ from rag.ingest import (_is_heading, chunk_document, detect_scale,  # noqa: E402
                         ingest_document, provenance_for, split_blocks,
                         unresolved_scale_passages)
 from market import tradingview as tv                                # noqa: E402
-from rag.normalize import compound_variants, fold, index_terms, tokenize  # noqa
+from rag.normalize import (compound_variants, fold, index_terms,    # noqa
+                           mask_non_quantities, tokenize)
 from rag.rerank import (W_AUTHORITY, W_RECENCY,                     # noqa: E402
                         _normalize_scores, rerank)
 from rag.retrieval import (FactStore, HybridRetriever,              # noqa: E402
@@ -546,6 +547,79 @@ check_true("one bad claim invalidates the whole answer",
 check_true("an all-good answer passes",
            verify_answer([("Revenue was $109,417 million", _row2)])["ok"],
            "(C)")
+
+# ---------------------------------------------------------------------------
+# D-0103: a bare number that QUOTES this evidence's own row inherits its
+# scale (fixes R47). _row2's own text is "...| Net sales | 109,417 |",
+# units_note="millions" -- a claim quoting "| 109,417 |" verbatim, with
+# "millions" stated anywhere in the same claim, should read the figure
+# correctly instead of as the bare (hence 10^6-wrong) 109,417 it used to.
+# ---------------------------------------------------------------------------
+check_true("a row-quoted claim now reads the scale correctly",
+           verify_claim("The table states, in millions -- | Net sales | "
+                        "109,417 |", _row2).status == "SUPPORTED",
+           "(D) D-0103: this claim shares its row with _row2 verbatim")
+check_true("...while a BARE mention, no row, is STILL the 10^6 error",
+           verify_claim("Revenue was $109,417", _row2).status
+           == "CONTRADICTED",
+           "(D) REGRESSION GUARD, same claim pinned above at line ~489: "
+           "D-0103 must not loosen the general case, only a PROVEN quote "
+           "of this evidence's own row")
+
+_ev_masked = mask_non_quantities(_row2.text)
+_c3 = mask_non_quantities("in millions -- | Net sales | 109,417 |")
+_cn3 = [n for n in extract_numbers(_c3) if n.raw == "109,417"][0]
+check_true("direct: row in BOTH claim and evidence, scale stated -> inherits",
+           _row_quoted_scale(_c3, _ev_masked, _cn3, _row2.units_note)
+           == _row2.units_note, "(A)")
+
+_c4 = mask_non_quantities("in millions -- | Net sales | 999,999 |")
+_cn4 = [n for n in extract_numbers(_c4) if n.raw == "999,999"][0]
+check_true("direct: a FABRICATED row, not in the evidence, inherits nothing",
+           _row_quoted_scale(_c4, _ev_masked, _cn4, _row2.units_note)
+           is None,
+           "(D) kills the mutant that checks only the claim's own row and "
+           "never the evidence's -- a row need only LOOK quoted is not the "
+           "same claim this module makes")
+
+_c5 = mask_non_quantities("as stated -- | Net sales | 109,417 |")
+_cn5 = [n for n in extract_numbers(_c5) if n.raw == "109,417"][0]
+check_true("direct: the row is quoted but NO scale word anywhere -> nothing",
+           _row_quoted_scale(_c5, _ev_masked, _cn5, _row2.units_note)
+           is None,
+           "(D) inventing a scale the claim never stated would be worse "
+           "than the bare 10^6 error it replaces")
+
+_c6 = mask_non_quantities("in millions -- | Net sales | 109,417 thousand |")
+_cn6 = [n for n in extract_numbers(_c6) if n.raw == "109,417"][0]
+check_true("direct: a number with its OWN scale word is left alone",
+           _cn6.scale_word == "thousand"
+           and _row_quoted_scale(_c6, _ev_masked, _cn6, _row2.units_note)
+           is None,
+           "(D) an EXPLICIT thousand must never be silently overruled by "
+           "the passage's OWN millions")
+
+check_true("direct: no units_note on the evidence -> nothing to inherit",
+           _row_quoted_scale(_c3, _ev_masked, _cn3, None) is None, "(D)")
+
+# MEASURED end to end, on the real 2026-09-19 combined RAG run (regraded,
+# model NOT re-run -- scripts/regrade_citations.py against the recorded
+# answers): citation_correctness_pct 38.89 -> 88.89, unsupported_claim_rate
+# 41.38 -> 10.34. Neither crosses its Phase 4 threshold (95 min / 3 max);
+# see D-0103 in DECISIONS.md for the full arithmetic and the two rejected,
+# less safe designs that were measured first.
+check_true("SAFETY: the coincidence that sank the rejected design 2 stays "
+           "CONTRADICTED here",
+           verify_claim(
+               "Revenue that quarter, stated in millions, grew steadily; "
+               "a separate unrelated internal tracking figure of 96995 "
+               "was also logged.",
+               Passage(text="Net income | 96,995",
+                       provenance=PROV, units_note="million")
+           ).status == "CONTRADICTED",
+           "(D) no row is quoted here -- a scale word merely appearing "
+           "somewhere in the claim, D-0103's rejected design 2, would wrongly "
+           "SUPPORT this. See D-0103's docstring for the full measurement")
 
 # ---------------------------------------------------------------------------
 section("conflicts: restatement, period mixing, staleness")

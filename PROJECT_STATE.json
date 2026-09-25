@@ -210,7 +210,9 @@
     "D-0096",
     "D-0100",
     "D-0101",
-    "D-0102"
+    "D-0102",
+    "D-0103",
+    "D-0104"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -433,7 +435,8 @@
       "mitigation": "NOT FIXED DELIBERATELY. Accepting a LEADING scale word would also make the grader accept the real 10^6 error, which is the one thing src/rag/citations.py exists to catch. Over-fitting a grader to its own corpus is how a FAIL becomes a PASS. Needs a user decision, and any fix must keep the negative controls green.",
       "decision_2026_09_05": "ACCEPTED AS RECORDED -- not fixed",
       "why": "Fixing it cannot change the verdict, and MEASURED arithmetic proves it: with only 7 checkable answers and 11 claims, citation_correctness_pct_min=95 requires 7 of 7 SUPPORTED, and unsupported_claim_rate_pct_max=3 requires 0 of 11 bad claims -- one bad claim out of 11 is already 9.09%. So even a perfect R47 fix leaves both thresholds FAILING unless every single claim verifies. Meanwhile, accepting a LEADING scale word would make the grader accept the real 10^6 error, which is the one thing src/rag/citations.py exists to catch.",
-      "separate_finding": "THE EVAL SET IS TOO SMALL FOR THESE THRESHOLDS. A 95% floor over 7 items and a 3% ceiling over 11 claims are both all-or-nothing gates: they cannot be met by a good-but-imperfect system, and a single defect makes them unmeetable. Filed as R49."
+      "separate_finding": "THE EVAL SET IS TOO SMALL FOR THESE THRESHOLDS. A 95% floor over 7 items and a 3% ceiling over 11 claims are both all-or-nothing gates: they cannot be met by a good-but-imperfect system, and a single defect makes them unmeetable. Filed as R49.",
+      "resolution_2026_09_23": "FIXED -- D-0103. Not 'accept a leading scale word' (measured unsafe: a scale word merely appearing elsewhere in the claim let an unrelated coincidental number through as SUPPORTED). Instead: a bare number inherits the evidence's units_note only when its OWN row ('| value') is proven quoted verbatim from THIS specific evidence's own text. MEASURED on the 2026-09-19 combined run: citation_correctness_pct 38.89 -> 88.89, unsupported_claim_rate_pct 41.38 -> 10.34. Neither crosses its threshold (95 min / 3 max) -- D-0094's own 'cannot change the verdict' conclusion still holds, now reverified against the larger eval set rather than assumed from the smaller one."
     },
     {
       "id": "R48",
@@ -2074,5 +2077,30 @@
       "tests_mutate_phase4_py": "286 -> 289 seeded (+3), 276 -> 279 killed (+3, all new mutants killed), 1 survived (same pre-existing facts2.json-caused survivor from D-0100, not a new one), 9 skipped (unchanged baseline)"
     },
     "scope": "Changes what future Phase 4 runs show the model. Does not touch phase_4/measurements_recorded -- D-0094's recorded FAIL verdict is unchanged. Does not itself advance the Phase 4 gate: a new full re-run is still required for an updated verdict, and this fix has not been exercised against a live model."
+  },
+  "D-0103_D-0104_R47_fixed_2026_09_23": {
+    "decisions": ["D-0103", "D-0104"],
+    "approved_by_user": "2026-09-23, explicit instruction to pursue the safer of two costed designs",
+    "designs_measured_and_rejected": {
+      "1_widen_trailing_window": "Scan backward too, not just forward. MEASURED to fix 0 of 12 failing claims -- the real gap between a scale phrase and the row it governs is 60-100+ chars, not a fixed few.",
+      "2_forward_persisting_scale": "A scale word, once seen, governs every later bare number in the claim (mirrors units_note's whole-passage semantics). MEASURED to reach citation_correctness_pct 83.33% / unsupported_claim_rate_pct 13.79% -- but MEASURED unsafe: a constructed claim with an early, unrelated scale word and a later, unrelated-but-coincidentally-matching number graded SUPPORTED. Rejected."
+    },
+    "design_kept": "3_row_anchored: a bare number inherits units_note only if '| <the number>', verbatim, appears in BOTH the claim and this SPECIFIC evidence's own text, AND some scale word appears anywhere in the claim. Ties inheritance to the number itself, not to anything merely nearby.",
+    "what_changed": {
+      "src/rag/citations.py": "new _row_quoted_scale() helper; verify_claim() computes claim_masked once and upgrades qualifying bare ClaimNumbers before the existing tolerance/matching logic, unchanged, runs on them.",
+      "tests/test_rag.py": "8 new assertions: positive row-quote case, the pre-existing bare-mention regression guard (pinned beside its opposite), 5 direct _row_quoted_scale calls (fabricated row, no scale word, explicit own scale word, no units_note), and design 2's rejected coincidence re-confirmed CONTRADICTED under this design.",
+      "tests/mutate_rag.py": "4 new mutants, all killed: row need only match the claim not the evidence; scaled with no scale word present; explicit scale word overridden; scale forced to 1.0.",
+      "tests/test_phase4_harness.py (D-0104)": "RAG-EN-001, D-0094's own worked mixed-claim example, is no longer mixed after D-0103 (both claims now SUPPORTED) -- swapped the non-vacuity guard to RAG-ABST-001 (still genuinely mixed, a different defect), and pinned RAG-EN-001's flip explicitly rather than silently dropping it."
+    },
+    "verification": {
+      "regrade_2026_09_19_combined": "citation_correctness_pct 38.89 -> 88.89 (7 -> 16 of 18 answers); unsupported_claim_rate_pct 41.38 -> 10.34 (12 -> 3 bad claims). HIGHER than rejected design 2's ceiling, with design 2's own unsafe coincidence still correctly CONTRADICTED.",
+      "regrade_2026_09_03_merged": "answers_supported 3 -> 5 of 7 (42.86% -> 71.43%), driving D-0104's test update.",
+      "neither_crosses_its_threshold": "88.89% < 95% min; 10.34% > 3% max. Does not change the Phase 4 verdict. D-0094's original 'cannot change the verdict' conclusion still holds, reverified against the larger eval set rather than assumed from the smaller one.",
+      "tests_run_all_sh": "3627 -> 3635 passed (+8), 0 failed, 6 skipped -- ALL GREEN",
+      "tests_mutate_rag_py": "116 -> 120 seeded (+4), 106 -> 110 killed (+4, all new mutants killed), 3 equivalent, 7 survived",
+      "survivors_confirmed_pre_existing": "the 7 mutate_rag.py survivors (ingest.py/retrieval.py XBRL fact-handling) are identical by name to a git-stash baseline run WITHOUT this change -- not caused by D-0103, not investigated further here",
+      "tests_mutate_phase4_py_unaffected": "re-run after D-0104's test_phase4_harness.py edit: still exactly 1 survivor (D-0100's facts2.json-caused one) and 9 skipped -- unchanged"
+    },
+    "scope": "Touches src/rag/citations.py, the module that produces citation_correctness_pct and unsupported_claim_rate_pct. Does not touch phase_4/measurements_recorded -- D-0094's recorded FAIL verdict is unchanged. Does not itself advance the Phase 4 gate."
   }
 }

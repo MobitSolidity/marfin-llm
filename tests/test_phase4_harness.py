@@ -5989,19 +5989,29 @@ _rows94d = RC94.regrade(_run94d,
                         os.path.join(_ROOT, "evals", "rag_gold_v1.jsonl"), 4)
 _by94 = {r["id"]: r for r in _rows94d}
 
-# RAG-EN-001: MEASURED to hold two claims, one SUPPORTED and one CONTRADICTED.
-# It is the case that proves a CONTRADICTED claim decides the answer -- if the
-# rule were dropped, this answer would read PARTIALLY_SUPPORTED.
-check_true("RAG-EN-001 really does hold both a supported and a bad claim",
-           sorted(set(_by94["RAG-EN-001"]["per_claim"]))
+# RAG-EN-001 was this fixture through D-0102: two claims, one SUPPORTED and
+# one CONTRADICTED by the R47 defect (a quoted row read as bare against
+# million-scaled evidence). D-0103 fixed exactly that defect, so RAG-EN-001
+# is no longer mixed -- both claims are now correctly SUPPORTED, MEASURED
+# below. RAG-ABST-001 takes over as the non-vacuity guard: it holds THREE
+# claims, two SUPPORTED and one still genuinely CONTRADICTED (a defect
+# outside R47's shape, unaffected by D-0103), so the "one bad claim decides
+# the answer" rule still has a real case to prove itself against.
+check_true("RAG-EN-001's claims are now BOTH supported, after D-0103",
+           _by94["RAG-EN-001"]["per_claim"] == ["SUPPORTED", "SUPPORTED"],
+           "(D) confirms the fix, not just its absence: this is the exact "
+           "case D-0092's own comment used to illustrate the R47 shape")
+check_true("RAG-ABST-001 really does hold both supported and a bad claim",
+           sorted(set(_by94["RAG-ABST-001"]["per_claim"]))
            == ["CONTRADICTED", "SUPPORTED"],
            "(A) NON-VACUITY GUARD for the assertion below: if this case ever "
            "stops being mixed, that assertion proves nothing")
 check_true("one CONTRADICTED claim decides the whole answer",
-           _by94["RAG-EN-001"]["new"] == "CONTRADICTED",
+           _by94["RAG-ABST-001"]["new"] == "CONTRADICTED",
            "(C) THE ASSERTION THE SURVIVOR DEMANDED. One fabricated figure is "
-           "not redeemed by a sound one beside it -- that dilution is exactly "
-           "how a bad number ships. The mutant made this PARTIALLY_SUPPORTED")
+           "not redeemed by two sound ones beside it -- that dilution is "
+           "exactly how a bad number ships. The mutant made this "
+           "PARTIALLY_SUPPORTED")
 
 # RAG-FA-001: MEASURED SUPPORTED after D-0092, and grounded by ONE passage out
 # of four. Requiring ALL passages to support a claim would break it.
@@ -6012,9 +6022,12 @@ check_true("RAG-FA-001 is SUPPORTED, grounded by one passage of several",
            "figure lives in ONE filing row -- demanding that every retrieved "
            "passage support the claim would mark every correct citation "
            "unsupported. The mutant required exactly that")
-check("...and the recompute still reports 3 supported answers of 7",
-      RC94.summarise(_rows94d)["answers_supported"], 3, 0,
-      "(D) pins the recomputed 42.86% that is now in the phase record")
+check("...and the recompute now reports 5 supported answers of 7",
+      RC94.summarise(_rows94d)["answers_supported"], 5, 0,
+      "(D) pins 71.43%, up from 42.86%, after D-0103 -- see D-0104. Not the "
+      "phase record: phase_4/measurements_recorded is untouched, and this "
+      "dataset's own official citation numbers stay whatever D-0090 last "
+      "recorded them as; this pins the regrade tool's OWN output only")
 
 
 # ===========================================================================

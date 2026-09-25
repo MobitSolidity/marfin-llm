@@ -5649,3 +5649,141 @@ only the eval-set and grader work D-0090 through D-0099 already covered.
 Does not claim `entity` was the only field ever missing from rendered
 evidence -- only that this one, found by tracing RAG-FA-001 to its root,
 is now supplied where the corpus provides it.
+
+## D-0103 — R47 fixed: a bare number that quotes evidence's own row inherits its scale
+
+**Date:** 2026-09-23 · **Status:** FIXED, approved by the user before any
+design work began · **Trigger:** explicit instruction to pursue the safer
+of the two designs costed while investigating R47.
+
+### Three designs were measured, in order, before one was kept
+
+**1. Widen the trailing-only window backward too.** R47's original
+description assumed the scale word sits shortly before the number. MEASURED
+against the real 2026-09-19 failures: it does not. A real failing claim
+reads `"...(in millions) -- Net income | 96,995"` -- the gap between the
+scale phrase and the row it governs is 60-100+ characters, spanning an
+intervening row label and a `|`, not a fixed few. A prototype widening the
+window to 24 characters flipped **zero** of the 12 failing claims. Rejected:
+it does not address the actual shape of the defect.
+
+**2. Let a scale word persist FORWARD to every later bare number in the
+claim** -- the same whole-block semantics `units_note` already has for a
+passage. MEASURED to work: `citation_correctness_pct` 38.89% -> 83.33%,
+`unsupported_claim_rate_pct` 41.38% -> 13.79%. MEASURED to also be unsafe,
+with a constructed counterexample:
+
+> "Revenue that quarter, stated in millions, grew steadily; a separate
+> unrelated internal tracking figure of 96995 was also logged."
+
+-- graded **SUPPORTED** against million-scaled evidence, because an early,
+contextually unconnected scale word bled onto a later, unrelated number that
+merely happened to agree with the evidence by coincidence. Rejected: this
+module exists specifically to refuse that kind of coincidence, and neither
+83.33% nor 13.79% crosses its threshold (95 min / 3 max) anyway -- the ceiling
+this design reaches does not change the Phase 4 verdict, so its risk buys
+nothing.
+
+**3. KEPT. Tie the inheritance to the number itself, not to anything
+elsewhere in the claim.** Every corpus passage already writes its rows as
+`label | value`. A claim that quotes `| 96,995` verbatim -- the SAME
+characters, in the SAME row form, drawn from THIS evidence's OWN text --
+has proven it is reading that row, not merely reusing a unit word nearby. A
+coincidental digit match with no `|`, or a differently-formatted number (a
+dropped comma), does not qualify, on purpose: better to leave a genuine
+quote unrecognised (it stays CONTRADICTED, exactly today's behaviour) than
+invent a connection the claim never made.
+
+### What changed
+
+`src/rag/citations.py`: a new `_row_quoted_scale(claim_masked,
+evidence_text_masked, cn, units_note)` returns the evidence's `units_note`
+for a bare `ClaimNumber` if and only if: (a) it has no scale word of its
+own -- an explicit statement is never overridden; (b) `"| " + cn.raw`
+appears, verbatim, in BOTH the claim and this specific evidence's own
+masked text; (c) some recognised scale word appears anywhere in the claim.
+`verify_claim` computes `claim_masked` once, upgrades any qualifying bare
+`ClaimNumber` before the existing tolerance/matching logic runs unchanged,
+and does nothing at all when `evidence` is not a `Passage` or declares no
+`units_note`.
+
+### Verification
+
+Regraded the real 2026-09-19 combined evidence file with
+`scripts/regrade_citations.py` (model NOT re-run):
+
+```
+citation_correctness_pct:    38.89 -> 88.89   (7 -> 16 of 18 answers)
+unsupported_claim_rate_pct:  41.38 -> 10.34   (12 -> 3 bad claims)
+```
+
+Higher than design 2's ceiling (83.33% / 13.79%), while the coincidence
+that broke design 2 stays CONTRADICTED under this one -- pinned as its own
+assertion in `tests/test_rag.py`. **Neither number crosses its Phase 4
+threshold (95% min / 3% max).** This does not change the Phase 4 verdict,
+and is not claimed to; `phase_4/measurements_recorded` is untouched.
+
+8 new assertions in `tests/test_rag.py`: the row-quoted claim now reads
+SUPPORTED; the pre-existing bare-mention case (no row) stays CONTRADICTED,
+pinned beside its opposite for contrast; five direct calls to
+`_row_quoted_scale` covering the positive case, a fabricated row absent from
+the evidence, a row with no scale word anywhere, a number with its own
+(different) explicit scale word, and no `units_note` on the evidence; and
+the constructed coincidence from design 2, confirmed still CONTRADICTED
+here.
+
+4 new mutants in `tests/mutate_rag.py`: the row need only match the claim
+(not the evidence too); a row-quoted number is scaled with no scale word
+anywhere; an explicit trailing scale word is overridden by the row quote;
+the row-quote path always applies scale 1.0 instead of the real one. All
+four killed.
+
+```
+tests/run_all.sh:   3627 -> 3635 passed (+8), 0 failed, 6 skipped -- ALL GREEN
+tests/mutate_rag.py: 116 -> 120 seeded (+4), 106 -> 110 killed (+4, all new
+                     mutants killed), 3 equivalent, 7 survived
+```
+
+The 7 survivors are **pre-existing and unrelated**: re-ran the identical
+battery against the pre-D-0103 tree (`git stash`) and got the exact same
+seven, by name -- `ingest.py`/`retrieval.py` XBRL fact-handling, nothing
+this decision touched. Not investigated further here; recorded so the
+number is not mistaken for something D-0103 introduced.
+
+### What this does not do
+
+`mutate_phase4.py` re-run afterward: still exactly 1 survivor (D-0100's
+`facts2.json`-caused one, unchanged) and 9 skipped (unchanged baseline) --
+D-0103 touches `citations.py`, not anything that battery mutates. Does not
+touch `phase_4/measurements_recorded`; D-0094's recorded FAIL verdict is
+unchanged. Does not itself advance the Phase 4 gate.
+
+
+## D-0104 — the D-0094 test block updated: R47 was hiding inside its own fixture
+
+**Date:** 2026-09-23 · **Status:** FIXED, a direct consequence of D-0103 ·
+**Trigger:** `tests/run_all.sh` failing after D-0103, on assertions
+D-0094 itself had pinned.
+
+D-0103 does not only affect the 2026-09-19 combined run. `RAG-EN-001`, in
+the earlier `evidence/phase4_merged_2026-09-03.json` fixture, was D-0094's
+own worked example of a MIXED answer -- one claim SUPPORTED, one
+CONTRADICTED -- used to prove that one bad claim decides the whole answer.
+Regraded: its CONTRADICTED claim was R47's exact shape, and D-0103 fixes it.
+`RAG-EN-001` now reads two-for-two SUPPORTED, and is no longer mixed.
+
+Rather than weaken the non-vacuity guard, swapped in a case that is still
+genuinely mixed: `RAG-ABST-001` holds three claims, two SUPPORTED and one
+CONTRADICTED by a defect outside R47's shape, unaffected by D-0103. The
+"one bad claim decides the answer" assertion now points at it instead, and
+a new assertion pins `RAG-EN-001`'s own flip explicitly, so the fix is
+confirmed rather than merely absent.
+
+```
+answers_supported on the 2026-09-03 merged fixture: 3 of 7 -> 5 of 7 (42.86% -> 71.43%)
+```
+
+This is the regrade tool's own recomputed output, pinned in the test suite.
+It is **not** a change to the official phase record:
+`phase_4/measurements_recorded` still reads whatever D-0090 last recorded
+for this dataset, untouched by either D-0103 or this entry.

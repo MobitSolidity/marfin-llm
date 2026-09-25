@@ -207,6 +207,34 @@ MUTATIONS = [
      '    return {"ok": not bad, "n_claims": len(results),',
      '    return {"ok": True, "n_claims": len(results),'),
 
+    # --- citations: D-0103, row-quoted scale inheritance --------------------
+    # R47: a claim quoting a table row verbatim -- "(in millions) -- Net
+    # income | 96,995" -- read as a bare, apparently-unscaled 96,995, the
+    # 10^6 error, because the scale phrase sits well before the trailing-only
+    # window _CLAIM_SCALE_RE checks. _row_quoted_scale lets a bare number
+    # inherit evidence.units_note ONLY when its OWN row ("| <the number>") is
+    # proven quoted verbatim from THIS evidence's own text -- deliberately
+    # narrower than "a scale word appears somewhere in the claim", which was
+    # MEASURED to accept a coincidental, unrelated number (see the function's
+    # own docstring) and rejected for exactly that.
+    ("citations.py", "the row need only match the CLAIM, not the evidence too",
+     "    if not (row.search(claim_masked) and row.search(evidence_text_masked)):",
+     "    if not row.search(claim_masked):"),
+    ("citations.py", "a row-quoted number is scaled with no scale word anywhere",
+     "    if not _CLAIM_SCALE_RE.search(claim_masked):\n"
+     "        return None\n"
+     "    return units_note",
+     "    return units_note"),
+    ("citations.py", "an explicit trailing scale word is overridden by the row quote",
+     "    if cn.scale_word or not units_note:",
+     "    if not units_note:"),
+    ("citations.py", "the row-quote path always applies scale 1.0, not the real scale",
+     '            if sw:\n'
+     '                upgraded.append(ClaimNumber(cn.raw, cn.value, sw,\n'
+     '                                            _CLAIM_SCALES.get(sw, 1.0)))',
+     '            if sw:\n'
+     '                upgraded.append(ClaimNumber(cn.raw, cn.value, sw, 1.0))'),
+
     # --- conflicts ---------------------------------------------------------
     ("conflicts.py", "period mixing silently resolved instead of refused",
      "    if require_single_period and len(kinds) > 1:",
