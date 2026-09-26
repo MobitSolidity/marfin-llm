@@ -796,17 +796,18 @@
     ]
   },
   "awaiting_user_action": {
-    "what": "Run the three per-arm commands on the i5-12400 and return the merged file.",
+    "what": "Run the three per-arm commands on the i5-12400 (rag now against the combined eval set) and return the merged file. Updated 2026-09-23: previous version of this action (2026-08-24) pointed rag at the default v1 set, superseded by the combined set (D-0096/D-0098, needed for R49).",
     "commands": [
-      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms rag   --out evals\\results\\p4_rag.json",
+      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms rag   --corpus evals\\rag_corpus_combined.jsonl --gold evals\\rag_gold_combined.jsonl --out evals\\results\\p4_rag.json",
       "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms tools --out evals\\results\\p4_tools.json",
       "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms plain --out evals\\results\\p4_plain.json",
       "python scripts\\merge_phase4.py evals\\results\\p4_rag.json evals\\results\\p4_tools.json evals\\results\\p4_plain.json --out evals\\results\\phase4_merged.json"
     ],
     "model_path_confirmed_by_user": "C:\\models",
-    "expected_wall_clock": "3.46 h total, COMPUTED, splittable across sessions",
-    "file_to_return": "evals/results/phase4_merged.json (the three raw per-arm files are also welcome)",
-    "approval_status": "The user chose option ج on 2026-08-24 and supplied the model directory. The commands are prepared. No run has been launched by me and none can be: the harness runs on the user's machine, not here."
+    "expected_wall_clock": "~68 minutes (1.1 h) total, MEASURED by summing real per-row seconds from evidence/phase4_merged_2026-09-03.json (plain, tools) and evidence/phase4_rag_combined_2026-09-19.json (rag, already on the combined set) plus each command's own ~49s TTFT/load overhead -- not the 3.46h COMPUTED figure this field previously carried, which predated D-0091's prefill fix and used the smaller v1 rag set",
+    "max_tokens": "omit the flag; the script's own default (512, since D-0091) is correct and MEASURED sufficient (0 answers lost to truncation on 2026-09-03). Do NOT pass --max-tokens 2048 as the older guide text (section 6.4) says -- that guidance predates D-0091",
+    "file_to_return": "evals/results/phase4_merged.json (the three raw per-arm files are also welcome, and would let plain/tools be skipped on a future re-run if nothing about them needs re-measuring)",
+    "approval_status": "The user chose option ج on 2026-08-24 and supplied the model directory; the commands are prepared. Re-confirmed 2026-09-23 after D-0100 through D-0104. No run has been launched by me and none can be: the harness runs on the user's machine, not here."
   },
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",

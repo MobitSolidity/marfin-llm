@@ -5787,3 +5787,64 @@ This is the regrade tool's own recomputed output, pinned in the test suite.
 It is **not** a change to the official phase record:
 `phase_4/measurements_recorded` still reads whatever D-0090 last recorded
 for this dataset, untouched by either D-0103 or this entry.
+
+## D-0105 — the re-run instructions updated: combined eval set, and a timing claim corrected before it was repeated
+
+**Date:** 2026-09-23 · **Status:** DOCUMENTATION, no source or test changed ·
+**Trigger:** preparing the exact commands for the next full Phase 4 re-run.
+
+### What was stale
+
+`docs/guides/phase-4-windows-setup-fa.md` section 5.1 and
+`PROJECT_STATE.json`'s `awaiting_user_action` both still gave the `rag`
+command with no `--corpus`/`--gold` override, which defaults to the small
+`v1` set (10 rows) -- not the combined set (32 rows, D-0096/D-0098) that
+R49 needed. Running the prepared commands as they stood would have
+re-opened R49 silently.
+
+### A timing claim, computed before it was checked, and caught before it shipped
+
+First pass at updating the estimate reasoned: rag grows 10 -> 32 rows
+(3.2x), so linearly scale the old "0.88 h" figure to roughly 2.7-2.9 hours.
+That reasoning is wrong on its own terms: the old figure was measured
+**before** D-0091's no-think prefill, when most of the wall-clock time was
+the model burning its budget inside `<think>`. Scaling a pre-fix number
+forward silently assumes the fix did not happen.
+
+Corrected by summing REAL per-row `metrics.seconds` from the two most
+recent actual recorded runs instead of scaling anything:
+`evidence/phase4_rag_combined_2026-09-19.json` (rag, already on the
+combined set) and `evidence/phase4_merged_2026-09-03.json` (plain, tools,
+already past D-0091). MEASURED total: **~68 minutes** for all three arms
+run fresh, not 2.7-2.9 hours, and far below the old guide's own 3.46-hour
+figure (which was also pre-D-0091).
+
+```
+rag   (32 calls, combined set): 17.0 min generation + 49s overhead = 17.9 min
+tools (21 calls):               23.3 min generation + 49s overhead = 24.2 min
+plain (21 calls):               24.7 min generation + 50s overhead = 25.6 min
+TOTAL                                                                ~68 min
+```
+
+### What changed
+
+`docs/guides/phase-4-windows-setup-fa.md`: the `rag` command in section
+5.1 now carries `--corpus evals\rag_corpus_combined.jsonl --gold
+evals\rag_gold_combined.jsonl`; a new 5.1.1 replaces a "should you reuse
+old plain/tools files" tangent (drafted, then cut once the real ~68-minute
+total made the ~50-minute saving not worth the added risk) with the
+corrected timing table and an explicit note that section 6.4's
+`--max-tokens 2048` guidance predates D-0091 and should not be followed --
+the script's own current default (512) is correct and already MEASURED
+sufficient.
+
+`PROJECT_STATE.json`'s `awaiting_user_action`: commands, `expected_wall_clock`,
+and a new `max_tokens` field updated to match, with the superseded 2026-08-24
+figures kept in the text rather than deleted, so the correction is visible
+as a correction.
+
+### What this does not do
+
+No source file, test, or mutant changed. Does not touch
+`phase_4/measurements_recorded`. Does not launch anything -- the run still
+happens on the user's machine, on their decision, as it always has.
