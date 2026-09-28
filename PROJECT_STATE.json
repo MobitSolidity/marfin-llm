@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
   "current_phase": "4",
-  "phase_status": "HARNESS_DEFECTS_CLOSED_AWAITING_RE_RUN_DECISION",
+  "phase_status": "FULL_RERUN_2026_09_27_MEASURED_STILL_FAIL_NARROWER_GAP",
   "user_approval_required": false,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -212,7 +212,9 @@
     "D-0101",
     "D-0102",
     "D-0103",
-    "D-0104"
+    "D-0104",
+    "D-0105",
+    "D-0106"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -811,7 +813,7 @@
   },
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
-    "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND",
+    "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND_REVERIFIED_2026_09_27_SEE_measurements_recorded_2026_09_27",
     "execution_route": "A - user's own machine (i5-12400 / 16 GB / Windows 11)",
     "route_approved_by_user": "2026-08-16",
     "route_options_document": "docs/phase-reports/phase-4-execution-options.md",
@@ -937,6 +939,53 @@
       },
       "why_this_is_a_real_measurement": "Unlike the 2026-08-31 diagnostic, this is a full 52-case run of the production harness, greedy and seeded, with the model file's sha256 VERIFIED, run in three chunks whose per-arm files merged with complete=True and merge_problems=[].",
       "human_grading_status": "PENDING for these 52 rows. R10's FAIL verdict (D-0081) was reached on the CONTAMINATED 2026-08-30 run and is NOT carried over as a verdict on this one."
+    },
+    "measurements_recorded_2026_09_27": {
+      "label": "MEASURED",
+      "recorded_on": "2026-09-27",
+      "authorised_by": "explicit user instruction to run the prepared D-0105 commands and return output",
+      "supersedes": "measurements_recorded (2026-09-05) for verdict purposes -- that block is left untouched as history",
+      "run_file": "evidence/phase4_merged_2026-09-27.json",
+      "verdict_file": "evidence/phase4_verdict_2026-09-27.json",
+      "citations_recomputed_file": "evidence/phase4_citations_recomputed_2026-09-27.json",
+      "evidence_line_endings": "The four run files were written by Python on Windows with CRLF. `git am` strips CR when it applies a patch, so archiving them as-is would have made the applied copy differ from the file the user holds. They were normalised to LF before commit; the content is identical (MEASURED: byte-equal after removing CR, still valid JSON, and grade_merged.py returns the identical verdict from the LF copy). Both hashes recorded so either copy can be verified.",
+      "evidence_sha256": {
+        "phase4_merged_2026-09-27.json": {"archived_lf": "d05a144237ecccd3ed5daa508d5560fd9d2cf18b897d9b2fba893a3ed8978033", "as_uploaded_crlf": "77de71af6fcee74cbbfd0e655c4f8df19c3a9a98d566af17e7d73c0cbe9952c0"},
+        "p4_rag_2026-09-27.json": {"archived_lf": "51ecd76f3d6b9052a38de0504ec9f0c3cf1ffc47a78db3488b6b28577dfaec93", "as_uploaded_crlf": "bc1cd5aaae187ee01b4c0b6e6e16cbecf3f4dddaf5b25a98d08b111375e2ff50"},
+        "p4_tools_2026-09-27.json": {"archived_lf": "815ed9d95927f73a03a727a1913fdf5fb677847facf7120f494b11a23575d1c5", "as_uploaded_crlf": "7dd2d2601ff24820eb1b11735f3e2bc580739bd9399ed889a2e5aab2939869d2"},
+        "p4_plain_2026-09-27.json": {"archived_lf": "7bc3bea3f650e9327fb8a6448fab3397f7ef6f2deaa6e7482adb7a50112ab716", "as_uploaded_crlf": "b16afc55e6323e016ed2d7bf0c5305c28b0fda2b3c421e164aa2becbc63cc666"}
+      },
+      "raw_per_arm_files": ["evidence/p4_rag_2026-09-27.json", "evidence/p4_tools_2026-09-27.json", "evidence/p4_plain_2026-09-27.json"],
+      "host": "Windows 11, Intel64 Family 6 Model 151 (i5-12400), Python 3.12.10 -- MEASURED identical to 2026-09-05",
+      "model": "Qwen3.5-4B-Q5_K_M.gguf, sha256 8814232b85... VERIFIED identical to 2026-09-05",
+      "config": {"ctx": 16384, "threads": 6, "max_tokens": 512, "rag_corpus": "evals/rag_corpus_combined.jsonl (32 cases, up from 10)"},
+      "cases": 74,
+      "verdict": "FAIL",
+      "verdict_counts": {"pass": 3, "fail": 7, "unmeasured": 2},
+      "graded_by": "scripts/grade_merged.py",
+      "verdict_composition": "IDENTICAL to the official 2026-09-05 verdict, threshold for threshold: the same 3 PASS, the same 7 FAIL, the same 2 UNMEASURED (MEASURED by diffing evidence/phase4_threshold_verdicts_2026-09-05.json against evidence/phase4_verdict_2026-09-27.json: no threshold changed verdict). What moved is the VALUE inside two of the failing thresholds.",
+      "verdict_produced_by": "scripts/regrade_citations.py on the rag answers, then scripts/grade_merged.py --citations-recomputed evidence/phase4_citations_recomputed_2026-09-27.json -- the sequence the README documents. Grading without the override reads the run's inline citation_correctness_pct (90.32), which the project's own tooling labels 'RECORDED by the defective grader'.",
+      "official_citation_values": {"citation_correctness_pct": 85.71, "unsupported_claim_rate_pct": 9.68, "note": "citation_correctness_pct is over ANSWERS, one bad claim fails the answer (18 of 21); unsupported_claim_rate_pct is over CLAIMS (3 of 31). The run's inline summary computes both over claims (28/31 = 90.32 and 3/31 = 9.68); those two sum to 100 and carry no independent information."},
+      "controlled_comparison_vs_2026_09_19": {
+        "what_is_held_constant": "The same 32 questions (22 answerable, 10 unanswerable), the same model file (sha256 identical), the same host, ctx 16384, threads 6, max_tokens 512. The only change that can affect what the model WRITES is D-0101/D-0102's entity rendering; the citation grader (D-0103) changes how answers are READ.",
+        "answerable_questions_the_model_abstained_on": "4 -> 1 (MEASURED from the abstained flag in both files). The three that stopped abstaining: RAG-EN-005, RAG-FA-001, RAG-FA-002. The one left is RAG-EN-003, the D-0098 retrieval failure, where abstaining is correct because the right passage was not retrieved.",
+        "unanswerable_questions_correctly_abstained_on": "10 -> 10. Naming the company in the evidence did not make the model answer anything it should refuse.",
+        "value_ok_on_answerable": "20 -> 21",
+        "recorded_over_abstentions_understated_it": "The 2026-09-19 harness labelled only RAG-FA-001 OVER_ABSTENTION. RAG-EN-005 and RAG-FA-002 opened with 'I do not have the figure' while still quoting the correct number in the same reply, and were labelled OK. So the recorded count was 1; the number of answerable questions actually refused was 3.",
+        "replies_that_changed": "only 5 of 32 replies are byte-identical between the two runs, as expected when the prompt changed for every rag case"
+      },
+      "same_grader_same_questions_citation_view": "Regrading the 2026-09-19 answers with the CURRENT grader gave 16 of 18 answers supported (88.89) and 3 of 29 claims bad (10.34); this run gives 18 of 21 (85.71) and 3 of 31 (9.68). Essentially flat. The citation numbers moved between 2026-09-05 and now because of the GRADER (D-0092, D-0099, D-0103) reading answers that were already there, not because the live model got better at citing. What the live run adds is 3 more answerable questions answered at all: 21 checkable answers against 18.",
+      "not_a_controlled_comparison_vs_2026_09_05": "The 2026-09-05 official verdict was on the 10-question v1 set. Since then the eval set (10 -> 32), the prompt (units D-0090, entity D-0102), the grader (D-0092, D-0099, D-0103) and the harness (D-0091) have ALL changed. Official citation values then: 42.86 / 45.45. Now: 85.71 / 9.68. The gap cannot be attributed to any one change and must not be quoted as the effect of D-0100 through D-0105.",
+      "unchanged_since_2026_09_03": {
+        "plain_and_tools_summaries": "IDENTICAL: all 24 summary keys for each of plain and tools are equal between evidence/phase4_merged_2026-09-03.json and evidence/phase4_merged_2026-09-27.json (MEASURED by comparing the dicts). deterministic_calc_correctness_pct (tools 25.0), correct_abstention_pct (66.67, plain and tools) and fabricated_financial_data_count (plain 1) are therefore untouched by D-0100 through D-0105, as reasoned before the run. They are still failing and were not investigated in this session.",
+        "hardware_thresholds": "decode 4.43-4.46 tok/s now against 4.28 (plain) and 4.36 (tools) on 2026-09-03; time to first token at ~2k prompt tokens 48.1-48.4 s now against 48.1-49.6 s. Same machine, same model file, same ctx and threads. These two thresholds (>= 8 tok/s, <= 3 s) are properties of the CPU and cannot move by software changes in this repository."
+      },
+      "two_new_findings_from_this_live_run": {
+        "date_fragment_misparsed_as_negative_number": "GENUINE NEW DEFECT, not seen in any regrade of recorded text because it requires a specific model phrasing pattern. mask_years() masks only the 4-digit year, so 'fiscal year ending on 2022-10-28' becomes '...on <YEAR>-10-28', and extract_numbers reads the two hyphens as unary minus signs, producing ClaimNumber('-10') and ClaimNumber('-28') -- a self-citation sentence that asserts no real magnitude gets graded CONTRADICTED. Caused 1 of the 3 remaining bad claims (RAG-EN-005's second sentence; its actual financial claim was independently SUPPORTED). It only became visible because D-0102 made RAG-EN-005 answer: on 2026-09-19 that reply was a hedged refusal with no checkable claim (MEASURED: abstained=True then, False now). NOT FIXED -- diagnosed only, pending a decision on scope (this can recur any time a model states a date near a claim).",
+        "natural_prose_restatement_not_row_quoted": "THE PREDICTED, ACCEPTED trade-off of D-0103's conservative design, now observed in the wild: RAG2-EN-003's model restated 'lists \"Total shareholders' equity\" as 56,950 (with figures in millions)' -- no '|' row format, so _row_quoted_scale correctly declines to help, exactly as documented in D-0103's own docstring. Not a bug; the safer design's known, accepted cost.",
+        "CPI_no_scale_case_reproduced": "RAG-EN-004 reproduces the pre-existing 'CPI has no units_note' case D-0094/D-0099 already named: the correct passage grades UNSUPPORTED (correctly cautious), but three irrelevant retrieved passages grade CONTRADICTED, and CONTRADICTED wins the per-claim status even though the claim is actually correct. Pre-existing, not new; not fixed here."
+      },
+      "not_yet_done": "No fix proposed or applied for either new finding. Both touch src/rag/citations.py or scripts/phase4_lib.py's claim-splitting, the same measurement-sensitive surface D-0103 required explicit approval to touch."
     },
     "measurements_note": "DELIBERATELY null. No token/sec, no peak RSS, no citation rate and no Persian-fluency figure exists for this project on any hardware. The harness writes them; it has not been run against a model.",
     "model_artefact": {

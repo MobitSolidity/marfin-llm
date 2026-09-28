@@ -5848,3 +5848,182 @@ as a correction.
 No source file, test, or mutant changed. Does not touch
 `phase_4/measurements_recorded`. Does not launch anything -- the run still
 happens on the user's machine, on their decision, as it always has.
+
+## D-0106 — the first live re-run after D-0100 through D-0105: the entity fix confirmed on a live model, two new findings, verdict unchanged
+
+**Date:** 2026-09-27 · **Status:** MEASURED · **Trigger:** the user ran the
+three D-0105 commands on the i5-12400 and returned the per-arm and merged
+results (`p4_rag.json`, `p4_tools.json`, `p4_plain.json`, `phase4_merged.json`).
+
+### Verdict
+
+Produced the way the README documents it -- regrade the recorded rag answers
+with `scripts/regrade_citations.py`, then `scripts/grade_merged.py
+--citations-recomputed`:
+
+```
+PASS 3   FAIL 7   UNMEASURED 2   (of 12 graded)   OVERALL: FAIL
+```
+
+Threshold for threshold, this is the SAME verdict as 2026-09-05: MEASURED by
+diffing `phase4_threshold_verdicts_2026-09-05.json` against the new one, no
+threshold changed its verdict. What moved is the value inside two of the
+failing thresholds.
+
+### What D-0101/D-0102 did, measured against a live model for the first time
+
+Every earlier number for D-0101 through D-0104 was a regrade of old model
+text. This run re-ran the model. The 2026-09-19 run and this one share
+everything that could affect what the model writes -- the same 32 questions,
+the same model file (sha256 identical), host, ctx 16384, threads 6,
+max_tokens 512 -- except one thing: the evidence now carries the company
+name. That is a controlled comparison, and it is the honest one:
+
+```
+                                              2026-09-19    2026-09-27
+answerable questions the model abstained on       4             1
+unanswerable questions correctly abstained on    10            10
+answerable questions with the right value        20            21
+```
+
+The three that stopped abstaining are `RAG-EN-005`, `RAG-FA-001` and
+`RAG-FA-002`. The one left, `RAG-EN-003`, is the retrieval failure D-0098
+documented, where abstaining is the correct behaviour because the right
+passage was not retrieved. And the ten unanswerable questions are still all
+refused -- giving the model the company name did not make it answer anything
+it should not.
+
+**The recorded count understated the defect.** The 2026-09-19 harness
+labelled only `RAG-FA-001` OVER_ABSTENTION. `RAG-EN-005` and `RAG-FA-002`
+opened with "I do not have the figure" while still quoting the correct
+number in the same reply, and were labelled OK. Recorded: 1. Actually
+refused: 3. D-0101 was written from the one that was counted.
+
+### The citation numbers, and which ones are official
+
+Two definitions of `citation_correctness_pct` exist in the tree. The
+official one (README convention, `regrade_citations.py`) is over ANSWERS,
+where one bad claim fails the whole answer: **18 of 21 = 85.71**.
+`unsupported_claim_rate_pct` is over CLAIMS: **3 of 31 = 9.68**. The run's
+own inline summary computes both over claims (28/31 = 90.32 and 3/31 =
+9.68); those two sum to 100 and carry no independent information, and the
+project's own tooling labels that inline figure "RECORDED by the defective
+grader". The verdict uses the official pair.
+
+**Between the same questions and the same grader, citations did not
+improve.** Regrading the 2026-09-19 answers with the current grader gave 16
+of 18 (88.89) and 3 of 29 (10.34); this run gives 18 of 21 (85.71) and 3 of
+31 (9.68). Essentially flat. The distance from the 2026-09-05 figures
+(42.86 / 45.45) to today's is the GRADER (D-0092, D-0099, D-0103) reading
+answers that were already there, on a bigger eval set. It is not a
+controlled comparison against 2026-09-05 -- the eval set (10 to 32), prompt,
+grader and harness all changed since -- and must not be quoted as the effect
+of D-0100 through D-0105. What the live run adds is 3 more answerable
+questions answered at all: 21 checkable answers against 18.
+
+### Finding 1 -- a new defect: date fragments misparsed as negative numbers
+
+`RAG-EN-005`'s reply has two sentences: the actual claim (SUPPORTED) and a
+self-citation, `"...corresponds to the fiscal year ending on 2022-10-28."`
+`mask_years()` masks only the 4-digit year, leaving `"...<YEAR>-10-28."`
+MEASURED directly:
+
+```python
+>>> extract_numbers(mask_non_quantities("...ending on 2022-10-28."))
+[ClaimNumber('-10' -> -10), ClaimNumber('-28' -> -28)]
+```
+
+Both hyphens read as unary minus through `_NUM_RE`'s `[-+]?`. A sentence
+that asserts no magnitude gets checked as if it claimed -10 and -28, matches
+nothing, and CONTRADICTS an answer whose real financial claim was
+independently SUPPORTED. It only became visible because D-0102 made this
+question answer: on 2026-09-19 its reply was a hedged refusal with no
+checkable claim. **Not fixed** -- diagnosed only; scope (mask month-day too?
+stop reading a masked year's trailing hyphen as a sign? drop self-citation
+sentences from claim-splitting?) needs its own decision, the standard R47 and
+D-0101 were held to.
+
+### Finding 2 -- the predicted cost of D-0103's conservative design, now observed
+
+`RAG2-EN-003` restates its own already-correct figure in prose -- `lists
+"Total shareholders' equity" as 56,950 (with figures in millions)` -- with
+no `|` row format. `_row_quoted_scale` correctly declines, as its docstring
+says: better to leave a genuine quote unrecognised than invent a connection
+the claim never made. Not a bug; the measured price of the safer choice.
+
+### Finding 3 -- pre-existing, reproduced
+
+`RAG-EN-004` is the "CPI has no `units_note`" case D-0094/D-0099 already
+named: the correct passage grades UNSUPPORTED (correctly cautious), three
+irrelevant retrieved passages grade CONTRADICTED, and CONTRADICTED wins the
+per-claim status although the claim is right. Not new; not touched.
+
+### What the remaining rag gap would take -- COMPUTED, not a proposal
+
+At 21 checkable answers and 31 claims, `citation_correctness_pct >= 95`
+allows at most 1 bad answer (20/21 = 95.24) and `unsupported_claim_rate_pct
+<= 3` allows 0 bad claims (1/31 = 3.23). Three answers are bad today, one
+for each finding above. So the two rag thresholds are now within reach of
+three specific decisions -- but the overall verdict cannot leave FAIL by
+that route: `generation_tokens_per_sec` (4.43-4.46 against >= 8) and
+`time_to_first_token` (48.1-48.4 s against <= 3) are properties of this CPU,
+and three other thresholds fail for reasons this session did not touch.
+Resolving the three would make the rag arm's measurement more accurate; it
+would not make Phase 4 pass.
+
+### What did not change
+
+The `plain` and `tools` summaries are identical to 2026-09-03: MEASURED by
+comparing the dicts, all 24 keys each. `deterministic_calc_correctness_pct`
+(tools 25.0), `correct_abstention_pct` (66.67, plain and tools) and
+`fabricated_financial_data_count` (plain 1) are still failing and were not
+investigated here. Decode 4.43-4.46 tok/s against 4.28-4.36 on 2026-09-03;
+time to first token 48.1-48.4 s against 48.1-49.6 s -- same machine, same
+model, same ctx and threads.
+
+### Corrected before delivery
+
+The first draft of this entry, written minutes earlier, was wrong in three
+ways, caught by cross-checking it against the regrade tool and the earlier
+run rather than against itself:
+
+1. It compared this run to 2026-09-05 as if D-0101 through D-0104 explained
+   the difference ("over_abstentions 2 -> 0", "fabrications 2 -> 0"). Those
+   improvements predate this session's fixes -- by 2026-09-19 fabrications
+   were already 0 -- and the eval set differs. The only controlled comparison
+   is against 2026-09-19, above.
+2. It quoted `citation_correctness_pct` as 90.32, the inline claims-based
+   figure, instead of the official 85.71. The README's own documented
+   sequence would have given the right number; the draft skipped it.
+3. It said the over-abstention result "confirms the fix generalises" on the
+   strength of one recorded case. The evidence for that is the three cases
+   above, found only by counting the abstained flag in both files.
+
+### A packaging defect, also caught before delivery
+
+The four run files were written by Python on Windows, so they carry CRLF.
+`git am` strips CR, so a patch archiving them as-is applies to files that
+differ from the ones the user holds -- MEASURED by test-applying the patch in
+a scratch clone: four files `differ: char 2, line 1`. The first check for
+this was itself wrong: `grep -c $'\r'` reported 0 because the tool's shell
+does not support `$'...'` quoting. A Python re-check found 1,053 to 4,507
+CRLFs per file. The archived copies are normalised to LF (byte-equal to the
+originals once CR is removed, still valid JSON, identical verdict from the LF
+copy), and both hashes are recorded in `PROJECT_STATE.json` under
+`evidence_sha256`.
+
+### Recorded
+
+Evidence: `p4_rag_2026-09-27.json`, `p4_tools_2026-09-27.json`,
+`p4_plain_2026-09-27.json`, `phase4_merged_2026-09-27.json`,
+`phase4_citations_recomputed_2026-09-27.json`,
+`phase4_verdict_2026-09-27.json`. `PROJECT_STATE.json`: new
+`measurements_recorded_2026_09_27` beside the untouched 2026-09-05 block.
+
+### What this does not do
+
+No fix is proposed or applied for either new finding; both sit on the
+measurement-sensitive surface (`src/rag/citations.py`, `scripts/phase4_lib.py`)
+D-0103 needed explicit approval to touch. Does not close Phase 4. Phase 4's
+final task -- decide whether fine-tuning is justified -- is still open and is
+the user's call.
