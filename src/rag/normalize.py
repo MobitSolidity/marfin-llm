@@ -251,6 +251,40 @@ _SEPS = ".,\u066b\u066c\u060c"
 # "in 2023, revenue grew" -- the commonest prose form of the very thing being
 # masked -- stops being masked. The separator set is widened to the Persian
 # ones, because "۱.۲۰۲۳" must be protected exactly as "1.2023" is.
+# D-0106, 2026-09-27, found in the FIRST live re-run after D-0100..D-0105.
+# A self-citation sentence -- "...fiscal year ending on 2022-10-28." -- masks
+# to "...<YEAR>-10-28." under the plain year rule above: the year is caught,
+# but "-10-28" is not any of the five kinds this module already knew about
+# (no month NAME, so _CALENDAR_DAY_RE does not fire), and is left as raw
+# digits. extract_numbers then reads each leading hyphen as a unary minus,
+# MEASURED directly:
+#   >>> extract_numbers(mask_non_quantities("...ending on 2022-10-28."))
+#   [ClaimNumber('-10' -> -10), ClaimNumber('-28' -> -28)]
+# -- a sentence asserting no magnitude fails to match anything and
+# CONTRADICTS an answer whose real claim was independently SUPPORTED.
+#
+# Matches the WHOLE "YYYY-MM-DD" as one span, so nothing is left over for
+# the plain year rule to partially consume -- which is also why this must
+# run BEFORE it. Reuses the exact year sub-pattern above (same four ranges,
+# same reasoning) rather than a bare 4-digit class, so an ISO date's year
+# is held to the same "is this plausibly a year" standard as a bare one.
+# Month/day are left as 1-2 digits of any script with no calendar-range
+# check (01-12 / 01-31): the two hyphens immediately after a year-shaped
+# number are already a narrow enough signal that tightening it further was
+# not shown to be necessary by anything MEASURED.
+_ISO_DATE_RE = re.compile(
+    "(?<![%(d)s%(s)s])"
+    "(?:%(one)s%(23)s%(any)s%(any)s"
+    "|%(one)s%(4)s%(any)s%(any)s"
+    "|%(one)s%(89)s%(any)s%(any)s"
+    "|%(two)s%(01)s%(any)s%(any)s)"
+    "-[%(d)s]{1,2}-[%(d)s]{1,2}"
+    "(?![%(d)s])"
+    % {"d": _D, "s": _SEPS, "any": _ANY,
+       "one": _dig(1), "two": _dig(2),
+       "23": _dig(2, 3), "4": _dig(4), "89": _dig(8, 9), "01": _dig(0, 1)})
+
+
 _YEAR_ANY_SCRIPT_RE = re.compile(
     "(?<![%(d)s%(s)s])"
     "(?:%(one)s%(23)s%(any)s%(any)s"
@@ -309,8 +343,21 @@ _MONTHS_FA = ("\u0698\u0627\u0646\u0648\u06cc\u0647"          # ژانویه
               "|\u062f\u0633\u0627\u0645\u0628\u0631")        # دسامبر
 
 # "10-K", "۱۰-K", "8-K", "10-Q". Digits in ANY script, hyphen, then a letter.
+#
+# D-0106: the "letter" class was \u0600-\u06ff, the whole Arabic-script
+# block -- which CONTAINS both digit sub-ranges it was meant to exclude,
+# Arabic-Indic \u0660-\u0669 and Extended/Persian \u06f0-\u06f9. MEASURED:
+# "۱۰-۲۸" (day 10, day 28, from an ISO date already stripped of its form/
+# calendar words) matched as a form designator, '۲۸' read as if it were a
+# letter. Comment always said "then a letter"; the range let a digit count
+# as one. Same species of mistake _dig()'s own docstring already named --
+# a script boundary assumed to be clean where Unicode does not keep it so.
+# The three sub-ranges below are \u0600-\u06ff with exactly those two
+# holes cut out; every actual Arabic/Persian letter and mark is still in.
+_FORM_LETTER = "\u0600-\u065f\u066a-\u06ef\u06fa-\u06ff"
 _FORM_DESIGNATOR_RE = re.compile(
-    "(?<![%(d)s])[%(d)s]{1,2}\\s*-\\s*[A-Za-z\u0600-\u06ff]{1,3}\\b" % {"d": _D})
+    "(?<![%(d)s])[%(d)s]{1,2}\\s*-\\s*[A-Za-z%(l)s]{1,3}\\b"
+    % {"d": _D, "l": _FORM_LETTER})
 
 # A month name followed by a day, or a day followed by a month name.
 _CALENDAR_DAY_RE = re.compile(
@@ -328,12 +375,13 @@ def mask_non_quantities(text):
     """
     Blank out the things in a sentence that LOOK numeric but assert no amount.
 
-    Five kinds, every one of them MEASURED corrupting the citation grader:
+    Six kinds, every one of them MEASURED corrupting the citation grader:
       - citation markers  [1] [2] [3]
       - year-like bare integers, in ASCII, Arabic-Indic or Persian digits
       - form designators  "Form 10-K", "۱۰-K"        (D-0099)
       - calendar days     "June 30", "۳۱ ژانویه"      (D-0099)
       - filer identifiers "CIK 0000320193"            (D-0099)
+      - ISO dates         "2022-10-28"                (D-0106)
 
     Markers are removed first. I ORIGINALLY DOCUMENTED THIS AS ORDER-CRITICAL,
     claiming a marker's digits would otherwise be consumed by the year
@@ -366,4 +414,8 @@ def mask_non_quantities(text):
     # leaving it for later lets the year rule see a bare 10.
     text = _FORM_DESIGNATOR_RE.sub("<FORM>", text)
     text = _CALENDAR_DAY_RE.sub("<DATE>", text)
+    # ISO dates before the plain year rule: it must consume the WHOLE
+    # "YYYY-MM-DD", or the year rule takes just the year and leaves the
+    # "-MM-DD" tail for extract_numbers to misread (D-0106).
+    text = _ISO_DATE_RE.sub("<DATE>", text)
     return _YEAR_ANY_SCRIPT_RE.sub("<YEAR>", text)

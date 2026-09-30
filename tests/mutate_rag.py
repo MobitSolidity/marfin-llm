@@ -67,6 +67,16 @@ MUTATIONS = [
      "    _FOLD[chr(0x06f0 + _i)] = str(_i)   # extended (persian)",
      "    pass"),
 
+    # D-0106: an ISO date's month-day left as raw digits after year masking,
+    # read as negative numbers by extract_numbers ("-10", "-28"), and a
+    # form-designator "letter" class that quietly accepted a Persian digit.
+    ("normalize.py", "ISO-date masking removed; month-day reads as negatives",
+     '    text = _ISO_DATE_RE.sub("<DATE>", text)',
+     '    pass'),
+    ("normalize.py", "form-designator letter class accepts Persian digits again",
+     '_FORM_LETTER = "\\u0600-\\u065f\\u066a-\\u06ef\\u06fa-\\u06ff"',
+     '_FORM_LETTER = "\\u0600-\\u06ff"'),
+
     # --- ingestion: the heading defect that deleted content ----------------
     ("ingest.py", "heading regex case-insensitive again (eats prose)",
      '_HEADING_CAPS_RE = re.compile(r"^\\s*[A-Z][A-Z0-9 ,\'&/()\\u2014-]{5,79}\\s*$")',

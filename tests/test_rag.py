@@ -622,6 +622,46 @@ check_true("SAFETY: the coincidence that sank the rejected design 2 stays "
            "SUPPORT this. See D-0103's docstring for the full measurement")
 
 # ---------------------------------------------------------------------------
+# D-0106: an ISO date's month-day was left as raw digits after year masking,
+# and extract_numbers read the hyphens as unary minus. Found live,
+# 2026-09-27, in a self-citation sentence that then CONTRADICTED an answer
+# whose real claim was independently SUPPORTED. Pinned HERE (not only in
+# test_phase4_harness.py, where the rest of this masking function's story
+# lives) because mutate_rag.py's oracle is this file alone -- a mutant is
+# only killed by an assertion that runs where the battery actually looks.
+# ---------------------------------------------------------------------------
+check_true("an ISO date now masks whole, not just its year",
+           "<DATE>" in mask_non_quantities(
+               "the fiscal year ending on 2022-10-28")
+           and "<YEAR>" not in mask_non_quantities(
+               "the fiscal year ending on 2022-10-28"),
+           "(D) MEASURED failing before this fix: masked to "
+           "'...<YEAR>-10-28', and extract_numbers read '-10' and '-28' "
+           "as negative numbers")
+check_true("...and nothing is left for extract_numbers to misread as -10/-28",
+           extract_numbers(mask_non_quantities(
+               "the fiscal year ending on 2022-10-28")) == [],
+           "(D) THE ASSERTION THE SURVIVOR DEMANDED for the masking fix")
+check_true("...and the same holds in Persian digits",
+           "<DATE>" in mask_non_quantities("\u06f2\u06f0\u06f2\u06f2-"
+                                           "\u06f1\u06f0-\u06f2\u06f8"),
+           "(A) found broken on the first attempt: the form-designator "
+           "rule matched '\u06f1\u06f0-\u06f2\u06f8' first -- see next")
+check_true("...because a Persian digit is no longer read as a form letter",
+           "<FORM>" not in mask_non_quantities(
+               "\u06f1\u06f0-\u06f2\u06f8"),
+           "(D) THE ASSERTION THE SECOND SURVIVOR DEMANDED: "
+           "_FORM_DESIGNATOR_RE's letter class was \\u0600-\\u06ff, which "
+           "contains the Persian digit range \\u06f0-\\u06f9 it was meant "
+           "to exclude -- same species of mistake as R43")
+check_true("...while a real form designator still masks (regression guard)",
+           "<FORM>" in mask_non_quantities("Form \u06f1\u06f0-K"),
+           "(C) Persian DIGITS before the hyphen (untouched by this fix) "
+           "plus a real letter after it must still mask -- the fix narrows "
+           "only the letter class's two digit sub-ranges, nothing else in "
+           "\\u0600-\\u06ff")
+
+# ---------------------------------------------------------------------------
 section("conflicts: restatement, period mixing, staleness")
 # ---------------------------------------------------------------------------
 

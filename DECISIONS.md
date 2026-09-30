@@ -6027,3 +6027,95 @@ measurement-sensitive surface (`src/rag/citations.py`, `scripts/phase4_lib.py`)
 D-0103 needed explicit approval to touch. Does not close Phase 4. Phase 4's
 final task -- decide whether fine-tuning is justified -- is still open and is
 the user's call.
+
+## D-0107 — the date bug fixed, and a second defect it was hiding behind
+
+**Date:** 2026-09-27 · **Status:** FIXED · **Trigger:** explicit instruction
+to fix D-0106's Finding 1 (date fragments misparsed as negative numbers).
+
+### The fix
+
+`src/rag/normalize.py`: a new `_ISO_DATE_RE`, matching a whole `YYYY-MM-DD`
+span (reusing the same year sub-pattern `_YEAR_ANY_SCRIPT_RE` already uses,
+so an ISO date's year is held to the same "is this plausibly a year"
+standard as a bare one) and masking it to `<DATE>` in one piece. Wired in
+**before** the plain year rule -- it must consume the whole date, or the
+year rule takes just the year and leaves `-MM-DD` for `extract_numbers` to
+misread, which is the bug exactly. Docstring updated: five kinds to six.
+
+### A second defect, found while testing the first
+
+The Persian version of the test case did not mask correctly on the first
+attempt. `_ISO_DATE_RE` was not wrong -- isolated, it matched the whole
+span. `_FORM_DESIGNATOR_RE` (D-0099) ran first and got there before it: its
+"letter" class was `\u0600-\u06ff`, the whole Arabic-script block, which
+contains the Persian digit range `\u06f0-\u06f9` it was supposed to
+exclude. MEASURED: `"۱۰-۲۸"` (day 10, day 28) matched as a form designator,
+one Persian digit standing in for the "letter" the pattern's own comment
+says it requires. Same species of mistake as R43: a script boundary
+assumed clean where Unicode does not keep it so. Fixed by cutting the two
+digit sub-ranges out of the letter class (`_FORM_LETTER`), leaving every
+actual Arabic/Persian letter and mark in.
+
+### Verification
+
+Direct:
+
+```python
+>>> extract_numbers(mask_non_quantities("...ending on 2022-10-28."))
+[]
+>>> mask_non_quantities("۲۰۲۲-۱۰-۲۸")
+'<DATE>'
+```
+
+The self-citation sentence that triggered this no longer has any digit
+left after masking, so `split_claims` now excludes it as not a checkable
+claim at all -- not merely graded correctly, recognised as never having
+been a real assertion.
+
+Regraded the real 2026-09-27 rag answers (`scripts/regrade_citations.py`,
+model NOT re-run):
+
+```
+                              before D-0107   after D-0107
+citation_correctness_pct         85.71            90.48   (19/21, up from 18/21)
+unsupported_claim_rate_pct        9.68             6.67   (2/30, down from 3/31 --
+                                                            claims_checked itself
+                                                            dropped: the fake claim
+                                                            is gone, not merely fixed)
+```
+
+Official verdict (`grade_merged.py --citations-recomputed`), produced fresh:
+**still 3 PASS / 7 FAIL / 2 UNMEASURED, OVERALL FAIL, same seven
+thresholds.** citation_correctness_pct (90.48 < 95) and
+unsupported_claim_rate_pct (6.67 > 3) are both closer but still failing, as
+D-0106's own arithmetic said fixing one of three findings would leave.
+
+9 new pinned assertions: 4 in `tests/test_phase4_harness.py` (English and
+Persian ISO dates, the form-designator interaction, extending the existing
+masking-artefact table) and 5 in `tests/test_rag.py` -- duplicated there
+deliberately, because `tests/mutate_rag.py`'s oracle is `test_rag.py`
+alone, and an assertion in `test_phase4_harness.py` is invisible to it.
+2 new mutants in `tests/mutate_rag.py`: ISO-date masking removed; the
+form-designator letter class reverted. Both initially SURVIVED (marked NOT
+TESTED) until the test_rag.py copies were added -- the same lesson stated
+directly this time: a mutant is only killed by an assertion that runs where
+the battery actually looks.
+
+```
+tests/run_all.sh:    3635 -> 3646 passed (+11), 0 failed, 6 skipped, ALL GREEN
+tests/mutate_rag.py: 120 -> 122 seeded (+2), 110 -> 112 killed (+2, both new
+                     mutants killed once correctly placed), 3 equivalent,
+                     7 survived (the same pre-existing seven, confirmed
+                     unchanged in count and name)
+```
+
+### What this does not do
+
+Does not touch Findings 2 or 3 from D-0106 (the prose-restatement design
+cost, the pre-existing CPI case) -- out of scope for "the date bug", left
+for their own decisions. Does not change the Phase 4 verdict: two
+thresholds move closer, the composition of PASS/FAIL/UNMEASURED does not.
+Does not touch `phase_4/measurements_recorded` or
+`measurements_recorded_2026_09_27` as MEASURED -- recorded as a further
+regrade beside them, the model was not re-run.

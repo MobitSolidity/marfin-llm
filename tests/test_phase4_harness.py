@@ -6862,9 +6862,32 @@ _ART = [
     ("0000320193",                   "<ID>",   "bare id, by its leading zeros"),
     ("ended June 30, 2024",          "<DATE>", "month then day"),
     ("ended January 31 2025",        "<DATE>", "month then day, no comma"),
+    # D-0106: found live, 2026-09-27. A self-citation sentence's ISO date
+    # was leaving its month-day as raw digits for extract_numbers to read
+    # as negative numbers ("-10", "-28"), CONTRADICTING an answer whose
+    # real claim was independently SUPPORTED.
+    ("ending on 2022-10-28",         "<DATE>", "ISO date, year-month-day"),
+    ("\u062f\u0631 \u06f2\u06f0\u06f2\u06f2-\u06f1\u06f0-\u06f2\u06f8 "
+     "\u0627\u0646\u062c\u0627\u0645 \u0634\u062f",
+                                      "<DATE>", "ISO date, PERSIAN digits"),
 ]
 for _txt, _tok, _why in _ART:
     check_true("masked: %s (%s)" % (_txt[:28], _why), _tok in _M99(_txt))
+
+# D-0106's second finding, found while testing the first: the Persian ISO
+# date above did NOT mask correctly on the first attempt, and not because
+# _ISO_DATE_RE was wrong -- isolated, it matched the whole span. The form-
+# designator rule ran first and got there before it: its "letter" class was
+# \u0600-\u06ff, the WHOLE Arabic-script block, which contains the Persian
+# digit range \u06f0-\u06f9 it was supposed to exclude. "۱۰-۲۸" matched as
+# a form designator, one Persian digit standing in for the letter the
+# pattern's own comment says it requires. Same species of mistake as R43:
+# a script boundary assumed clean where Unicode does not keep it so.
+check_true("a Persian-digit day-day pair is NOT read as a form designator",
+           "<FORM>" not in _M99("\u06f1\u06f0-\u06f2\u06f8"),
+           "(D) MEASURED failing before this fix: '\u06f1\u06f0-\u06f2\u06f8' "
+           "(10-28) matched _FORM_DESIGNATOR_RE, one digit standing in for "
+           "the 'letter' the pattern requires")
 
 # The point of masking is that NO number survives to be graded as money.
 for _txt, _tok, _why in _ART:
@@ -6879,6 +6902,7 @@ _KEEP = [
     ("total assets of 364,980",    364980.0),
     ("the index was 308.417",      308.417),
     ("30 percent growth",          30.0),
+    ("revenue was 96,995 as of 2022-10-28", 96995.0),
 ]
 for _txt, _want in _KEEP:
     _got = [n.value for n in _E99(_M99(_txt))]
