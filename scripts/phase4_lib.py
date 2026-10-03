@@ -235,11 +235,26 @@ def value_matches(expected, text, tolerance, scaled=False):
     currency amounts a filing states in millions.
 
     A returned False is a real failure signal; the caller must not soften it.
+
+    D-0108, 2026-10-03. Numbers inside a <tool_call>...</tool_call> block are
+    INPUT ARGUMENTS the model chose to send a tool, not a computed answer it
+    is stating -- so they are stripped before the search runs. MEASURED
+    false pass this caught: EN-NUM-001's entire reply was
+    `<tool_call>{"name": "bond_price", "arguments": {"face_value": 1000,
+    "coupon_rate": 0.05, "ytm": 0.05, "years_to_maturity": 3}}</tool_call>`,
+    no prose at all, yet graded value_ok=True -- because the par-bond case
+    (ytm == coupon_rate, so price == face_value) put the number 1000 in the
+    arguments it sent the tool, coinciding with the 1000 it never actually
+    said. Stripping the block removes face_value along with it; this is not
+    claimed to recover a correct grade, only to stop crediting a coincidence
+    the single-turn harness (see summarize_eval's TWO CALC NUMBERS note)
+    never let the model earn.
     """
     if expected is None:
         raise ValueError("value_matches called with expected=None; a case "
                          "with no expected_value must not be value-graded")
     tol = 0.0 if tolerance is None else abs(float(tolerance))
+    text = _TOOL_BLOCK_RE.sub(" ", text or "")
     found = extract_magnitudes(text) if scaled else extract_numbers(text)
     for n in found:
         if abs(n - float(expected)) <= tol:

@@ -309,6 +309,9 @@ MUTATIONS = [
      "    tol = 0.0 if tolerance is None else abs(float(tolerance))",
      "    tol = 0.0 if tolerance is None else abs(float(tolerance)) "
      "* max(1.0, abs(float(expected)))"),
+    (LIB, "tool-call arguments are searched again, reopening D-0108",
+     '    text = _TOOL_BLOCK_RE.sub(" ", text or "")',
+     '    text = text or ""'),
     (LIB, "a missing tolerance becomes generous instead of exact",
      "    tol = 0.0 if tolerance is None else abs(float(tolerance))",
      "    tol = 1.0 if tolerance is None else abs(float(tolerance))"),
@@ -1202,14 +1205,24 @@ MUTATIONS = [
     (NORM, "the year mask reverts to rejecting a trailing comma",
      '    "(?![%(d)s]|[%(s)s][%(d)s])"',
      '    "(?![%(d)s%(s)s])"'),
+    # Re-anchored 2026-10-03 (D-0108). D-0107 added _ISO_DATE_RE, which
+    # REUSES the year alternation and its leading guard verbatim, so both
+    # anchors below stopped being unique and this battery marked them
+    # "ambiguous" and SKIPPED them -- silently dropping the year mask's
+    # coverage while still printing a plausible killed count. Each anchor now
+    # carries a neighbouring line that only _YEAR_ANY_SCRIPT_RE has.
     (NORM, "the year mask swallows any four-digit number",
      '    "(?:%(one)s%(23)s%(any)s%(any)s"\n'
      '    "|%(one)s%(4)s%(any)s%(any)s"\n'
      '    "|%(one)s%(89)s%(any)s%(any)s"\n'
-     '    "|%(two)s%(01)s%(any)s%(any)s)"',
-     '    "(?:%(any)s%(any)s%(any)s%(any)s)"'),
+     '    "|%(two)s%(01)s%(any)s%(any)s)"\n'
+     '    "(?![%(d)s]|[%(s)s][%(d)s])"',
+     '    "(?:%(any)s%(any)s%(any)s%(any)s)"\n'
+     '    "(?![%(d)s]|[%(s)s][%(d)s])"'),
     (NORM, "the year mask drops its leading guard and matches inside numbers",
+     '_YEAR_ANY_SCRIPT_RE = re.compile(\n'
      '    "(?<![%(d)s%(s)s])"\n',
+     '_YEAR_ANY_SCRIPT_RE = re.compile(\n'
      '    ""\n'),
     (NORM, "the year placeholder is itself a number",
      '    return _YEAR_ANY_SCRIPT_RE.sub("<YEAR>", text)',
@@ -1620,9 +1633,14 @@ MUTATIONS = [
     (NORM, "filer identifiers stop being masked",
      'text = _FILER_ID_RE.sub("<ID>", text)',
      'pass'),
+    # Re-anchored 2026-10-03 (D-0108): D-0107 rewrote this pattern's letter
+    # class (_FORM_LETTER) and moved the format dict to its own line, so the
+    # old one-line anchor was "absent" and the mutant was silently SKIPPED.
     (NORM, "the form pattern forgets Persian digits",
-     '"(?<![%(d)s])[%(d)s]{1,2}\\\\s*-\\\\s*[A-Za-z\\u0600-\\u06ff]{1,3}\\\\b" % {"d": _D})',
-     '"(?<![0-9])[0-9]{1,2}\\\\s*-\\\\s*[A-Za-z]{1,3}\\\\b")'),
+     '"(?<![%(d)s])[%(d)s]{1,2}\\\\s*-\\\\s*[A-Za-z%(l)s]{1,3}\\\\b"\n'
+     '    % {"d": _D, "l": _FORM_LETTER})',
+     '"(?<![0-9])[0-9]{1,2}\\\\s*-\\\\s*[A-Za-z%(l)s]{1,3}\\\\b"\n'
+     '    % {"d": _D, "l": _FORM_LETTER})'),
     (NORM, "the leading-zero safety net for ids is removed",
      '"(?:CIK\\\\s*[%(d)s]+|(?<![%(d)s])0{2,}[%(d)s]+)" % {"d": _D},',
      '"(?:CIK\\\\s*[%(d)s]+)" % {"d": _D},'),

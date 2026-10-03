@@ -187,6 +187,38 @@ check_raises("value_matches refuses expected=None rather than passing",
              lambda: L.value_matches(None, "anything", 0.1))
 
 # ---------------------------------------------------------------------------
+# D-0108 (2026-10-03): a number inside <tool_call>...</tool_call> is an INPUT
+# ARGUMENT the model sent a tool, not a result it is stating.
+#
+# MEASURED on the 2026-09-27 live run: EN-NUM-001 (a par bond: ytm == coupon,
+# so price == face value == 1000) was graded value_ok=True on a reply that was
+# nothing but the tool call below. The 1000 it "matched" was face_value, an
+# argument. These checks pin both directions -- an argument alone must NOT
+# match, and the same number restated in prose must still match -- because
+# the first without the second is a grader that rejects everything.
+# ---------------------------------------------------------------------------
+_d108_bond = ('<tool_call>{"name": "bond_price", "arguments": '
+              '{"face_value": 1000, "coupon_rate": 0.05, "ytm": 0.05, '
+              '"years_to_maturity": 3}}</tool_call>')
+check_true("a tool-call ARGUMENT no longer counts as the stated answer",
+           not L.value_matches(1000.0, _d108_bond, 0.01),
+           "(D) EN-NUM-001's whole reply was this call; face_value=1000 "
+           "coincided with the expected price")
+check_true("...but a value the model actually restates in prose still counts",
+           L.value_matches(1000.0,
+                           _d108_bond + "\n\nThe bond price is 1000.00.", 0.01),
+           "(C) stripping the block must not strip the prose around it")
+_d108_pe = ('<tool_call>{"name": "pe_ratio", "arguments": '
+            '{"price": 150, "eps": 8.4}}</tool_call>')
+check_true("...and this holds for an unrelated expected value too "
+           "(price 150, not the P/E)",
+           not L.value_matches(150.0, _d108_pe, 0.01),
+           "(A) the rule is about WHERE a number sits, not which number it is")
+check_true("a prose answer with NO tool call is untouched by the stripping",
+           L.value_matches(1000.0, "The price is 1000.", 0.01),
+           "(C) the common case must behave exactly as before")
+
+# ---------------------------------------------------------------------------
 # THE FIXTURE'S OWN TOLERANCE, read from the file rather than restated here.
 #
 # The checks above pass a tolerance in as an argument, so they test
