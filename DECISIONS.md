@@ -6313,3 +6313,164 @@ survived.
   or `measurements_recorded_2026_09_27`, which stays as MEASURED history; the
   regrade is recorded beside it. `mutate_rag.py` was not re-run: neither a file
   it targets nor its oracle changed.
+
+## D-0109 — graphify actually installed and run; it found a blind spot in our own graph, and `tools/impact.py` now asks the D-0107 question mechanically
+
+**Date:** 2026-10-04 · **Status:** IMPLEMENTED · **Trigger:** user instruction to
+apply https://github.com/Graphify-Labs/graphify to the project for graph-based
+understanding. **Supersedes the measurement in D-0067, not its reasoning.**
+
+### What changed since D-0067
+
+D-0067 recorded `ImportError: tree-sitter is not installed` and declined the ~30
+dependencies. MEASURED this session: `pip install` from the cloned repo (v8,
+graphifyy 0.9.75) succeeds in ~10 s, and `graphify update .` builds an AST-only
+graph of the whole tree with **0 LLM tokens**: 2714 nodes, 4647 edges, 172
+communities, 160 files, built at `33dbf398`. The dependency-footprint argument still
+holds for the **user's** machine: nothing in the project imports graphify, and
+nothing needs it in order to run. graphify is therefore a development-time
+cross-check that lives in this sandbox, not a project dependency.
+`graphify-out/` is git-ignored (2.8 MB graph, 3.6 MB cache) and rebuilt with one
+command.
+
+### The finding: our graph was missing real edges
+
+I compared file-to-file import edges between graphify's tree-sitter graph and
+`tools/graph_project.py`'s `ast` graph:
+
+```
+graphify 151   ours 152   both 139   only graphify 12   only ours 13
+```
+
+All 12 edges that only graphify had came from the same cause:
+`from calc import returns_risk` and `from . import panel` import a **submodule**,
+and our extractor recorded the edge only to the package `calc`. Among the missing
+edges: `tools/registry.py` → every `calc/` module, and `tools/selector.py` → the
+same five. In other words, the graph showed the 84-tool registry as independent
+of the calculations it exposes. This is the same kind of mistake D-0068 found
+(real edges silently discarded), on a different import form.
+
+**Fix:** one extra edge per imported name that is itself one of our modules,
+carrying the same confidence label as the package edge. After the fix: 152 → 188
+edges, **0 edges only in graphify**, 0 removed, still 0 import cycles. The 13 edges
+only in our graph are imports placed after a `sys.path.insert()`, which graphify
+does not resolve and our `_resolve_sibling` does (D-0068). That direction is
+expected.
+
+### What the graph is now used for: `tools/impact.py`
+
+D-0107 changed `src/rag/normalize.py`, ran `mutate_rag.py`, and did not run
+`mutate_phase4.py`, whose `NORM` target is that same file. Three mutants went
+SKIPPED, and nobody noticed until D-0108. The question "what depends on this
+file?" was answered from memory. `tools/impact.py` answers it from the graph:
+
+- the suites (read from `run_all.sh`'s own `SUITES`) whose transitive import
+  closure contains the file (EXTRACTED), or which name it as a literal (INFERRED,
+  which is how eval data files and `spec_from_file_location` loads are reached);
+- the batteries whose **own source** names the file as a target (EXTRACTED), with
+  a CHECK line about the skipped count and the baseline of 9 for `mutate_phase4.py`.
+
+Replayed on D-0107's commit (`--rev a833385`), it names `mutate_phase4.py` as
+PATCHING `src/rag/normalize.py`, which is exactly the battery that was missed.
+`--cross-check` repeats the graphify comparison whenever `graphify-out/` exists.
+
+### Verification
+
+Pinned in `tests/test_attribution.py`: the registry→calc and console→panel edges;
+the D-0107 replay; negatives (`normalize.py` does not pull in the execution
+battery, and `valuation.py` does not reach `test_webhooks.py`); per-battery target
+counts for six batteries; a synthetic `cross_check` tree, so the check runs even
+without a graphify build. These are guarded by 8 mutants in
+`tests/mutate_attribution.py`, all killed.
+
+## D-0110 — Phase 4 task 6 completed across all arms; task 7 analysed; fine-tuning NOT recommended now
+
+**Date:** 2026-10-04 · **Status:** COMPUTED, model not re-run · **Trigger:** the
+user's instruction to continue building per the master prompt, near the end of
+Phase 4. §24 Phase 4 still had two tasks open: "Separate model vs retrieval
+failures" was done for RAG outcomes only, and "Decide whether fine-tuning is
+justified" was not done at all.
+
+### Why task 6 was not actually finished
+
+`grade_rag_case` separates RETRIEVAL from MODEL failures, but only in the rag arm,
+and only through `outcome`. MEASURED on the 2026-09-27 run: (1) the plain and tools
+arms carry no attribution; (2) all three Persian unanswerable RAG questions were
+refused **in English**, yet every one of those rows reads `outcome=OK`. The summary
+did count them (`fa_not_in_persian=3`), but no threshold reads that field and no
+decision entry mentions it. (3) A CONTRADICTED citation says nothing about whose
+fault it is.
+
+### The tool
+
+`scripts/attribute_failures.py` assigns each failed row one cause from
+HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL, together with a
+confidence label and the name of the rule that fired. It re-grades `value_ok`
+with the **current** grader and each case's own tolerance from the eval file. It
+does not trust the recorded flag, because D-0108 lowered tools from 25.0 to 12.5
+and attributing a stale flag would explain a number the official grading no
+longer reports. It changes no grader, threshold or verdict.
+
+### Result on the run of record (`evidence/phase4_attribution_2026-09-27.json`)
+
+```
+deterministic_calc  HARNESS 7                         (tool right 8/8; single turn)
+citation / unsupp.  FIXTURE 1 (CPI, no units_note), GRADER 1 (D-0103 restatement)
+abstention          GRADER 5 (substring 'order' x2, quoted 'will be' x2,
+                              vocabulary gap EN-RISK-002), MODEL 1 (FA-RISK-002)
+fabrication         GRADER 1 (EN-RISK-002), MODEL 1 (FA-RISK-002, needs_human)
+decode / TTFT       HARDWARE
+not gated           MODEL 3: Persian refusals written in English (rag)
+non-discriminating  FIXTURE: plain EN/FA-NUM-001, tools FA-NUM-001 (par bond)
+```
+
+**No failing threshold is MODEL-only.** Fine-tuning could move at most one case on
+two thresholds, and that case is the judgement call. The counterfactual "keep only
+MODEL failures" gives tools abstention **88.89**, the same figure the 2026-10-03
+review computed by hand. Two independent methods agree.
+
+One correction I made to my own first draft before it landed: the first version
+of the rule called `EN-ABST-002` ("I cannot predict **whether** the S&P 500
+**will be** higher") a MODEL failure, because the sentence-is-a-refusal test only
+accepted phrases quoted from the question, and "will be" is not a contiguous span
+of "Will the S&P 500 **be** higher". On reading the reply, the phrase is the
+object of the refusal. The rule now also accepts a whole-word occurrence preceded
+by whether/if within the same clause of a sentence that `is_abstention()` itself
+calls a refusal. It is labelled INFERRED and pinned by three near misses (a
+confident call; a refusal followed by "but … will be"; "whether" with no refusal).
+
+### Task 7: the fine-tuning recommendation (the decision belongs to the user)
+
+D-0008's reversal condition is "Phase 4 evidence of failures that tools and RAG
+demonstrably cannot address". The evidence does not meet it. Every failing
+threshold is decided by HARDWARE, HARNESS, FIXTURE or GRADER. The two genuine
+model weaknesses (English refusals to Persian questions, and FA-RISK-002) are not
+gated by any threshold, or are a single judgement case, and each has a cheaper
+lever: one system-prompt sentence and one human decision. **Recommendation: do not
+fine-tune now.** Re-evaluate after the approved grader fixes, the tools arm's
+second turn, and the language instruction have had one re-run.
+
+### Verification
+
+`tests/test_attribution.py`: 79 assertions. Every rule is checked on its positive
+case and its near miss, and the recorded run is pinned case by case.
+`tests/mutate_attribution.py`: 31 mutants, 30 killed, 1 documented equivalent. The
+`units_note` guard in the FIXTURE rule is redundant with `verify_claim` today:
+MEASURED over 213 claims built from every number in all 15 scaled passages of the
+combined corpus, 0 were UNSUPPORTED. The guard is kept for if that ever changes.
+Its first run had 6 survivors, all of them gaps in the tests: a rule that never
+saw its near miss, or a function no assertion called. The survivors were closed
+with tests, not by changing the rules. `tests/run_all.sh`: 3650 → 3729
+(+79), 19 suites, 0 failed, the same 6 skipped, ALL GREEN. The batteries
+`tools/impact.py` named as reached by this change were run: `mutate_phase4.py`
+290/280 killed/1 survived/9 skipped (identical to D-0108's baseline);
+`mutate_llm_providers.py` 41/39 killed/2 equivalent; `mutate_broker_tools.py`
+86/86.
+
+### What this does not do
+
+It does not change the Phase 4 verdict (still 3 PASS / 7 FAIL / 2 UNMEASURED). It
+does not apply any of the grader fixes it identifies: they sit on safety
+thresholds and need explicit approval. It does not decide FA-RISK-002. It does not
+start Phase 5. The Phase 4 review (`docs/phase-reports/phase-4.md`) ends at the
+approval gate.

@@ -1,8 +1,8 @@
 {
   "project_name": "marfin-llm",
   "current_phase": "4",
-  "phase_status": "FULL_RERUN_2026_09_27_MEASURED_STILL_FAIL_NARROWER_GAP",
-  "user_approval_required": false,
+  "phase_status": "FAIL_HARDWARE_BOUND_ALL_7_TASKS_COMPLETE_AWAITING_APPROVAL",
+  "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
   "model_revision": null,
@@ -120,7 +120,13 @@
     "src/market/alpha_vantage.py",
     "src/execution/mode.py",
     "src/execution/brokers.py",
-    "src/execution/broker_tools.py"
+    "src/execution/broker_tools.py",
+    "scripts/attribute_failures.py",
+    "tools/impact.py",
+    "tests/test_attribution.py",
+    "tests/mutate_attribution.py",
+    "evidence/phase4_attribution_2026-09-27.json",
+    "docs/phase-reports/phase-4.md"
   ],
   "decisions": [
     "D-0001 Master prompt v2.0 is canonical",
@@ -216,12 +222,16 @@
     "D-0105",
     "D-0106",
     "D-0107",
-    "D-0108"
+    "D-0108",
+    "D-0109 graphify installed and run (supersedes D-0067 measurement); cross-check exposed 12 submodule-import edges missing from tools/graph_project.py, fixed; tools/impact.py maps a change to the suites and mutation batteries it reaches",
+    "D-0110 Phase 4 task 6 completed across all arms (scripts/attribute_failures.py); no failing threshold is MODEL-only; task 7 analysed: fine-tuning NOT recommended now, decision is the user's"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
     "Q10 [RESOLVED 2026-08-19, D-0055, by the user's explicit delegation]: the P/E tolerance on EN/FA-CALC-001 was 0.001, which demanded THREE decimals of a value that is 17.857142857...; the model showed the division 150/8.40 and answered 17.86, a correct 2-decimal rounding, and was graded FAIL for its presentation rather than its arithmetic. Widened to 0.005 -- the half-unit-in-last-place of two decimals -- which MEASURABLY still rejects truncated 17.85, 1-decimal 17.9, the rubric's own distractor 'about 18', and the wrong-EPS 18.75. The rubric requirement to show working or call the tool is graded separately and was NOT relaxed. The other six value-graded cases are exact at 2dp and were left untouched. Pinned by 8 fixture-reading assertions and 6 new mutations; the eval file is now itself a mutation target.",
-    "Q11 [RESOLVED 2026-08-21, D-0058, by the user's explicit delegation (\"هر عددی که میدانی مناسب است قرار بده\")]: TOOL_CALL_CAP = 8, applied in run_arm_tools BEFORE execution, not at grade time. MEASURED basis: 65 calls were emitted across the tools arm; the worst case EN-CALC-001 emitted 26, all repetitions of one calculation. Two of my own earlier claims were DISPROVED by that measurement: EN-MIX-001 and FA-TERM-001 emitted 17 and 7 DISTINCT calls, which is legitimate breadth, not spam -- so a cap below 17 would have truncated correct behaviour and then scored the model down for it. 8 sits above the highest legitimate count observed. WHAT A CAPPED RUN NO LONGER MEASURES: the unbounded call count of an un-capped model; that number is genuinely lost. The grade records what was EMITTED alongside what was EXECUTED so the loss is visible, and a reply with exactly 8 calls is NOT flagged as capped."
+    "Q11 [RESOLVED 2026-08-21, D-0058, by the user's explicit delegation (\"هر عددی که میدانی مناسب است قرار بده\")]: TOOL_CALL_CAP = 8, applied in run_arm_tools BEFORE execution, not at grade time. MEASURED basis: 65 calls were emitted across the tools arm; the worst case EN-CALC-001 emitted 26, all repetitions of one calculation. Two of my own earlier claims were DISPROVED by that measurement: EN-MIX-001 and FA-TERM-001 emitted 17 and 7 DISTINCT calls, which is legitimate breadth, not spam -- so a cap below 17 would have truncated correct behaviour and then scored the model down for it. 8 sits above the highest legitimate count observed. WHAT A CAPPED RUN NO LONGER MEASURES: the unbounded call count of an un-capped model; that number is genuinely lost. The grade records what was EMITTED alongside what was EXECUTED so the loss is visible, and a reply with exactly 8 calls is NOT flagged as capped.",
+    "Q13 [D-0110, 2026-10-04]: fine-tuning recommended NOT justified now -- every failing threshold is decided by HARDWARE/HARNESS/FIXTURE/GRADER; the only MODEL case on a threshold is FA-RISK-002 (a judgement). Accept, or overrule?",
+    "Q14 [D-0110]: all 3 Persian unanswerable RAG questions are refused in English (outcome=OK hides it; fa_not_in_persian=3). Approve a system-prompt line \"refuse in the language of the question\" for the next re-run?"
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -304,7 +314,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-08-27",
+  "last_updated": "2026-10-04",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -368,7 +378,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0099",
+  "decisions_logged": "D-0001..D-0110",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -498,7 +508,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": null,
+  "awaiting_approval_for": "Phase 4 review (docs/phase-reports/phase-4.md): fine-tuning recommendation (Q13), FA-RISK-002 judgement, grader fixes on safety thresholds, tools-arm second turn + Persian-refusal instruction (Q14)",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2287,5 +2297,38 @@
       "phase_4/measurements_recorded and measurements_recorded_2026_09_27 as MEASURED history",
       "correct_abstention_pct, fabricated_financial_data_count, D-0106's Findings 2 and 3"
     ]
+  },
+  "D-0109_D-0110_attribution_and_graph_2026_10_04": {
+    "label": "COMPUTED from the stored 2026-09-27 replies; model not re-run; graphify figures MEASURED",
+    "graphify": {
+      "version": "graphifyy 0.9.75, installed from github.com/Graphify-Labs/graphify (v8)",
+      "graph": "2714 nodes, 4647 edges, 172 communities, 0 LLM tokens, built at 33dbf398",
+      "role": "development-time cross-check only; graphify-out/ git-ignored; no project code imports it",
+      "finding": "12 file-level import edges graphify had and tools/graph_project.py lacked (submodule imports: tools/registry.py -> all calc/ modules, etc.); fixed; 0 remaining; 0 cycles"
+    },
+    "impact_tool": "tools/impact.py: replayed on D-0107 (a833385) it names tests/mutate_phase4.py as PATCHING src/rag/normalize.py -- the battery D-0107 missed",
+    "attribution_file": "evidence/phase4_attribution_2026-09-27.json",
+    "failing_thresholds_by_cause": {
+      "generation_tokens_per_sec_min": "HARDWARE",
+      "time_to_first_token_2k_sec_max": "HARDWARE",
+      "deterministic_calc_correctness_pct_min": "HARNESS 7 (tool right 8/8; single-turn harness)",
+      "citation_correctness_pct_min": "FIXTURE 1 (CPI no units_note), GRADER 1 (D-0103 prose restatement)",
+      "unsupported_claim_rate_pct_max": "FIXTURE 1, GRADER 1",
+      "correct_abstention_pct_min": "GRADER 5, MODEL 1 (FA-RISK-002, needs_human)",
+      "fabricated_financial_data_count_max": "GRADER 1, MODEL 1 (FA-RISK-002)"
+    },
+    "model_only_thresholds": 0,
+    "ungated_model_weakness": "3/3 Persian unanswerable RAG questions refused in English (RAG-ABST-003, RAG2-ABST-003, RAG2-ABST-006), outcome=OK on each",
+    "counterfactual_model_only": {
+      "correct_abstention_pct.tools": 88.89,
+      "correct_abstention_pct.plain": 100.0,
+      "note": "COMPUTED, not a verdict; 88.89 equals the 2026-10-03 hand computation"
+    },
+    "fine_tuning_recommendation": "NOT justified now (D-0008 reversal condition not met). Re-evaluate after approved grader fixes + tools second turn + Persian-refusal instruction and one ~68 min re-run. The decision is the user's.",
+    "verification": {
+      "tests_run_all_sh": "3650 -> 3729 passed (+79), 19 suites, 0 failed, 6 skipped (unchanged), ALL GREEN",
+      "tests_mutate_attribution_py": "31 seeded, 30 killed, 1 documented equivalent, 0 survived, 0 skipped; first run had 6 survivors, all test gaps, closed by tests"
+    },
+    "does_not_change": "Phase 4 verdict (3 PASS / 7 FAIL / 2 UNMEASURED); any grader; any threshold; measurements_recorded_2026_09_27"
   }
 }

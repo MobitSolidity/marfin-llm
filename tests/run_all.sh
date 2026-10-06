@@ -117,7 +117,8 @@ tests/test_broker_tools.py \
 tests/test_screenshot.py \
 tests/test_phase4_harness.py \
 tests/test_llm_providers.py \
-tests/test_console.py"
+tests/test_console.py \
+tests/test_attribution.py"
 
 for t in $SUITES; do
   echo
@@ -536,6 +537,22 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: the llm provider source is not restored, or an oracle is red"
     fail=1; }
   [ $llmm_status -ne 0 ] && fail=1
+
+  echo
+  echo "--- failure attribution + impact (D-0109/D-0110) ------------------"
+  # 31 mutants. The ones that matter most relabel a MODEL failure as somebody
+  # else's: that would make the fine-tuning question look settled when it is
+  # not. One documented equivalent (the units_note guard, redundant with
+  # verify_claim today: 213 claims measured, 0 counter-examples).
+  atm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_attribution.py)
+  atm_status=$?
+  echo "$atm" | grep -E "^ +(seeded|killed|equivalent|survived|skipped):"
+  echo "$atm" | grep -E "^ +(survived|skipped): +[1-9]" && fail=1
+  echo "$atm" | grep -E "^ +RECHECK:" && fail=1
+  echo "$atm" | grep -q "source restored and oracle green: True" || {
+    echo "  ERROR: attribution/impact source not restored, or its oracle is red"
+    fail=1; }
+  [ $atm_status -ne 0 ] && fail=1
 fi
 
 echo
