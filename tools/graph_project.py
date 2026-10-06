@@ -243,6 +243,23 @@ def extract(files):
                 edges.append({"source": mod, "target": target,
                               "relation": "imports", "confidence": conf,
                               "source_location": n.lineno})
+                # D-0109, 2026-10-04. `from calc import returns_risk` and
+                # `from . import panel` import a SUBMODULE, not a name defined
+                # in the package's __init__. The edge above points only at the
+                # package, so the real dependency was lost. MEASURED by
+                # cross-checking against graphify's tree-sitter graph: 12
+                # file-level edges missing, among them tools/registry.py ->
+                # every calc/ module, i.e. the 84-tool registry looked
+                # independent of the calculations it exposes. One extra edge
+                # per imported name that IS one of our modules restores them,
+                # with the same confidence as the package edge.
+                for a in n.names:
+                    sub = "%s.%s" % (target, a.name) if target else a.name
+                    if sub in ours_mods and sub != mod:
+                        edges.append({"source": mod, "target": sub,
+                                      "relation": "imports",
+                                      "confidence": conf,
+                                      "source_location": n.lineno})
 
     # Calls: a NAME, not a resolved target. Python cannot be resolved
     # statically in general, so the label records how sure we are.

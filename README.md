@@ -12,7 +12,10 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0108). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0110). |
+| `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
+| `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
+| `tools/impact.py` | Which suites and mutation batteries a change reaches, from the dependency graph. Run it before trusting a green run (D-0109). |
 | `ITEM7_RUN_COMMANDS.md` | The chunked item-7 commands, in Persian, with the re-priced bounds and the early-warning line to watch. Both paths dry-run first (PASS 9/9 and 15/15). |
 | `configs/capability-manifest.yaml` | Probe-derived capability inventory. |
 | `configs/model-cards/` | Verbatim official `config.json` for every Phase 1 candidate. |
@@ -2448,6 +2451,25 @@ It reads only — no socket, no quota, no file written — and is deliberately
 - Full regression: **18 suites, 3,654 assertions, 0 failed, 0 skipped.**
 
 ## Project Analysis Tools
+
+### graphify cross-check and `tools/impact.py` (D-0109)
+
+graphify (https://github.com/Graphify-Labs/graphify, Apache-2.0) is now
+installed and run as a **development-time** cross-check. It is not a project
+dependency, nothing imports it, and `graphify-out/` is git-ignored.
+
+```bash
+pip install graphifyy                    # or: uv tool install graphifyy
+graphify update .                        # AST-only, 0 LLM tokens
+python3 tools/impact.py --cross-check    # edges graphify has that our graph lacks (want 0)
+python3 tools/impact.py --worktree       # suites + batteries your change reaches
+python3 tools/impact.py --rev HEAD
+```
+
+The first cross-check found 12 submodule-import edges missing from our own
+graph (for example `tools/registry.py` → every `calc/` module). That is fixed,
+and the count is now 0. `tools/impact.py` names every mutation battery that
+patches a changed file, which is exactly the check D-0107 missed.
 
 ### `tools/graph_project.py` — structure and dependency graph
 
