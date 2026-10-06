@@ -143,6 +143,23 @@ MUTATIONS = [
      '            model = [r for r in miss if r["cause"] == "MODEL"]',
      '            model = [r for r in miss if r["cause"] != "MODEL"]'),
 
+    # -- human rulings (D-0111) ---------------------------------------------
+    (ATTR, "a ruling no longer requires the exact reply (hash ignored)",
+     '        key = (r["arm"], r["id"], reply_sha256(replies.get((r["arm"], r["id"]))))\n'
+     '        if key in rulings:',
+     '        key = (r["arm"], r["id"], reply_sha256(replies.get((r["arm"], r["id"]))))\n'
+     '        if any(k[:2] == key[:2] for k in rulings):\n'
+     '            key = [k for k in rulings if k[:2] == key[:2]][0]'),
+    (ATTR, "rulings are never applied",
+     '    rulings_applied = apply_rulings(rows, run)',
+     '    rulings_applied = []'),
+    (ATTR, "a ruled case is still reported as needing a human",
+     '            r["rule"], r["needs_human"] = why, False',
+     '            r["rule"], r["needs_human"] = why, True'),
+    (ATTR, "the ruling flips the case to MODEL instead of the user's cause",
+     '            r["cause"], r["confidence"] = cause, "HUMAN"',
+     '            r["cause"], r["confidence"] = "MODEL", "HUMAN"'),
+
     # -- graph_project (D-0109) ----------------------------------------------
     (GRAPH, "submodule imports dropped again (the D-0109 gap)",
      '                    if sub in ours_mods and sub != mod:',
