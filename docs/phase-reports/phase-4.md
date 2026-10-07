@@ -11,6 +11,8 @@ Label key: (V) VERIFIED · (M) MEASURED · (C) COMPUTED · (E) ESTIMATED · (U) 
 ## Status
 
 **FAIL — hardware-bound.** All seven §24 Phase 4 tasks are now complete.
+
+> **Update 2026-10-06 (D-0112):** you approved the three grader fixes. They have been applied to the recorded replies (model not re-run). The verdict is still 3/7/2, but abstention went 66.67 → **100.0** (plain) and **88.89** (tools), and plain fabrication 1 → **0**. Each threshold that still fails is held by a cause other than the model. See `evidence/phase4_verdict_2026-09-27_post-D0112.json`.
 The approved verdict hasn't changed: **3 PASS / 7 FAIL / 2 UNMEASURED** (M,
 `evidence/phase4_verdict_2026-09-27_post-D0107.json`). This session added
 the two pieces that were still missing: task 6 (failure attribution across
@@ -203,7 +205,7 @@ condition is met, and Phase 5 would be justified on evidence.
 ## Open Issues
 
 - `persian_fluency_regression_pct` and `paper_live_confusion_count` are still UNMEASURED. R10 needs a human reader; paper/live belongs to Phase 8A.
-- Grader fixes for `contains_banned` (word boundary, quote-aware) and the `is_abstention` vocabulary are ready to propose, but they touch a safety threshold, so they need your approval.
+- ~~Grader fixes for `contains_banned` and the `is_abstention` vocabulary need your approval.~~ **Approved and applied (D-0112).**
 - Persian refusals in English: there's no threshold for this yet.
 - ~~FA-RISK-002 needs your judgement.~~ Ruled a hedged refusal (D-0111).
 
@@ -216,7 +218,7 @@ condition is met, and Phase 5 would be justified on evidence.
 
 1. **Fine-tuning (Q13):** accept the recommendation (not now), or overrule it.
 2. ~~**FA-RISK-002:** failure or hedged refusal?~~ **Answered: hedged refusal (D-0111).**
-3. Approve, or decline, the three grader fixes on safety-threshold code.
+3. ~~Approve, or decline, the three grader fixes on safety-threshold code.~~ **Approved and applied (D-0112).**
 4. (Q14) Approve the two non-model levers before any Phase 5: a second turn for the tools arm, and a "refuse in the question's language" line in the system prompt. Both would need one ~68-minute re-run on the i5-12400.
 5. Whether to accept Phase 4 as **FAIL — hardware-bound** and proceed, given that Q8 already chose (b).
 

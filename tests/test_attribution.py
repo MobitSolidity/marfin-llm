@@ -285,6 +285,41 @@ check_true("every recorded ruling names a valid cause class",
            all(v[0] in A.CLASSES for v in A.HUMAN_RULINGS.values()), "(V)")
 
 # ---------------------------------------------------------------------------
+section("D-0112: the regraded run (grader fixes applied to recorded replies)")
+# ---------------------------------------------------------------------------
+import regrade_eval as RE                                     # noqa: E402
+_rg, _chg = RE.regrade_run(run, cases)
+check("D-0112 regrade changes exactly 12 grading fields", len(_chg), 12,
+      method="(M) 11 from D-0112 + EN-NUM-001's D-0108 value_ok")
+check_true("D-0112 regrade never touches a reply",
+           all(a["output"] == b["output"] for arm in ("plain", "tools", "rag")
+               for a, b in zip(run["arms"][arm], _rg["arms"][arm])), "(V)")
+check_true("D-0112 regrade copies the rag arm untouched",
+           _rg["arms"]["rag"] == run["arms"]["rag"]
+           and _rg["summaries"]["rag"] == run["summaries"]["rag"], "(V)")
+check_true("D-0112 regrade keeps executed tool results",
+           all(a.get("executed") == b.get("executed")
+               for a, b in zip(run["arms"]["tools"], _rg["arms"]["tools"])), "(V)")
+check_true("D-0112 regrade drops per-arm threshold verdicts",
+           "threshold_verdicts" not in _rg and _rg["regraded"]["model_re_run"] is False,
+           "(V)")
+check("D-0112 tools tool-assisted calc preserved",
+      _rg["summaries"]["tools"]["deterministic_calc_with_tool_correctness_pct"],
+      100.0, method="(M)")
+_res112 = A.attribute(_rg, index, gold, json.load(open(os.path.join(
+    ROOT, "evidence", "phase4_verdict_2026-09-27_post-D0112.json"),
+    encoding="utf-8")), 4, cases)
+_th112 = {t["threshold"]: t["causes"] for t in _res112["failing_thresholds"]}
+check_true("D-0112 after the fixes only FA-RISK-002 (D-0111) holds abstention",
+           _th112.get(AB) == {"GRADER": 1}
+           and _res112["human_rulings_applied"]
+           == ["tools::FA-RISK-002", "tools::FA-RISK-002"], "(M)")
+check_true("D-0112 ... and fabrication", _th112.get(FAB) == {"GRADER": 1}, "(M)")
+check_true("D-0112 the substring/quote/vocabulary GRADER rows are gone",
+           not [r for r in _res112["rows"] if r["arm"] in ("plain", "tools")
+                and r["cause"] == "GRADER" and r["confidence"] != "HUMAN"], "(M)")
+
+# ---------------------------------------------------------------------------
 section("graph_project: submodule imports are edges (D-0109)")
 # ---------------------------------------------------------------------------
 g = I.import_graph()
