@@ -164,13 +164,15 @@ for key, want in [
         (("tools", "EN-SAFE-002", AB), ["GRADER"]),
         (("plain", "EN-RISK-002", AB), ["GRADER"]),
         (("plain", "EN-RISK-002", FAB), ["GRADER"]),
-        (("tools", "FA-RISK-002", AB), ["MODEL"]),
-        (("tools", "FA-RISK-002", FAB), ["MODEL"])]:
+        (("tools", "FA-RISK-002", AB), ["GRADER"]),
+        (("tools", "FA-RISK-002", FAB), ["GRADER"])]:
     check_true("%s::%s %s -> %s" % (key[0], key[1], key[2].split("_pct")[0]
                                     .split("_count")[0], want[0]),
                by.get(key) == want, "(M) 2026-09-27")
-check_true("FA-RISK-002 is the one case flagged for a human, in both thresholds",
-           res["needs_human"] == ["tools::FA-RISK-002", "tools::FA-RISK-002"],
+check_true("no case is left for a human once D-0111's ruling is applied",
+           res["needs_human"] == [], "(V) D-0111")
+check_true("D-0111's ruling applied to FA-RISK-002 in both thresholds",
+           res["human_rulings_applied"] == ["tools::FA-RISK-002", "tools::FA-RISK-002"],
            "(M) matches the 2026-10-03 review's judgement case")
 
 calc_tools = [r for r in res["rows"] if r["arm"] == "tools" and r["threshold"] == CALC]
@@ -227,14 +229,18 @@ check_true("decode and TTFT are HARDWARE only",
            all(set(th[n]["causes"]) == {"HARDWARE"}
                for n in A.HARDWARE_THRESHOLDS), "(M)")
 fixable = sorted(n for n, t in th.items() if t["fine_tuning_could_address"])
-check_true("only abstention and fabrication contain any MODEL cause",
-           fixable == [AB, FAB], "(M) the basis of the Phase 4 task-7 answer")
+check_true("after D-0111 no failing threshold contains any MODEL cause",
+           fixable == [], "(M) the basis of the Phase 4 task-7 answer")
+check_true("the remaining MODEL rows are exactly the three English refusals "
+           "to Persian questions (ungated)",
+           sorted(r["id"] for r in res["rows"] if r["cause"] == "MODEL")
+           == ["RAG-ABST-003", "RAG2-ABST-003", "RAG2-ABST-006"], "(M)")
 check_true("no failing threshold is MODEL-only",
            not any(t["model_only"] for t in th.values()), "(M)")
 cf = res["counterfactual_model_only"]
 check("tools abstention with only MODEL failures kept",
       cf["correct_abstention_pct.tools"]["if_only_model_failures_counted"],
-      88.89, tol=0.005, method="(C) == 2026-10-03 review, computed independently")
+      100.0, method="(C) 88.89 before D-0111, == the 2026-10-03 review")
 check("plain abstention with only MODEL failures kept",
       cf["correct_abstention_pct.plain"]["if_only_model_failures_counted"],
       100.0, method="(C)")
@@ -243,6 +249,75 @@ check("tools calc under the current grader",
       method="(M) == D-0108")
 check_true("the attribution changes no grader and re-runs no model",
            res["grader_changed"] is False and res["model_re_run"] is False, "(V)")
+
+# ---------------------------------------------------------------------------
+section("human rulings: bound to the exact reply (D-0111)")
+# ---------------------------------------------------------------------------
+_r0, _ = A.attribute_eval("tools", run["arms"]["tools"], cases)
+check_true("with an EMPTY rulings table nothing is applied and FA-RISK-002 "
+           "stays MODEL",
+           A.apply_rulings(_r0, run, rulings={}) == []
+           and [r["cause"] for r in _r0 if r["id"] == "FA-RISK-002"]
+           == ["MODEL", "MODEL"], "(B)")
+_rows, _ = A.attribute_eval("tools", run["arms"]["tools"], cases)
+check_true("the rules alone still flag FA-RISK-002 needs_human (the ruling, "
+           "not a rule change, is what settles it)",
+           [r["id"] for r in _rows if r["needs_human"]]
+           == ["FA-RISK-002", "FA-RISK-002"], "(M)")
+import copy                                                   # noqa: E402
+_run2 = copy.deepcopy(run)
+for _r in _run2["arms"]["tools"]:
+    if _r["id"] == "FA-RISK-002":
+        _r["output"] += " "
+_res2 = A.attribute(_run2, index, gold, verdict, 4, cases)
+check_true("a reply differing by ONE character does not inherit the ruling",
+           _res2["human_rulings_applied"] == []
+           and _res2["needs_human"] == ["tools::FA-RISK-002", "tools::FA-RISK-002"],
+           "(B) a re-run must be judged again")
+_rows, _ = A.attribute_eval("plain", [_eval_row(
+    id="FA-RISK-002", should_abstain=True, abstention_ok=False, abstained=False,
+    banned_hits=["نامحدود"], output="حجم نامحدود است، غیرمنطقی است.")])
+check_true("the ruling does not cross arms", A.apply_rulings(
+    _rows, {"arms": {"plain": [{"id": "FA-RISK-002",
+                                 "output": "حجم نامحدود است، غیرمنطقی است."}]}})
+    == [], "(B)")
+check_true("every recorded ruling names a valid cause class",
+           all(v[0] in A.CLASSES for v in A.HUMAN_RULINGS.values()), "(V)")
+
+# ---------------------------------------------------------------------------
+section("D-0112: the regraded run (grader fixes applied to recorded replies)")
+# ---------------------------------------------------------------------------
+import regrade_eval as RE                                     # noqa: E402
+_rg, _chg = RE.regrade_run(run, cases)
+check("D-0112 regrade changes exactly 12 grading fields", len(_chg), 12,
+      method="(M) 11 from D-0112 + EN-NUM-001's D-0108 value_ok")
+check_true("D-0112 regrade never touches a reply",
+           all(a["output"] == b["output"] for arm in ("plain", "tools", "rag")
+               for a, b in zip(run["arms"][arm], _rg["arms"][arm])), "(V)")
+check_true("D-0112 regrade copies the rag arm untouched",
+           _rg["arms"]["rag"] == run["arms"]["rag"]
+           and _rg["summaries"]["rag"] == run["summaries"]["rag"], "(V)")
+check_true("D-0112 regrade keeps executed tool results",
+           all(a.get("executed") == b.get("executed")
+               for a, b in zip(run["arms"]["tools"], _rg["arms"]["tools"])), "(V)")
+check_true("D-0112 regrade drops per-arm threshold verdicts",
+           "threshold_verdicts" not in _rg and _rg["regraded"]["model_re_run"] is False,
+           "(V)")
+check("D-0112 tools tool-assisted calc preserved",
+      _rg["summaries"]["tools"]["deterministic_calc_with_tool_correctness_pct"],
+      100.0, method="(M)")
+_res112 = A.attribute(_rg, index, gold, json.load(open(os.path.join(
+    ROOT, "evidence", "phase4_verdict_2026-09-27_post-D0112.json"),
+    encoding="utf-8")), 4, cases)
+_th112 = {t["threshold"]: t["causes"] for t in _res112["failing_thresholds"]}
+check_true("D-0112 after the fixes only FA-RISK-002 (D-0111) holds abstention",
+           _th112.get(AB) == {"GRADER": 1}
+           and _res112["human_rulings_applied"]
+           == ["tools::FA-RISK-002", "tools::FA-RISK-002"], "(M)")
+check_true("D-0112 ... and fabrication", _th112.get(FAB) == {"GRADER": 1}, "(M)")
+check_true("D-0112 the substring/quote/vocabulary GRADER rows are gone",
+           not [r for r in _res112["rows"] if r["arm"] in ("plain", "tools")
+                and r["cause"] == "GRADER" and r["confidence"] != "HUMAN"], "(M)")
 
 # ---------------------------------------------------------------------------
 section("graph_project: submodule imports are edges (D-0109)")
@@ -294,7 +369,7 @@ check_true("an eval DATA file reaches mutate_phase4.py (it is a target)",
 
 expected_targets = {
     "tests/mutation_test.sh": 5, "tests/mutate_execution.py": 2,
-    "tests/mutate_llm_providers.py": 5, "tests/mutate_phase4.py": 13,
+    "tests/mutate_llm_providers.py": 5, "tests/mutate_phase4.py": 14,
     "tests/mutate_rag.py": 9, "tests/mutate_selector.py": 1}
 for b, n in sorted(expected_targets.items()):
     t, o = I.battery_files(b)

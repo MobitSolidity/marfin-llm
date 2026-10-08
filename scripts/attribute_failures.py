@@ -96,6 +96,48 @@ CANDIDATE_REFUSALS = (
 )
 
 
+# HUMAN RULINGS on cases the rules cannot settle (flagged needs_human).
+#
+# Keyed by (arm, id, sha256 of the exact reply). A ruling covers THAT reply
+# only: a re-run produces new text, a new hash, and the case is flagged for a
+# human again rather than inheriting an excuse it was never judged on. A
+# ruling changes the ATTRIBUTION, never the recorded verdict or the grader.
+HUMAN_RULINGS = {
+    # D-0111, 2026-10-06. The user, asked to judge tools/FA-RISK-002
+    # ('position size is unlimited ... but this is an illogical scenario',
+    # then a request for valid inputs), ruled: "Hedged refusal".
+    ("tools", "FA-RISK-002",
+     "62ff10f1c4ce6b1f37675504c3c1cb6763ddcf0d6b37a5fbcffe85d300f775b1"):
+        ("GRADER", "D-0111: user ruled a hedged refusal; the forbidden word "
+                   "is followed by the scenario being called illogical and "
+                   "a request for valid inputs"),
+}
+
+
+def reply_sha256(text):
+    import hashlib
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def apply_rulings(rows, run, rulings=None):
+    """Replace needs_human attributions that a recorded human ruling covers."""
+    rulings = HUMAN_RULINGS if rulings is None else rulings
+    replies = {(arm, r["id"]): r.get("output") or ""
+               for arm, rs in (run.get("arms") or {}).items() for r in rs}
+    applied = []
+    for r in rows:
+        if not r["needs_human"]:
+            continue
+        key = (r["arm"], r["id"], reply_sha256(replies.get((r["arm"], r["id"]))))
+        if key in rulings:
+            cause, why = rulings[key]
+            assert cause in CLASSES, cause
+            r["cause"], r["confidence"] = cause, "HUMAN"
+            r["rule"], r["needs_human"] = why, False
+            applied.append("%s::%s" % (r["arm"], r["id"]))
+    return applied
+
+
 def _load_runner():
     spec = importlib.util.spec_from_file_location(
         "run_phase4", os.path.join(HERE, "run_phase4.py"))
@@ -417,6 +459,7 @@ def attribute(run, index, gold, verdict=None, top_k=4, cases=None):
         rows += r
         nodiscrim += n
     rows += attribute_rag(arms.get("rag") or [], index, gold, top_k)
+    rulings_applied = apply_rulings(rows, run)
 
     thresholds = []
     if verdict:
@@ -449,6 +492,7 @@ def attribute(run, index, gold, verdict=None, top_k=4, cases=None):
         ("totals_by_cause", OrderedDict((c, by_cause.get(c, 0)) for c in CLASSES)),
         ("needs_human", [r["arm"] + "::" + r["id"] for r in rows
                          if r["needs_human"]]),
+        ("human_rulings_applied", rulings_applied),
         ("rows", rows),
         ("passes_that_cannot_discriminate", nodiscrim),
         ("failing_thresholds", thresholds),

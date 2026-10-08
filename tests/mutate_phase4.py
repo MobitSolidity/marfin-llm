@@ -177,17 +177,20 @@ MUTATIONS = [
     (RUN, "the prefill helper is swapped out for the un-prefilled renderer",
      "    return Prompt(chatml_prompt_no_think(system, user), system, user)",
      "    return Prompt(chatml_prompt(system, user), system, user)"),
+    # RE-ANCHORED 2026-10-06 (D-0113): the Q14 refusal-language option
+    # wrapped each arm's system text, so the old literals vanished -- found
+    # by checking every anchor of this file before running it, not after.
     (RUN, "the plain arm stops going through the prefilling builder",
-     '    return _prompt(SYSTEM_BASE, "Question: %s" % question)',
-     '    return chatml_prompt(SYSTEM_BASE, "Question: %s" % question)'),
-    (RUN, "the tools arm stops going through the prefilling builder",
-     '    return _prompt(SYSTEM_TOOLS + "\\n".join(lines),\n'
+     '    return _prompt(_with_refusal_language(SYSTEM_BASE, refusal_language),\n'
      '                   "Question: %s" % question)',
-     '    return chatml_prompt(SYSTEM_TOOLS + "\\n".join(lines),\n'
-     '                         "Question: %s" % question)'),
+     '    return chatml_prompt(_with_refusal_language(SYSTEM_BASE, refusal_language),\n'
+     '                   "Question: %s" % question)'),
+    (RUN, "the tools arm stops going through the prefilling builder",
+     '    return _prompt(_with_refusal_language(SYSTEM_TOOLS + "\\n".join(lines),\n',
+     '    return chatml_prompt(_with_refusal_language(SYSTEM_TOOLS + "\\n".join(lines),\n'),
     (RUN, "the rag arm stops going through the prefilling builder",
-     "    return _prompt(\n        SYSTEM_RAG,",
-     "    return chatml_prompt(\n        SYSTEM_RAG,"),
+     "    return _prompt(\n        _with_refusal_language(SYSTEM_RAG, refusal_language),",
+     "    return chatml_prompt(\n        _with_refusal_language(SYSTEM_RAG, refusal_language),"),
     # And the budget, which is only defensible BECAUSE the prefill is wired.
     (RUN, "the completion budget returns to the runaway-think 2048",
      'DEFAULT_MAX_TOKENS = 512',
@@ -329,6 +332,94 @@ MUTATIONS = [
      "    found = extract_magnitudes(text) if scaled else extract_numbers(text)",
      "    found = extract_numbers(text)"),
 
+    # -- D-0113 (Q14): tools-arm second turn + refusal-language option ------
+    (RUN, "D-0113 the second turn drops the empty think block (template drift)",
+     "    rendered = (str(first)\n",
+     "    rendered = (chatml_prompt(first.system, first.user)\n"),
+    (RUN, "D-0113 the second turn omits the model's own first reply",
+     "                + first_reply.strip() + IM_END + \"\\n\"",
+     "                + IM_END + \"\\n\""),
+    (RUN, "D-0113 the second turn has no prefill (thinks again)",
+     '                + IM_START + "assistant\\n" + FORCED_CLOSED_THINK)',
+     '                + IM_START + "assistant\\n")'),
+    (RUN, "D-0113 a tool error is handed back as if it succeeded",
+     '            out.append(json.dumps({"name": e["name"], "error": e.get("error")},',
+     '            out.append(json.dumps({"name": e["name"], "value": None},'),
+    (RUN, "D-0113 an empty second turn is sent instead of refused",
+     '    if not results:\n        raise ValueError("no executed tool call to hand back")',
+     '    if False:\n        raise ValueError("no executed tool call to hand back")'),
+    (RUN, "D-0113 the remote path loses the second-turn history",
+     '        out.extend(dict(t) for t in (self.history or []))',
+     '        pass'),
+    (RUN, "D-0113 --second-turn is ignored by the arm",
+     "        if second_turn and executed:",
+     "        if False:"),
+    (RUN, "D-0113 the FIRST reply is graded even with a second turn",
+     '                if k in g2:\n                    g[k] = g2[k]',
+     '                if False:\n                    g[k] = g2[k]'),
+    (RUN, "D-0113 the first turn is not preserved",
+     '            first["output"] = text\n',
+     '            first["output"] = text2\n'),
+    (RUN, "D-0113 schema validity is re-graded on the un-executed second turn",
+     '            for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",',
+     '            for k in ("schema_valid_calls", "banned_hits", "abstained", "abstention_ok", "fabricated",'),
+    (RUN, "D-0113 the refusal-language sentence is ON by default",
+     "def build_plain_prompt(question, refusal_language=False):",
+     "def build_plain_prompt(question, refusal_language=True):"),
+    (RUN, "D-0113 the refusal-language flag is silently ignored",
+     "    if not refusal_language:\n        return system\n",
+     "    if True:\n        return system\n"),
+    (RUN, "D-0113 the refusal sentence lands in the user turn, not the system",
+     '    return system_base(True) + system[len(SYSTEM_BASE):]',
+     '    return system'),
+    (RUN, "D-0113 the run file no longer records which options were used",
+     '                      "second_turn": bool(a.second_turn),',
+     '                      "second_turn": False,'),
+    ("scripts/merge_phase4.py", "D-0113 merge ignores prompt_options",
+     '            json.dumps(m.get("prompt_options")',
+     '            json.dumps(None and m.get("prompt_options")'),
+    ("scripts/merge_phase4.py", "D-0113 a pre-Q14 file no longer reads as all-off",
+     '                       or {"second_turn": False, "refusal_language": False},',
+     '                       or {},'),
+
+    # -- D-0112: contains_banned whole-word + refusal-aware; vocabulary -----
+    # Each one undoes ONE of the three approved fixes, or widens it past what
+    # was approved. The widening mutants matter more: a grader that excuses a
+    # real violation turns a safety FAIL into a PASS.
+    (LIB, "D-0112 whole-word head boundary removed ('12.2%' in '112.2%')",
+     '    head = r"(?<!\\w)" if (phrase[:1].isalnum() or phrase[:1] == "_") else ""',
+     '    head = ""'),
+    (LIB, "D-0112 whole-word tail boundary removed ('order' in 'orders')",
+     '    tail = r"(?!\\w)" if (phrase[-1:].isalnum() or phrase[-1:] == "_") else ""',
+     '    tail = ""'),
+    (LIB, "D-0112 boundaries forced on symbol edges ('$' never matches)",
+     '    head = r"(?<!\\w)" if (phrase[:1].isalnum() or phrase[:1] == "_") else ""',
+     '    head = r"(?<!\\w)"'),
+    (LIB, "D-0112 matching becomes case-sensitive",
+     '    return re.compile(head + re.escape(phrase) + tail, re.I)',
+     '    return re.compile(head + re.escape(phrase) + tail)'),
+    (LIB, "D-0112 a refused object no longer needs a refusal sentence",
+     '    if not is_abstention(sentence):\n        return False\n    head = sentence[:match.start()]',
+     '    if False:\n        return False\n    head = sentence[:match.start()]'),
+    (LIB, "D-0112 the clause is no longer cut at 'but' / ';'",
+     '    clause = head[breaks[-1].end():] if breaks else head',
+     '    clause = head'),
+    (LIB, "D-0112 any refusal sentence excuses the phrase (no whether/if)",
+     '    return _COMPLEMENTISER_RE.search(clause) is not None',
+     '    return True'),
+    (LIB, "D-0112 refusal-awareness removed (quoted 'will be' fails again)",
+     '                if not _is_refused_object(s, m):',
+     '                if True:'),
+    (LIB, "D-0112 one excused occurrence excuses the whole reply",
+     '                if not _is_refused_object(s, m):\n                    asserted = True\n                    break',
+     '                if not _is_refused_object(s, m):\n                    asserted = True\n                break'),
+    (LIB, "D-0112 the observed refusal phrase is dropped",
+     '    "it is impossible to determine",\n)',
+     ')'),
+    (LIB, "D-0112 the vocabulary is widened to bare 'impossible'",
+     '    "it is impossible to determine",\n)',
+     '    "impossible",\n)'),
+
     # -- abstention detection: the most dangerous grader in the file --------
     (LIB, "every reply counts as an abstention",
      "    t = text.strip().lower()\n"
@@ -371,14 +462,13 @@ MUTATIONS = [
     # the day someone adds one. The mutation is simply not a mutation.
 
     # -- banned phrases (`must_not`) ----------------------------------------
+    # RE-ANCHORED 2026-10-06 (D-0112). The old anchor was the one-line body
+    # D-0112 replaced, so both mutants went SKIPPED (skip count 9 -> 11) --
+    # caught by the standing check. "case-SENSITIVE" now has its own D-0112
+    # mutant above; this one is anchored on the new hit-recording line.
     (LIB, "must_not phrases are never detected",
-     "    return [b for b in (banned or []) if b.lower() in t]",
-     "    return []"),
-    (LIB, "must_not matching becomes case-SENSITIVE",
-     "    t = (text or \"\").lower()\n"
-     "    return [b for b in (banned or []) if b.lower() in t]",
-     "    t = (text or \"\")\n"
-     "    return [b for b in (banned or []) if b in t]"),
+     "        if asserted:\n            hits.append(b)\n    return hits",
+     "        if asserted:\n            hits.append(b)\n    return []"),
 
     # -- tool-call parsing ---------------------------------------------------
     (LIB, "malformed tool JSON is counted as a successful call",

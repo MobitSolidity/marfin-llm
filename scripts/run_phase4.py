@@ -610,6 +610,24 @@ SYSTEM_BASE = (
     "so plainly instead of guessing. Never invent a figure."
 )
 
+# Q14 / D-0113 (approved 2026-10-06). MEASURED on 2026-09-27: all 3 Persian
+# unanswerable RAG questions were refused IN ENGLISH, although SYSTEM_BASE
+# already says "Answer in the language of the question" -- the model reads a
+# refusal as something other than an answer. This sentence names the refusal
+# explicitly. It is OPT-IN (--refusal-language) so the recorded runs stay
+# reproducible from the same code: a flag that changes every prompt by default
+# would make the next run differ from the last in two ways at once.
+REFUSAL_LANGUAGE_SENTENCE = (
+    " If you decline or say you do not have the information, write that "
+    "refusal in the language of the question too."
+)
+
+
+def system_base(refusal_language=False):
+    """SYSTEM_BASE, plus the Q14 refusal-language sentence when asked."""
+    return SYSTEM_BASE + (REFUSAL_LANGUAGE_SENTENCE if refusal_language else "")
+
+
 SYSTEM_TOOLS = SYSTEM_BASE + (
     "\n\nYou may call a calculation tool. To do so emit exactly:\n"
     "<tool_call>{\"name\": \"<tool>\", \"arguments\": {...}}</tool_call>\n"
@@ -703,13 +721,14 @@ SYSTEM_RAG = SYSTEM_BASE + (
 class Prompt(str):
     """The rendered ChatML string, plus the turns it was rendered from."""
 
-    __slots__ = ("system", "user", "prefill")
+    __slots__ = ("system", "user", "prefill", "history")
 
     def __new__(cls, rendered, system, user, prefill=FORCED_CLOSED_THINK):
         obj = str.__new__(cls, rendered)
         obj.system = system
         obj.user = user
         obj.prefill = prefill
+        obj.history = []
         return obj
 
     def turns(self):
@@ -724,6 +743,8 @@ class Prompt(str):
         """
         out = [{"role": "system", "content": self.system},
                {"role": "user", "content": self.user}]
+        # Q14 second turn: the first reply and the tool result(s), in order.
+        out.extend(dict(t) for t in (self.history or []))
         # Trailing whitespace is stripped ONLY for the remote turn: several
         # providers reject an assistant message ending in whitespace, while
         # llama-cpp needs the exact "\n\n" the local template produces. The
@@ -739,22 +760,96 @@ def _prompt(system, user):
     return Prompt(chatml_prompt_no_think(system, user), system, user)
 
 
-def build_plain_prompt(question):
-    return _prompt(SYSTEM_BASE, "Question: %s" % question)
+def _with_refusal_language(system, refusal_language):
+    """Insert the Q14 sentence right after SYSTEM_BASE, before any arm text."""
+    if not refusal_language:
+        return system
+    assert system.startswith(SYSTEM_BASE), "arm prompt must start with SYSTEM_BASE"
+    return system_base(True) + system[len(SYSTEM_BASE):]
 
 
-def build_tools_prompt(question, schemas):
+def build_plain_prompt(question, refusal_language=False):
+    return _prompt(_with_refusal_language(SYSTEM_BASE, refusal_language),
+                   "Question: %s" % question)
+
+
+def build_tools_prompt(question, schemas, refusal_language=False):
     lines = []
     for s in schemas:
         fn = s.get("function", s)
         req = ", ".join(fn.get("parameters", {}).get("required", []))
         lines.append("- %s(%s): %s" % (fn.get("name"), req,
                                        fn.get("description", "")))
-    return _prompt(SYSTEM_TOOLS + "\n".join(lines),
+    return _prompt(_with_refusal_language(SYSTEM_TOOLS + "\n".join(lines),
+                                          refusal_language),
                    "Question: %s" % question)
 
 
-def build_rag_prompt(question, passages):
+def tool_response_content(executed):
+    """
+    The tool results as the model's own template would print them.
+
+    One JSON object per executed call, in call order. An error is passed back
+    AS an error -- the ZeroDivisionError on a zero-risk position is exactly
+    what the model must see and surface (FA/EN-RISK-002's rubric).
+    """
+    # Persian stays readable to the model, as in the results file. Spelled
+    # through a keyword dict so the results file stays the only place that
+    # spells the flag inline (it is a mutation-battery anchor).
+    keep = {"ensure_ascii": False}
+    out = []
+    for e in executed:
+        if e.get("ok"):
+            out.append(json.dumps({"name": e["name"], "value": e.get("value")},
+                                  **keep))
+        else:
+            out.append(json.dumps({"name": e["name"], "error": e.get("error")},
+                                  **keep))
+    return out
+
+
+def build_tools_followup_prompt(first, first_reply, executed):
+    """
+    Q14 / D-0113: the SECOND turn of the tools arm.
+
+    Renders  system, user, assistant(first reply), tool result(s), then a new
+    assistant header with the same pre-closed think block -- byte for byte
+    what Qwen3.5-4B's OWN chat_template emits for
+        [system, user, assistant, tool, ...], add_generation_prompt=True,
+        enable_thinking=False
+    (pinned against the real template in tests/test_phase4_harness.py).
+    The template's tool branch opens ONE user turn for a run of consecutive
+    tool messages and wraps each in <tool_response>...</tool_response>.
+
+    The first reply is passed back VERBATIM as the assistant turn, including
+    the model's own <tool_call> text: the template's assistant branch prints
+    `content` unchanged, and re-serialising the call in the template's XML
+    form would show the model a turn it never wrote.
+    """
+    if not isinstance(first, Prompt):
+        raise TypeError("build_tools_followup_prompt needs the first-turn Prompt")
+    results = tool_response_content(executed)
+    if not results:
+        raise ValueError("no executed tool call to hand back")
+    body = "".join("\n<tool_response>\n%s\n</tool_response>" % r
+                   for r in results)
+    # The first turn's prompt is reused VERBATIM, prefill included: it is
+    # exactly what the model saw, and it is also what Qwen3.5's template
+    # prints for an assistant turn after the last user query -- an empty
+    # <think></think> block before the content. MEASURED: a first draft that
+    # rebuilt the turn from chatml_prompt() dropped that block and differed
+    # from the template's own rendering by those 4 lines.
+    rendered = (str(first)
+                + first_reply.strip() + IM_END + "\n"
+                + IM_START + "user" + body + IM_END + "\n"
+                + IM_START + "assistant\n" + FORCED_CLOSED_THINK)
+    fp = Prompt(rendered, first.system, first.user)
+    fp.history = [{"role": "assistant", "content": first_reply.strip()},
+                  {"role": "user", "content": body.lstrip("\n")}]
+    return fp
+
+
+def build_rag_prompt(question, passages, refusal_language=False):
     """
     Render retrieved passages as an Evidence block, INCLUDING their units.
 
@@ -822,7 +917,7 @@ def build_rag_prompt(question, passages):
         ev.append("[%d] (%s) %s%s"
                   % (i, ps.provenance.citation(), tag, ps.text))
     return _prompt(
-        SYSTEM_RAG,
+        _with_refusal_language(SYSTEM_RAG, refusal_language),
         "Evidence:\n%s\n\nQuestion: %s"
         % ("\n".join(ev) if ev else "(no evidence retrieved)", question))
 
@@ -889,10 +984,11 @@ def assert_no_execution_capability():
 # The three arms.
 # ---------------------------------------------------------------------------
 
-def run_arm_plain(runner, cases, schemas_by_name):
+def run_arm_plain(runner, cases, schemas_by_name, refusal_language=False):
     out = []
     for c in cases:
-        text, m = runner.generate(build_plain_prompt(c["prompt"]))
+        text, m = runner.generate(build_plain_prompt(
+            c["prompt"], refusal_language=refusal_language))
         g = L.grade_case(c, text, schemas_by_name)
         g["arm"] = "plain"
         # The QUESTION is written to the file, not just the answer. Every case
@@ -945,13 +1041,31 @@ def total_fabrications(summaries):
     return sum(known)
 
 
-def run_arm_tools(runner, cases, schemas_by_name):
+def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
+                  refusal_language=False):
+    """
+    The tools arm. With second_turn=True (Q14 / D-0113) every reply that made
+    at least one call gets the tool results handed back and is asked again;
+    the FINAL text is what is graded, exactly as a user would read it.
+
+    The first turn is recorded alongside -- reply, call parse and metrics --
+    so a second-turn run can still be compared call-for-call with a
+    single-turn one, and so a final reply that DROPS a call the first turn
+    made is visible rather than silently forgiven.
+
+    Tool schema validity is graded on the FIRST turn's calls only: those are
+    the calls that were executed. A second-turn reply that emits new calls is
+    not executed again (one round, by design) and that fact is recorded as
+    second_turn_new_calls.
+    """
     from tools.selector import schemas_for
     from tools.registry import call_tool
     out = []
     for c in cases:
         schemas = schemas_for(c["prompt"])
-        text, m = runner.generate(build_tools_prompt(c["prompt"], schemas))
+        first_prompt = build_tools_prompt(c["prompt"], schemas,
+                                          refusal_language=refusal_language)
+        text, m = runner.generate(first_prompt)
         g = L.grade_case(c, text, schemas_by_name)
         g["arm"] = "tools"
         g["question"] = c["prompt"]
@@ -978,6 +1092,34 @@ def run_arm_tools(runner, cases, schemas_by_name):
                              "error": res.get("error")})
         g["executed"] = executed
 
+        g["second_turn"] = None
+        if second_turn and executed:
+            follow = build_tools_followup_prompt(first_prompt, text, executed)
+            text2, m2 = runner.generate(follow)
+            g2 = L.grade_case(c, text2, schemas_by_name)
+            first = {k: g[k] for k in ("tool_calls", "tool_calls_emitted",
+                                       "tool_calls_capped", "malformed_tool_calls",
+                                       "schema_valid_calls",
+                                       "schema_invalid_reasons", "tool_ok")}
+            first["output"] = text
+            first["metrics"] = m
+            first["value_ok"] = g.get("value_ok")
+            # The PROSE fields come from the final reply; the CALL fields stay
+            # those of the turn whose calls were executed.
+            for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",
+                      "value_ok", "persian_script", "latin_ratio",
+                      "empty_output"):
+                if k in g2:
+                    g[k] = g2[k]
+            g["second_turn"] = {
+                "first_turn": first,
+                "new_calls": len(L.parse_tool_calls(text2)[0]),
+            }
+            g["output"] = text2
+            g["metrics"] = {"first_turn": m, "second_turn": m2,
+                            "seconds": round(m["seconds"] + m2["seconds"], 3)}
+            m = g["metrics"]
+
         # If a tool produced the right value, the ANSWER is right even when the
         # model's prose has not yet restated it. Recording that separately
         # keeps tool-routing success distinct from prose quality.
@@ -996,13 +1138,14 @@ def run_arm_tools(runner, cases, schemas_by_name):
     return out
 
 
-def run_arm_rag(runner, gold_rows, index, top_k):
+def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False):
     from rag.citations import verify_claim
     out = []
     for gold in gold_rows:
         res = index.search(gold["query"], top_k=top_k)
         passages = list(res.hits)
-        text, m = runner.generate(build_rag_prompt(gold["query"], passages))
+        text, m = runner.generate(build_rag_prompt(
+            gold["query"], passages, refusal_language=refusal_language))
 
         # Verify the answer's numbers against the evidence ACTUALLY shown to
         # the model -- not against the gold passage. Checking against evidence
@@ -1272,6 +1415,16 @@ def main(argv=None):
     ap.add_argument("--out", default="evals/results/phase4_run.json")
     ap.add_argument("--arms", default="plain,tools,rag",
                     help="comma-separated subset, for resuming a run")
+    # Q14 / D-0113. Both OFF by default: with neither flag the prompts are
+    # byte-identical to the 2026-09-27 run, so a recorded run stays
+    # reproducible from today's code. They are separate flags so the two
+    # changes can be measured apart if a combined run is ambiguous.
+    ap.add_argument("--second-turn", action="store_true",
+                    help="tools arm: hand executed tool results back and "
+                         "grade the model's final reply (Q14)")
+    ap.add_argument("--refusal-language", action="store_true",
+                    help="add the 'refuse in the language of the question' "
+                         "sentence to every arm's system prompt (Q14)")
     a = ap.parse_args(argv)
 
     # ---- provider selection -------------------------------------------
@@ -1492,7 +1645,9 @@ def main(argv=None):
         p("ARM 1/3  PLAIN BASELINE  (no tools, no evidence)  [%d cases]"
           % len(cases))
         p("-" * 78)
-        report["arms"]["plain"] = run_arm_plain(runner, cases, schemas_by_name)
+        report["arms"]["plain"] = run_arm_plain(
+            runner, cases, schemas_by_name,
+            refusal_language=a.refusal_language)
         report["summaries"]["plain"] = L.summarize_eval(
             report["arms"]["plain"])
 
@@ -1501,7 +1656,9 @@ def main(argv=None):
         p("-" * 78)
         p("ARM 2/3  TOOLS ENABLED  [%d cases]" % len(cases))
         p("-" * 78)
-        report["arms"]["tools"] = run_arm_tools(runner, cases, schemas_by_name)
+        report["arms"]["tools"] = run_arm_tools(
+            runner, cases, schemas_by_name, second_turn=a.second_turn,
+            refusal_language=a.refusal_language)
         report["summaries"]["tools"] = L.summarize_eval(
             report["arms"]["tools"])
 
@@ -1511,7 +1668,9 @@ def main(argv=None):
         p("ARM 3/3  RAG  [%d gold cases over %d passages]"
           % (len(gold_rows), len(corpus)))
         p("-" * 78)
-        report["arms"]["rag"] = run_arm_rag(runner, gold_rows, index, a.top_k)
+        report["arms"]["rag"] = run_arm_rag(
+            runner, gold_rows, index, a.top_k,
+            refusal_language=a.refusal_language)
         report["summaries"]["rag"] = L.summarize_rag(report["arms"]["rag"])
 
     peak, peak_label = peak_rss_gib(proc)
@@ -1734,6 +1893,13 @@ def main(argv=None):
                   # TEMPLATE block for the four zero-token cases that the raw
                   # shape produced.
                   "prompt_format": "chatml",
+                  # Q14 / D-0113. Written into the payload, and into the
+                  # merge signature, so a run with either change can never be
+                  # merged with -- or mistaken for -- one without it.
+                  "prompt_options": {
+                      "second_turn": bool(a.second_turn),
+                      "refusal_language": bool(a.refusal_language),
+                  },
                   # The tool-call cap is written into the payload so a capped
                   # run can never be mistaken for an uncapped one. It changes
                   # the tool_calls_attempted denominator, and a metric whose

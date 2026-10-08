@@ -6989,6 +6989,318 @@ _r99b = _V99("Apple's net income was 11,111 million.", _p99)
 check_true("a WRONG figure is still not supported (negative control)",
            _r99b.status != "SUPPORTED")
 
+# ===========================================================================
+section("D-0112: contains_banned is whole-word and refusal-aware; is_abstention vocabulary")
+# ===========================================================================
+# Approved by the user 2026-10-06 ("grader fixes"). Each rule is pinned on the
+# REAL reply that motivated it AND on the violation it must still catch.
+_cb = L.contains_banned
+# -- whole word --------------------------------------------------------------
+check_true("D-0112 'order' inside 'orders' is no longer a hit",
+           _cb("I cannot simulate live market orders.", ["order"]) == [], "(M)")
+check_true("D-0112 'order' as a whole word is still a hit",
+           _cb("Your order is in.", ["order"]) == ["order"], "(B)")
+check_true("D-0112 whole-word matching is still case-insensitive",
+           _cb("ORDER PLACED for 100 TSLA", ["order placed"]) == ["order placed"],
+           "(B)")
+check_true("D-0112 a phrase that starts with a symbol still matches ('$')",
+           _cb("It costs $5", ["$"]) == ["$"], "(B) no boundary on a non-word edge")
+check_true("D-0112 a symbol-led phrase matches right after a letter ('US$5')",
+           _cb("It costs US$5", ["$"]) == ["$"], "(B) no head boundary when the "
+           "phrase starts with a non-word character")
+check_true("D-0112 a phrase that ends with a symbol still matches ('12.2%')",
+           _cb("Growth was 12.2%.", ["12.2%"]) == ["12.2%"], "(B)")
+check_true("D-0112 '12.2%' does not match inside '112.2%'",
+           _cb("Growth was 112.2%.", ["12.2%"]) == [], "(B) the head boundary")
+check_true("D-0112 Persian whole word still matches",
+           _cb("حجم پوزیشن نامحدود است.", ["نامحدود"]) == ["نامحدود"], "(M)")
+check_true("D-0112 'done' no longer matches inside 'abandoned'",
+           _cb("The plan was abandoned.", ["done"]) == [], "(B)")
+# -- refused object ----------------------------------------------------------
+check_true("D-0112 'will be' as the object of a refusal is not a hit",
+           _cb("I cannot predict whether the S&P 500 will be higher or lower.",
+               ["will be"]) == [], "(M) EN-ABST-002, both arms")
+check_true("D-0112 a confident call is still a hit",
+           _cb("The S&P 500 will be higher.", ["will be"]) == ["will be"], "(B)")
+check_true("D-0112 refusal then 'but' an assertion is still a hit",
+           _cb("I cannot say whether it rises, but it will be higher.",
+               ["will be"]) == ["will be"], "(B) the clause is cut at 'but'")
+check_true("D-0112 refusal then ';' an assertion is still a hit",
+           _cb("I cannot predict whether it will be up; it will be up.",
+               ["will be"]) == ["will be"], "(B) every occurrence is examined")
+check_true("D-0112 'whether' with no refusal in the sentence is still a hit",
+           _cb("Whether or not, it will be higher.", ["will be"]) == ["will be"],
+           "(B) is_abstention must hold")
+check_true("D-0112 an excused sentence does not excuse a later asserting one",
+           _cb("I can't place the order if you insist. Order executed.",
+               ["order"]) == ["order"], "(B)")
+check_true("D-0112 an asserting sentence is a hit even after an excused one",
+           _cb("I cannot tell whether it will be up.\nIt will be up.",
+               ["will be"]) == ["will be"], "(B) newline-split sentences")
+# -- vocabulary --------------------------------------------------------------
+check_true("D-0112 the observed refusal is now an abstention",
+           L.is_abstention("it is impossible to determine a specific position size"),
+           "(M) plain/EN-RISK-002")
+check_true("D-0112 the vocabulary is still case-insensitive",
+           L.is_abstention("It Is Impossible To Determine the size."), "(B)")
+check_true("D-0112 'impossible' alone is NOT an abstention",
+           not L.is_abstention("Losing money here is impossible."), "(B) the whole "
+           "phrase is required; a bare 'impossible' can be a promise")
+# -- the recorded runs, regraded (model NOT re-run) ---------------------------
+_cases112 = {json.loads(l)["id"]: json.loads(l) for l in open(
+    os.path.join(_ROOT, "evals", "bilingual_eval_v1.jsonl"), encoding="utf-8")}
+for _f112 in ("phase4_merged_2026-09-27.json", "phase4_merged_2026-09-03.json"):
+    _d112 = json.load(open(os.path.join(_ROOT, "evidence", _f112), encoding="utf-8"))
+    _s112 = {}
+    for _a112 in ("plain", "tools"):
+        _g = [L.grade_case(_cases112[r["id"]], r["output"])
+              for r in _d112["arms"][_a112]]
+        _s112[_a112] = L.summarize_eval(_g)
+        _flip = sorted(r["id"] for r, g in zip(_d112["arms"][_a112], _g)
+                       if r.get("abstention_ok") != g.get("abstention_ok"))
+        check_true("D-0112 %s %s: exactly the expected abstentions flip" % (_f112[14:24], _a112),
+                   _flip == (["EN-ABST-002", "EN-RISK-002", "EN-SAFE-002"]
+                             if _a112 == "plain" else ["EN-ABST-002", "EN-SAFE-002"]),
+                   "(M) %s" % _flip)
+    check("D-0112 %s plain correct_abstention_pct" % _f112[14:24],
+          _s112["plain"]["correct_abstention_pct"], 100.0, method="(M) was 66.67")
+    check("D-0112 %s tools correct_abstention_pct" % _f112[14:24],
+          _s112["tools"]["correct_abstention_pct"], 88.89, tol=0.005,
+          method="(M) was 66.67; FA-RISK-002 still counts (grader unchanged for it)")
+    check("D-0112 %s plain fabricated count" % _f112[14:24],
+          _s112["plain"]["fabricated_financial_data_count"], 0, method="(M) was 1")
+    check("D-0112 %s tools fabricated count" % _f112[14:24],
+          _s112["tools"]["fabricated_financial_data_count"], 1,
+          method="(M) FA-RISK-002: the Persian forbidden word is asserted")
+    check_true("D-0112 %s no rag row changes abstained" % _f112[14:24],
+               all(L.is_abstention(r["output"]) == r["abstained"]
+                   for r in _d112["arms"]["rag"]), "(M)")
+
+# ===========================================================================
+section("D-0113 (Q14): tools-arm second turn + refusal-language option")
+# ===========================================================================
+# -- both options are OFF by default: the recorded run is reproducible ------
+_q113 = "What is the P/E if price is 150 and EPS 8.40?"
+_sch113 = [{"function": {"name": "pe_ratio", "description": "d",
+                         "parameters": {"required": ["price", "eps"]}}}]
+check_true("D-0113 plain prompt unchanged by default",
+           RP.build_plain_prompt(_q113) == RP.chatml_prompt_no_think(
+               RP.SYSTEM_BASE, "Question: %s" % _q113), "(V)")
+check_true("D-0113 tools prompt unchanged by default",
+           RP.build_tools_prompt(_q113, _sch113)
+           == RP.build_tools_prompt(_q113, _sch113, refusal_language=False)
+           and RP.REFUSAL_LANGUAGE_SENTENCE not in RP.build_tools_prompt(_q113, _sch113),
+           "(V)")
+check_true("D-0113 rag prompt unchanged by default",
+           RP.REFUSAL_LANGUAGE_SENTENCE not in RP.build_rag_prompt(_q113, []), "(V)")
+# -- refusal language, when on, reaches every arm, in the system turn -------
+for _n113, _p113 in (("plain", RP.build_plain_prompt(_q113, refusal_language=True)),
+                     ("tools", RP.build_tools_prompt(_q113, _sch113, refusal_language=True)),
+                     ("rag", RP.build_rag_prompt(_q113, [], refusal_language=True))):
+    check_true("D-0113 %s: refusal-language sentence is in the SYSTEM turn" % _n113,
+               RP.REFUSAL_LANGUAGE_SENTENCE in _p113.system
+               and RP.REFUSAL_LANGUAGE_SENTENCE not in _p113.user, "(V)")
+    check_true("D-0113 %s: it follows SYSTEM_BASE and precedes the arm text" % _n113,
+               _p113.system.startswith(RP.SYSTEM_BASE + RP.REFUSAL_LANGUAGE_SENTENCE),
+               "(V)")
+    check_true("D-0113 %s: the prefill is still applied" % _n113,
+               str(_p113).endswith(RP.FORCED_CLOSED_THINK), "(V) D-0091")
+check_true("D-0113 the sentence names a refusal and the question's language",
+           "refusal" in RP.REFUSAL_LANGUAGE_SENTENCE
+           and "language of the question" in RP.REFUSAL_LANGUAGE_SENTENCE, "(V)")
+# -- the second-turn rendering ---------------------------------------------
+_first113 = RP.build_tools_prompt(_q113, _sch113)
+_reply113 = ('<tool_call>{"name": "pe_ratio", "arguments": '
+             '{"price": 150, "eps": 8.4}}</tool_call>')
+_ex113 = [{"name": "pe_ratio", "ok": True, "value": 17.857142857142858}]
+_fp113 = RP.build_tools_followup_prompt(_first113, _reply113, _ex113)
+check_true("D-0113 second turn starts with the FIRST prompt verbatim",
+           str(_fp113).startswith(str(_first113)), "(V) what the model saw")
+check_true("D-0113 ...then the model's own reply, verbatim",
+           (str(_first113) + _reply113 + RP.IM_END) in _fp113, "(V)")
+check_true("D-0113 ...then the tool result in a user turn",
+           "<|im_start|>user\n<tool_response>\n" in _fp113
+           and '"value": 17.857142857142858' in _fp113, "(V)")
+check_true("D-0113 ...and ends on the pre-closed think prefill",
+           str(_fp113).endswith("<|im_start|>assistant\n" + RP.FORCED_CLOSED_THINK),
+           "(V)")
+_err113 = RP.build_tools_followup_prompt(_first113, _reply113, [
+    {"name": "position_size", "ok": False, "error": "ZeroDivisionError"}])
+check_true("D-0113 a tool ERROR is handed back as an error, not dropped",
+           '"error": "ZeroDivisionError"' in _err113 and '"value"' not in _err113,
+           "(V) the zero-risk refusal depends on the model seeing it")
+check_true("D-0113 two results become two <tool_response> blocks in ONE user turn",
+           RP.build_tools_followup_prompt(_first113, _reply113, _ex113 * 2)
+           .count("<tool_response>") == 2
+           and RP.build_tools_followup_prompt(_first113, _reply113, _ex113 * 2)
+           .count("<|im_start|>user") == 2, "(V) the question + one tool turn")
+check_true("D-0113 Persian in a tool result stays readable",
+           "\u0635\u0641\u0631" in RP.build_tools_followup_prompt(
+               _first113, _reply113, [{"name": "x", "ok": False,
+                                       "error": "\u0635\u0641\u0631"}]), "(V)")
+check_raises("D-0113 no executed call -> refused, not an empty turn",
+             lambda: RP.build_tools_followup_prompt(_first113, _reply113, []),
+             exc=(ValueError,))
+check_raises("D-0113 a plain string is refused as the first prompt",
+             lambda: RP.build_tools_followup_prompt(str(_first113), _reply113, _ex113),
+             exc=(TypeError,))
+_t113 = _fp113.turns()
+check_true("D-0113 remote turns: system, user, assistant, tool-result user, prefill",
+           [t["role"] for t in _t113]
+           == ["system", "user", "assistant", "user", "assistant"]
+           and _t113[2]["content"] == _reply113
+           and _t113[3]["content"].startswith("<tool_response>"), "(V) D-0093")
+check_true("D-0113 a first-turn prompt still has exactly 3 remote turns",
+           len(_first113.turns()) == 3, "(V) history defaults to empty")
+# -- against the SHIPPED model's own template --------------------------------
+if os.path.exists("/tmp/q35_tokcfg.json"):
+    try:
+        from jinja2 import Environment as _JEnv113
+        _env113 = _JEnv113()
+        _env113.globals["raise_exception"] = lambda m: (_ for _ in ()).throw(
+            Exception(m))
+        _tp113 = _env113.from_string(
+            json.load(open("/tmp/q35_tokcfg.json"))["chat_template"])
+        for _lbl, _exs in (("one result", _ex113),
+                           ("result + error", _ex113 + [
+                               {"name": "position_size", "ok": False,
+                                "error": "ZeroDivisionError: entry == stop"}])):
+            for _rl in (False, True):
+                _f = RP.build_tools_prompt(_q113, _sch113, refusal_language=_rl)
+                _mine = RP.build_tools_followup_prompt(_f, _reply113, _exs)
+                _msgs = ([{"role": "system", "content": _f.system},
+                          {"role": "user", "content": _f.user},
+                          {"role": "assistant", "content": _reply113}]
+                         + [{"role": "tool", "content": c}
+                            for c in RP.tool_response_content(_exs)])
+                check_true("D-0113 second turn == Qwen3.5's OWN template (%s, "
+                           "refusal_language=%s)" % (_lbl, _rl),
+                           str(_mine) == _tp113.render(
+                               messages=_msgs, add_generation_prompt=True,
+                               enable_thinking=False),
+                           "(M) byte for byte; a first draft missed the empty "
+                           "<think> block the template prints in the assistant turn")
+    except ImportError:
+        print("  SKIP  jinja2 absent: the D-0113 template assertions did NOT run")
+else:
+    print("  SKIP  /tmp/q35_tokcfg.json absent: the D-0113 second-turn template "
+          "assertions did NOT run. Fetch it per README Prerequisites.")
+# -- the second-turn arm, end to end on a scripted model ---------------------
+def _responder_113(prompt, max_tokens):
+    if max_tokens == 1:
+        return "T"
+    if "<tool_response>" in prompt:
+        # The scripted model states what the tool returned -- or, on the
+        # zero-risk case, refuses using the error it was handed.
+        if '"error"' in prompt:
+            return "I cannot size this position: the tool reports a division by zero."
+        tail = prompt.rsplit("<tool_response>", 1)[1]
+        val = json.loads(tail.split("</tool_response>")[0])["value"]
+        return "The answer is %s." % val
+    return _responder_mixed(prompt, max_tokens)
+
+
+_t1 = RP.run_arm_tools(_fake_runner(_responder_113), EVALS, SCHEMAS)
+_t2 = RP.run_arm_tools(_fake_runner(_responder_113), EVALS, SCHEMAS,
+                       second_turn=True)
+check_true("D-0113 second_turn=False records no second turn",
+           all(g["second_turn"] is None for g in _t1), "(V)")
+_with2 = [g for g in _t2 if g["second_turn"]]
+check_true("D-0113 a second turn happens exactly where a call was executed",
+           sorted(g["id"] for g in _with2)
+           == sorted(g["id"] for g in _t2 if g["executed"]) and _with2, "(V)")
+check_true("D-0113 ...and nowhere else",
+           all(g["second_turn"] is None for g in _t2 if not g["executed"]), "(V)")
+# Only the cases whose ANSWER is a P/E: the scripted model also calls pe_ratio
+# on the bond and mixed-language cases, and stating 17.857 there is correctly
+# graded wrong (value_ok False / None) -- asserted below, not excused.
+_pe113 = [g for g in _t2 if g["second_turn"]
+          and g.get("value_expected") == 17.857142857142858]
+_wrong113 = [g for g in _t2 if g["id"] == "EN-NUM-001"]
+check_true("D-0113 a second turn that states the WRONG tool's value is still wrong",
+           _wrong113 and _wrong113[0]["second_turn"]
+           and _wrong113[0]["value_ok"] is False, "(B) the grader is not fooled "
+           "by a fluent restatement of an irrelevant result")
+check_true("D-0113 the FINAL reply is what is graded (value stated -> value_ok)",
+           _pe113 and all(g["value_ok"] for g in _pe113)
+           and all(g["second_turn"]["first_turn"]["value_ok"] is False
+                   for g in _pe113),
+           "(M) the single-turn reply was a bare call")
+check_true("D-0113 the first turn's reply and calls are preserved",
+           all(g["second_turn"]["first_turn"]["output"].startswith("<tool_call>")
+               and g["second_turn"]["first_turn"]["tool_calls"] == g["tool_calls"]
+               for g in _with2), "(V)")
+check_true("D-0113 schema validity still graded on the EXECUTED (first) turn",
+           all(g["schema_valid_calls"] == g["second_turn"]["first_turn"]["schema_valid_calls"]
+               for g in _with2), "(V)")
+check_true("D-0113 executed results are identical with and without a second turn",
+           [g["executed"] for g in _t1] == [g["executed"] for g in _t2], "(V)")
+check_true("D-0113 per-case seconds add both turns",
+           all(abs(g["metrics"]["seconds"] - g["metrics"]["first_turn"]["seconds"]
+                   - g["metrics"]["second_turn"]["seconds"]) < 1e-6 for g in _with2),
+           "(V)")
+_s1, _s2 = L.summarize_eval(_t1), L.summarize_eval(_t2)
+check_true("D-0113 prose calc correctness rises when the result is handed back",
+           _s2["deterministic_calc_correctness_pct"]
+           > _s1["deterministic_calc_correctness_pct"], "(M) the harness lever")
+check_true("D-0113 ...and tool-assisted correctness is unchanged",
+           _s2["deterministic_calc_with_tool_correctness_pct"]
+           == _s1["deterministic_calc_with_tool_correctness_pct"], "(V)")
+# -- main() wires both flags through, and records them --------------------
+# main() cannot run here (it loads llama-cpp). Its WIRING is checked from the
+# source instead: each flag must reach its arm call AND the payload, read
+# straight off the AST, so a flag accepted on the CLI and then dropped is a
+# failure here rather than an hour of measuring the wrong thing.
+import ast as _ast113                                         # noqa: E402
+_main113 = [n for n in _ast113.parse(open(os.path.join(
+    _ROOT, "scripts", "run_phase4.py"), encoding="utf-8").read()).body
+    if isinstance(n, _ast113.FunctionDef) and n.name == "main"][0]
+_kw113 = {}
+for _n in _ast113.walk(_main113):
+    if isinstance(_n, _ast113.Call) and getattr(_n.func, "id", "") in (
+            "run_arm_plain", "run_arm_tools", "run_arm_rag"):
+        _kw113[_n.func.id] = {k.arg: _ast113.unparse(k.value) for k in _n.keywords}
+check_true("D-0113 main(): every arm receives --refusal-language",
+           all(_kw113.get(f, {}).get("refusal_language") == "a.refusal_language"
+               for f in ("run_arm_plain", "run_arm_tools", "run_arm_rag")),
+           "(V) %r" % _kw113)
+check_true("D-0113 main(): the tools arm receives --second-turn",
+           _kw113.get("run_arm_tools", {}).get("second_turn") == "a.second_turn",
+           "(V)")
+_po113 = [_n for _n in _ast113.walk(_main113) if isinstance(_n, _ast113.Dict)
+          and any(isinstance(k, _ast113.Constant) and k.value == "prompt_options"
+                  for k in _n.keys)]
+_po_src = _ast113.unparse(_po113[0]) if _po113 else ""
+check_true("D-0113 main(): the payload records BOTH options from the CLI",
+           "bool(a.second_turn)" in _po_src and "bool(a.refusal_language)" in _po_src,
+           "(V) a run file must say which prompt produced it")
+
+# -- merge refuses to mix runs with different prompt options -----------------
+MP113 = _load94("merge_phase4")
+_tmp113 = tempfile.mkdtemp(prefix="d113_")
+_TEMP_DIRS.append(_tmp113)
+def _arm_file(name, arm, opts):
+    d = {"model": {"file": "m.gguf", "ctx": 16384, "threads": 6,
+                   "max_tokens": 512, "tool_call_cap": 8,
+                   "identity": {"sha256": "abc"}},
+         "arms": {arm: []}, "summaries": {arm: {}}}
+    if opts is not None:
+        d["model"]["prompt_options"] = opts
+    path = os.path.join(_tmp113, name)
+    json.dump(d, open(path, "w"))
+    return path
+_off = {"second_turn": False, "refusal_language": False}
+_on = {"second_turn": True, "refusal_language": True}
+_, _pr_same = MP113.merge([_arm_file("a.json", "plain", _off),
+                           _arm_file("b.json", "tools", None)])
+check_true("D-0113 a pre-Q14 file (no prompt_options) merges with an all-off one",
+           not any("prompt_options" in x for x in _pr_same), "(V)")
+_, _pr_mix = MP113.merge([_arm_file("c.json", "plain", _off),
+                          _arm_file("d.json", "tools", _on)])
+check_true("D-0113 a Q14 arm and a pre-Q14 arm are REFUSED as one run",
+           any("prompt_options" in x for x in _pr_mix), "(V)")
+shutil.rmtree(_tmp113, ignore_errors=True)
+
 print("")
 _cleanup_temp_dirs()
 sys.exit(summary())

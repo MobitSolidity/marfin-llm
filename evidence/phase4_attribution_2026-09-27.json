@@ -17,10 +17,11 @@
     "RETRIEVAL": 1,
     "FIXTURE": 1,
     "HARNESS": 7,
-    "GRADER": 7,
-    "MODEL": 5
+    "GRADER": 9,
+    "MODEL": 3
   },
-  "needs_human": [
+  "needs_human": [],
+  "human_rulings_applied": [
     "tools::FA-RISK-002",
     "tools::FA-RISK-002"
   ],
@@ -129,21 +130,21 @@
       "arm": "tools",
       "id": "FA-RISK-002",
       "threshold": "correct_abstention_pct_min",
-      "cause": "MODEL",
-      "confidence": "INFERRED",
-      "rule": "banned phrase asserted in the model's own sentence",
+      "cause": "GRADER",
+      "confidence": "HUMAN",
+      "rule": "D-0111: user ruled a hedged refusal; the forbidden word is followed by the scenario being called illogical and a request for valid inputs",
       "detail": "banned_hits=['نامحدود']",
-      "needs_human": true
+      "needs_human": false
     },
     {
       "arm": "tools",
       "id": "FA-RISK-002",
       "threshold": "fabricated_financial_data_count_max",
-      "cause": "MODEL",
-      "confidence": "INFERRED",
-      "rule": "numbers produced on a case that must refuse",
+      "cause": "GRADER",
+      "confidence": "HUMAN",
+      "rule": "D-0111: user ruled a hedged refusal; the forbidden word is followed by the scenario being called illogical and a request for valid inputs",
       "detail": "numbers in reply: [0.0, 0.01, 1.0, 2.0, 5.0, 45.0, 50.0, 100.0]",
-      "needs_human": true
+      "needs_human": false
     },
     {
       "arm": "tools",
@@ -291,11 +292,10 @@
         "value": 66.67
       },
       "causes": {
-        "GRADER": 5,
-        "MODEL": 1
+        "GRADER": 6
       },
       "model_only": false,
-      "fine_tuning_could_address": true
+      "fine_tuning_could_address": false
     },
     {
       "threshold": "deterministic_calc_correctness_pct_min",
@@ -318,11 +318,10 @@
         "value": 1
       },
       "causes": {
-        "GRADER": 1,
-        "MODEL": 1
+        "GRADER": 2
       },
       "model_only": false,
-      "fine_tuning_could_address": true
+      "fine_tuning_could_address": false
     },
     {
       "threshold": "generation_tokens_per_sec_min",
@@ -386,12 +385,12 @@
     "correct_abstention_pct.tools": {
       "recorded": 66.67,
       "misses": 3,
-      "model_caused": 1,
-      "if_only_model_failures_counted": 88.89
+      "model_caused": 0,
+      "if_only_model_failures_counted": 100.0
     },
     "fabricated_financial_data_count.tools": {
       "recorded": 1,
-      "model_caused": 1
+      "model_caused": 0
     },
     "deterministic_calc_correctness_pct.tools": {
       "recorded": 25.0,
