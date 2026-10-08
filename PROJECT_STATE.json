@@ -231,7 +231,10 @@
     "Q10 [RESOLVED 2026-08-19, D-0055, by the user's explicit delegation]: the P/E tolerance on EN/FA-CALC-001 was 0.001, which demanded THREE decimals of a value that is 17.857142857...; the model showed the division 150/8.40 and answered 17.86, a correct 2-decimal rounding, and was graded FAIL for its presentation rather than its arithmetic. Widened to 0.005 -- the half-unit-in-last-place of two decimals -- which MEASURABLY still rejects truncated 17.85, 1-decimal 17.9, the rubric's own distractor 'about 18', and the wrong-EPS 18.75. The rubric requirement to show working or call the tool is graded separately and was NOT relaxed. The other six value-graded cases are exact at 2dp and were left untouched. Pinned by 8 fixture-reading assertions and 6 new mutations; the eval file is now itself a mutation target.",
     "Q11 [RESOLVED 2026-08-21, D-0058, by the user's explicit delegation (\"هر عددی که میدانی مناسب است قرار بده\")]: TOOL_CALL_CAP = 8, applied in run_arm_tools BEFORE execution, not at grade time. MEASURED basis: 65 calls were emitted across the tools arm; the worst case EN-CALC-001 emitted 26, all repetitions of one calculation. Two of my own earlier claims were DISPROVED by that measurement: EN-MIX-001 and FA-TERM-001 emitted 17 and 7 DISTINCT calls, which is legitimate breadth, not spam -- so a cap below 17 would have truncated correct behaviour and then scored the model down for it. 8 sits above the highest legitimate count observed. WHAT A CAPPED RUN NO LONGER MEASURES: the unbounded call count of an un-capped model; that number is genuinely lost. The grade records what was EMITTED alongside what was EXECUTED so the loss is visible, and a reply with exactly 8 calls is NOT flagged as capped.",
     "Q13 [D-0110, 2026-10-04]: fine-tuning recommended NOT justified now -- every failing threshold is decided by HARDWARE/HARNESS/FIXTURE/GRADER; the only MODEL case on a threshold is FA-RISK-002 (a judgement). Accept, or overrule?",
-    "Q14 [D-0110]: all 3 Persian unanswerable RAG questions are refused in English (outcome=OK hides it; fa_not_in_persian=3). Approve a system-prompt line \"refuse in the language of the question\" for the next re-run?"
+    "Q14 [D-0110]: all 3 Persian unanswerable RAG questions are refused in English (outcome=OK hides it; fa_not_in_persian=3). Approve a system-prompt line \"refuse in the language of the question\" for the next re-run?",
+    "Q14 [RUN 2026-10-09, D-0114, MEASURED]: second turn lifted tools prose calc 12.5 -> 75 (remaining 2 are '10%' graded against 0.1 -- grader gap G2); refusal line took rag fa_not_in_persian 3 -> 0 but the new Persian refusal wording is unknown to is_abstention (gap G1) -> rag fabrication 0 -> 3; plain CAGR regressed to 20% / 10.94% (MODEL). Verdict still 3/7/2.",
+    "Q15 [D-0114]: approve grader fixes G1 (Persian 'اطلاعاتی ... ندارم' refusal) and G2 (percent-aware value match)? Counterfactual: tools abstention 77.78, tools calc 100, rag fabrication 0; no threshold flips.",
+    "Q16 [D-0114]: tools FA-RISK-002 new reply (sha256 6369ff55...9433) asks for equity/stop and says no position if both are 50 -- hedged refusal or failure? D-0111 ruling is hash-bound and no longer applies."
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -378,7 +381,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0113",
+  "decisions_logged": "D-0001..D-0114",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -508,7 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": "Phase 4 review (docs/phase-reports/phase-4.md): fine-tuning recommendation (Q13); Q14 run on the i5-12400 (Q14_RUN_COMMANDS.md), tools-arm second turn + Persian-refusal instruction (Q14)",
+  "awaiting_approval_for": "Phase 4 review (docs/phase-reports/phase-4.md): fine-tuning decision (Q13, re-informed by the Q14 run, D-0114); grader fixes G1/G2 (Q15); FA-RISK-002 new-reply ruling (Q16)",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2378,5 +2381,57 @@
     "template_check": "second turn byte-identical to Qwen3.5-4B's own chat_template (enable_thinking=False); first draft differed by the empty <think> block, fixed",
     "run_commands": "Q14_RUN_COMMANDS.md (Persian); ~70-75 min ESTIMATED",
     "verification": "test_phase4_harness 1077 -> 1121; mutate_phase4 316 seeded/306 killed/1 survived/9 skipped (baseline); run_all.sh 3837 passed, 0 failed, 3 skipped"
+  },
+  "D-0114_q14_results_2026_10_09": {
+    "decision": "D-0114",
+    "date": "2026-10-09",
+    "trigger": "user uploaded phase4_merged_q14.json.txt (run on the i5-12400)",
+    "status": "Q14 MEASURED and recorded; no code/grader/threshold changed",
+    "provenance": {
+      "upload_sha256_crlf": "7fcb70300bf20eac834f69babbb9d3cef0cb6c9b2894ae5ca04845ba9ae2148e",
+      "archived_lf_sha256": "65963d1aec95c808e404d872f221059291b617460a6659976d44eac3c2e045e7",
+      "model_sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+      "prompt_options": {
+        "second_turn": true,
+        "refusal_language": true
+      }
+    },
+    "verdict": "3 PASS / 7 FAIL / 2 UNMEASURED (unchanged count)",
+    "deciding_values": {
+      "citation": 90.48,
+      "abstention_tools": 66.67,
+      "calc_plain": 75.0,
+      "calc_tools": 75.0,
+      "fabrication_rag": 3,
+      "decode_tok_s": 2.65,
+      "ttft_s": 68.278,
+      "unsupported": 6.9,
+      "peak_rss_gib": 3.838
+    },
+    "effects": {
+      "second_turn": "tools prose calc 12.5 -> 75; CALC-002 x2 state 10% (grader gap G2)",
+      "refusal_language": "rag fa_not_in_persian 3 -> 0; new Persian refusal wording missed by is_abstention (gap G1) -> rag fabrication 3, tools FA-ABST-001 miss",
+      "plain_side_effect": "EN-CALC-002 20%, FA-CALC-002 10.94% (MODEL regression)"
+    },
+    "latency_note": "slower than 2026-09-27 (4.43 tok/s, 48 s); TTFT probe uses neither flag -> machine state INFERRED",
+    "proposed_not_applied": {
+      "G1": "is_abstention Persian pattern اطلاعاتی?[^.!?\\n؟]{0,80}?ندارم",
+      "G2": "value_matches: n% compared as n/100, unscaled only",
+      "counterfactual": "tools abst 77.78, tools calc 100, rag fab 0; no threshold flips"
+    },
+    "attribution_totals": {
+      "HARDWARE": 0,
+      "RETRIEVAL": 1,
+      "FIXTURE": 1,
+      "HARNESS": 2,
+      "GRADER": 1,
+      "MODEL": 9
+    },
+    "evidence": [
+      "evidence/phase4_merged_2026-10-09_q14.json",
+      "evidence/phase4_citations_recomputed_2026-10-09_q14.json",
+      "evidence/phase4_verdict_2026-10-09_q14.json",
+      "evidence/phase4_attribution_2026-10-09_q14.json"
+    ]
   }
 }
