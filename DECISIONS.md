@@ -6614,3 +6614,88 @@ exactly one place, and both are visible.
 It does not re-run the model, edit the eval set, or touch the rag grader, the
 citation grader, or any threshold. It does not encode D-0111 into the grader. It
 does not close Phase 4.
+
+## D-0113 — Q14 built: a second turn for the tools arm and a refusal-language option; the run itself is the user's
+
+**Date:** 2026-10-06 · **Status:** IMPLEMENTED AND VERIFIED; NOT RUN (the model runs
+only on the user's i5-12400, Route A) · **Trigger:** the user: "run q14".
+
+### What "run" can and cannot mean here
+
+MEASURED this session: 2 vCPU, `import llama_cpp` → ModuleNotFoundError, no GGUF.
+The model cannot run in this sandbox. Q14 therefore has two halves. The **harness
+change** is done here and fully verified. The **measurement** is the user's ~70–75
+minute run, with commands in `Q14_RUN_COMMANDS.md` (Persian, following the
+ITEM7 format). No number in this decision comes from a new run.
+
+### What was built (`scripts/run_phase4.py`, `scripts/merge_phase4.py`)
+
+- **`--second-turn`** (tools arm). When a reply's calls were executed, the results
+  are handed back and the model's **final** reply is graded. This is the lever
+  D-0108/D-0110 named: the tool was right 8/8 and the model was never told.
+  - The first reply is passed back verbatim.
+  - A tool **error** is passed back as an error. The zero-risk refusal depends on
+    the model seeing the ZeroDivisionError.
+  - One round only. New calls in the second turn are counted (`new_calls`), not
+    executed.
+  - Schema validity stays graded on the executed first turn.
+  - The first turn's reply, calls and metrics are preserved, so a second-turn run
+    stays comparable call for call with a single-turn one.
+- **`--refusal-language`** (all arms). One sentence after `SYSTEM_BASE`, in the
+  system turn: "If you decline or say you do not have the information, write that
+  refusal in the language of the question too."
+- **Both flags are off by default.** Without them, every prompt is byte-identical
+  to the 2026-09-27 run (asserted), so recorded runs stay reproducible from today's
+  code. They are separate flags so that the two effects can be separated with one
+  more run if a combined result is ambiguous.
+- **Provenance.** `model.prompt_options` is written into the run file and added to
+  `merge_phase4.py`'s run signature, so a Q14 arm can never be merged with a
+  pre-Q14 one. A pre-Q14 file without the field reads as all-off, which is what it
+  was.
+
+### The template check that caught my own first draft
+
+Qwen3.5-4B's own `chat_template` was fetched (`/tmp/q35_tokcfg.json`, per the
+README prerequisites) and rendered with jinja2 for
+`[system, user, assistant, tool…]`, `enable_thinking=False`. My first draft rebuilt
+the earlier turn with `chatml_prompt()`. It **differed by 4 lines**: the template
+prints an empty `<think></think>` block in an assistant turn after the last user
+query, and the draft dropped it. That would have shown the model a history it was
+never trained on. The fix reuses the first prompt verbatim (prefill included). It
+is now **byte-identical** to the template, for one result and for result+error,
+with and without the refusal sentence, and pinned by 4 assertions.
+
+Fetching those files also activated 3 template assertion blocks that had been
+SKIPPED in this sandbox (`tokenizers` was missing; installed). All of them pass,
+so the run_all.sh skip count fell 6 → 3.
+
+### Verification
+
+- `tests/test_phase4_harness.py` 1077 → 1121. Assertions cover:
+  - the defaults are unchanged;
+  - the refusal sentence is in the system turn of all three arms and the prefill
+    is kept;
+  - the second-turn rendering, including errors, two results, Persian, and the
+    refusals for no executed call and a non-Prompt argument;
+  - the remote turns carry the history;
+  - the template match;
+  - a scripted-model end-to-end run: the final reply is graded, and stating the
+    *wrong* tool's value is still wrong;
+  - `main()`'s flag wiring, checked from the AST;
+  - merge refusing mixed options.
+- `tests/mutate_phase4.py`: 16 new mutants. **316 seeded, 306 killed, 1 survived, 9
+  skipped**, which is the established baseline. Before the run, every anchor was
+  checked against the edited source. That found 3 prefill-wiring mutants my
+  refactor had blinded, and a fourth (`ensure_ascii=False`) that my own new code,
+  and then my own comment, had made ambiguous. All were repaired before the battery
+  ran, not after it reported them.
+- `tests/run_all.sh`: **3837 passed, 0 failed, 3 skipped, ALL GREEN.** Along the
+  way, `tools/impact.py`'s pinned target count for `mutate_phase4.py` (13 → 14)
+  failed until updated, which correctly flagged the new merge target.
+
+### What this does not do
+
+It does not run the model, and does not claim any effect. Whether calc correctness
+rises and whether the Persian refusals switch language is exactly what the run
+measures. It does not touch the eval set or any threshold. It does not close
+Phase 4 or decide Q13.

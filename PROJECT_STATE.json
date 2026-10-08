@@ -378,7 +378,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0112",
+  "decisions_logged": "D-0001..D-0113",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -508,7 +508,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": "Phase 4 review (docs/phase-reports/phase-4.md): fine-tuning recommendation (Q13), tools-arm second turn + Persian-refusal instruction (Q14)",
+  "awaiting_approval_for": "Phase 4 review (docs/phase-reports/phase-4.md): fine-tuning recommendation (Q13); Q14 run on the i5-12400 (Q14_RUN_COMMANDS.md), tools-arm second turn + Persian-refusal instruction (Q14)",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2363,5 +2363,20 @@
     },
     "verdict": "still 3 PASS / 7 FAIL / 2 UNMEASURED; abstention and fabrication each held by tools/FA-RISK-002 alone (D-0111 ruling honoured in attribution, deliberately not in the grader)",
     "verification": "test_phase4_harness 1040 -> 1073; test_attribution 86 -> 95; mutate_phase4 300 seeded/290 killed/1 survived/9 skipped (baseline); mutate_attribution 35/34+1 equiv/0; mutate_rag 122/112/3 equiv/7 survived (the D-0107 seven)"
+  },
+  "D-0113_q14_harness_2026_10_06": {
+    "decision": "D-0113",
+    "date": "2026-10-06",
+    "trigger": "user: 'run q14'",
+    "status": "HARNESS BUILT AND VERIFIED; MEASUREMENT PENDING on the user's i5-12400 (Route A) -- the sandbox cannot run the model (MEASURED: 2 vCPU, no llama_cpp, no GGUF)",
+    "flags": {
+      "--second-turn": "tools arm: executed tool results handed back, FINAL reply graded; first turn preserved; schema validity on the executed turn; one round",
+      "--refusal-language": "all arms: 'If you decline or say you do not have the information, write that refusal in the language of the question too.' in the system turn"
+    },
+    "defaults": "both OFF; prompts byte-identical to 2026-09-27 without them",
+    "provenance": "model.prompt_options in the run file and in merge_phase4.py's signature",
+    "template_check": "second turn byte-identical to Qwen3.5-4B's own chat_template (enable_thinking=False); first draft differed by the empty <think> block, fixed",
+    "run_commands": "Q14_RUN_COMMANDS.md (Persian); ~70-75 min ESTIMATED",
+    "verification": "test_phase4_harness 1077 -> 1121; mutate_phase4 316 seeded/306 killed/1 survived/9 skipped (baseline); run_all.sh 3837 passed, 0 failed, 3 skipped"
   }
 }

@@ -219,7 +219,7 @@ condition is met, and Phase 5 would be justified on evidence.
 1. **Fine-tuning (Q13):** accept the recommendation (not now), or overrule it.
 2. ~~**FA-RISK-002:** failure or hedged refusal?~~ **Answered: hedged refusal (D-0111).**
 3. ~~Approve, or decline, the three grader fixes on safety-threshold code.~~ **Approved and applied (D-0112).**
-4. (Q14) Approve the two non-model levers before any Phase 5: a second turn for the tools arm, and a "refuse in the question's language" line in the system prompt. Both would need one ~68-minute re-run on the i5-12400.
+4. **(Q14) Approved and built (D-0113); awaiting your run** -- see `Q14_RUN_COMMANDS.md`. Original item: approve the two non-model levers before any Phase 5: a second turn for the tools arm, and a "refuse in the question's language" line in the system prompt. Both would need one ~68-minute re-run on the i5-12400.
 5. Whether to accept Phase 4 as **FAIL — hardware-bound** and proceed, given that Q8 already chose (b).
 
 ## Recommended Next Action

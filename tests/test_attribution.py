@@ -369,7 +369,7 @@ check_true("an eval DATA file reaches mutate_phase4.py (it is a target)",
 
 expected_targets = {
     "tests/mutation_test.sh": 5, "tests/mutate_execution.py": 2,
-    "tests/mutate_llm_providers.py": 5, "tests/mutate_phase4.py": 13,
+    "tests/mutate_llm_providers.py": 5, "tests/mutate_phase4.py": 14,
     "tests/mutate_rag.py": 9, "tests/mutate_selector.py": 1}
 for b, n in sorted(expected_targets.items()):
     t, o = I.battery_files(b)

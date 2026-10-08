@@ -79,6 +79,11 @@ def merge(paths):
             m.get("max_tokens"),
             m.get("tool_call_cap"),
             ident.get("sha256") if isinstance(ident, dict) else None,
+            # Q14 / D-0113. A file written before the flags existed carries
+            # no prompt_options and is read as both-off, which is what it was.
+            json.dumps(m.get("prompt_options")
+                       or {"second_turn": False, "refusal_language": False},
+                       sort_keys=True),
         )
 
     sigs = {}
@@ -86,7 +91,8 @@ def merge(paths):
         sigs.setdefault(sig(d), []).append(os.path.basename(path))
     if len(sigs) > 1:
         problems.append(
-            "inputs disagree on (model, ctx, threads, max_tokens, cap, sha256); "
+            "inputs disagree on (model, ctx, threads, max_tokens, cap, sha256, "
+            "prompt_options); "
             "these are NOT arms of one run: %s"
             % json.dumps({str(k): v for k, v in sigs.items()},
                          ensure_ascii=False))
