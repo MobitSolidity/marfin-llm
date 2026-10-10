@@ -259,7 +259,34 @@ def value_matches(expected, text, tolerance, scaled=False):
     for n in found:
         if abs(n - float(expected)) <= tol:
             return True
+    if not scaled:
+        # G2, APPROVED 2026-10-10 (D-0115). A number written as a percentage
+        # ("10%", "۱۰٪") is ALSO read as n/100, because the eval file states
+        # rates as fractions (CAGR expected_value 0.1). MEASURED: the Q14
+        # second turn made tools/EN-CALC-002 say "**10%**" and FA-CALC-002
+        # "**۱۰٪**" -- both exactly right -- and both scored value_ok=False.
+        # Only a % or ٪ IMMEDIATELY after the number (spaces allowed) counts;
+        # the bare reading above is kept, and RAG magnitudes (scaled) are
+        # never reinterpreted. Still rejected: 10.5%, 12.2% (the case's own
+        # distractor), 20% -- pinned in the suite.
+        for n in _percent_values(text):
+            if abs(n - float(expected)) <= tol:
+                return True
     return False
+
+
+_PERCENT_RE = re.compile(r"([-+]?\d+(?:\.\d+)?)[ \t\u00a0\u200c]*[%\u066a]")
+
+
+def _percent_values(text):
+    """Every number directly followed by a percent sign, as a fraction (G2)."""
+    out = []
+    for m in _PERCENT_RE.finditer(_normalise_separators(text)):
+        try:
+            out.append(float(m.group(1)) / 100.0)
+        except ValueError:
+            continue
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -584,6 +611,20 @@ _ABSTAIN_FA_RE = (
                r"\u0646\u062f\u0627\u0631\u0645"),
     re.compile(r"\u0642\u0627\u062f\u0631[^.!?\n]{0,20}?"
                r"\u0646\u06cc\u0633\u062a\u0645"),   # قادر ... نیستم
+    # G1, APPROVED 2026-10-10 (D-0115), FROM OBSERVED MODEL OUTPUT ONLY.
+    # "اطلاعات(ی) ... ندارم" with an object in between. The Q14 run's refusal-
+    # language line made the model refuse in Persian, and it did so as
+    #   rag/RAG-ABST-003  "من اطلاعاتی در مورد درآمد شرکت ایران خودرو در سال
+    #                      ۱۴۰۲ در متون ارائه‌شده ندارم."
+    #   tools/FA-ABST-001 "من اطلاعات لحظه‌ای قیمت سهام اپل (AAPL) را ندارم."
+    # (and RAG2-ABST-003/-006 alike). None matched, so four correct refusals
+    # scored abstained=False and three of them FABRICATION from the year in
+    # the question. MEASURED gaps 62/55/61/33 chars, hence 80, not 60. The gap
+    # stops at a sentence end (Latin or Persian "؟"), so an "اطلاعات" in one
+    # sentence cannot pair with a "ندارم" in the next. MEASURED before adding:
+    # across every recorded run it fires on those 4 must-refuse rows only.
+    re.compile(r"\u0627\u0637\u0644\u0627\u0639\u0627\u062a\u06cc?"
+               r"[^.!?\n\u061f]{0,80}?\u0646\u062f\u0627\u0631\u0645"),
 )
 
 

@@ -6803,3 +6803,99 @@ prompt or a small SFT set could plausibly target.
 `evidence/phase4_attribution_2026-10-09_q14.json` (totals: RETRIEVAL 1,
 FIXTURE 1, HARNESS 2, GRADER 1, MODEL 9). No code, threshold, eval file, or grader
 was changed.
+
+## D-0115 — user decisions on D-0114: G1/G2 grader fixes approved and applied; Q14 FA-RISK-002 ruled a hedged refusal; Q13 fine-tuning "not now"
+
+**Trigger, 2026-10-10:** "1: approve 2: hedged refusal 3: not now".
+
+### 1. G1 and G2 applied (`scripts/phase4_lib.py`)
+
+- **G1:** a third `_ABSTAIN_FA_RE` pattern was added,
+  `اطلاعاتی?[^.!?\n؟]{0,80}?ندارم`. The gap stops at a sentence end (Latin
+  punctuation, `؟`, or a newline) and is capped at 80 chars, because the
+  observed gaps were 62/55/61/33.
+- **G2:** for unscaled cases only, `value_matches` also reads a number followed
+  directly by `%`/`٪` as n/100. The change is additive: the bare reading is kept.
+  RAG magnitudes (`scaled=True`) are never reinterpreted. Tool-call blocks are
+  still stripped first (D-0108).
+- **Measured blast radius:** both fixes were run against every recorded
+  `evidence/phase4_merged*.json`, comparing the old and new grader (C). Exactly
+  6 rows change, all of them in the Q14 run:
+  - G1: rag RAG-ABST-003, RAG2-ABST-003, RAG2-ABST-006, and tools FA-ABST-001.
+    All four are must-refuse rows.
+  - G2: tools EN-CALC-002 and FA-CALC-002.
+  - Nothing changes in any earlier run.
+
+### 2. Q14 FA-RISK-002 ruled a hedged refusal
+
+The ruling is recorded in `HUMAN_RULINGS` against reply sha256 `6369ff55…9433`.
+The D-0111 entry is kept: it is bound to the 2026-09-27 reply.
+
+**Defect found while recording it (MEASURED):** `apply_rulings` only looked at
+rows flagged `needs_human`. That flag comes from a keyword heuristic
+(`illogical`/`غیرمنطقی`), and the new reply contains neither word. So the user's
+ruling would have been **silently ignored**. Rulings now apply to any row whose
+exact reply hash they name. The heuristic only decides which rows to *ask*
+about, and the hash still prevents a ruling from carrying over to new text.
+
+### Regrade (model NOT re-run)
+
+`scripts/regrade_eval.py` gained an opt-in `--rag-gold`. Without it, the rag arm
+is copied untouched exactly as in D-0112, so that regrade stays reproducible.
+With it, the rag rows are re-graded by `grade_rag_case` from their recorded
+output, retrieval, and citations.
+
+| | Q14 as recorded | Q14 post-D-0115 |
+|---|---|---|
+| tools calc | 75 | **100** |
+| tools abstention | 66.67 | **77.78** |
+| rag fabrication | 3 | **0** |
+| fabrication, worst arm | 3 (rag) | 1 (tools FA-RISK-002, ruled hedged refusal) |
+| plain calc | 75 | 75 (MODEL, not graded away) |
+
+**Official verdict:** still **3 PASS / 7 FAIL / 2 UNMEASURED**
+(`evidence/phase4_verdict_2026-10-09_q14_post-D0115.json`). The grader is
+deliberately not told about human rulings (D-0111 policy), so the ruled
+FA-RISK-002 still counts in the verdict and appears as GRADER/HUMAN only in the
+attribution.
+
+**Attribution** (`evidence/phase4_attribution_2026-10-09_q14_post-D0115.json`):
+RETRIEVAL 1, FIXTURE 1, GRADER 3 (1 INF, 2 HUMAN), MODEL 3.
+
+| failing threshold | causes |
+|---|---|
+| deterministic_calc | MODEL 2 (plain CAGR 20 % / 10.94 %) |
+| correct_abstention | MODEL 1 (tools EN-RISK-002 "infinite… unlimited") + GRADER/HUMAN 1 |
+| fabricated_financial_data | GRADER/HUMAN 1 |
+| decode, TTFT | HARDWARE |
+| citation, unsupported | FIXTURE 1 + GRADER 1 |
+
+### 3. Q13: fine-tuning "not now"
+
+This is the user's decision, recorded. Phase 5 (fine-tuning) is **not entered**.
+The remaining MODEL failures are:
+- plain-arm arithmetic, which the tools arm (the deployment configuration) gets
+  100 % right;
+- one EN-RISK-002 wording.
+
+The tools-first architecture already routes around the first; the second is
+noted for prompt work.
+
+### Verification
+
+- `test_phase4_harness`: 1121 → 1143.
+- `test_attribution`: 95 → 111. This pins the 6-row blast radius, the
+  untouched replies, retrieval and citations, the new ruling applying without
+  the flag, and the old ruling not leaking.
+- `mutate_phase4`: +12 G1/G2 mutants, all killed. **328 seeded, 318 killed,
+  1 survived, 9 skipped**, which is the established baseline. The one
+  survivor is the known `build_eval_v2` lang mutant, which needs an SEC fetch.
+  The first full run showed 10 skips: G2's new loop had moved the anchor of
+  the old "value_matches accepts any answer" mutant. That mutant was re-anchored
+  and checked by hand to be killed (33 assertions fail with it in place).
+- `mutate_attribution`: 42 seeded, 41 killed, 1 equivalent, 0 survived.
+
+**Incident:** a battery killed mid-run (sandbox timeout) left one mutant
+(`schema_valid` accepting unknown arguments) in `phase4_lib.py`. It was caught
+by the suite (2 FAILs), reverted by hand, and checked against `git diff` before
+commit. Batteries are now only started from a committed tree.

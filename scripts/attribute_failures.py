@@ -111,6 +111,16 @@ HUMAN_RULINGS = {
         ("GRADER", "D-0111: user ruled a hedged refusal; the forbidden word "
                    "is followed by the scenario being called illogical and "
                    "a request for valid inputs"),
+    # D-0115, 2026-10-10. The Q14 re-run (2026-10-09) produced a NEW reply,
+    # so the ruling above no longer applies to it -- by design. The user,
+    # asked to judge it (it asks for equity and the exact stop, says that if
+    # entry and stop are both 50 no position should be opened, and uses 45 /
+    # 1000 only as examples), ruled: "hedged refusal".
+    ("tools", "FA-RISK-002",
+     "6369ff553827441393aabc9deeb4540a321b25f57f6905b8bd317df4eb469433"):
+        ("GRADER", "D-0115: user ruled the Q14 reply a hedged refusal; it "
+                   "declines to size the position, says none should be "
+                   "opened at entry == stop, and its figures are examples"),
 }
 
 
@@ -120,14 +130,19 @@ def reply_sha256(text):
 
 
 def apply_rulings(rows, run, rulings=None):
-    """Replace needs_human attributions that a recorded human ruling covers."""
+    """Replace the attribution of every row whose exact reply a human ruled on."""
     rulings = HUMAN_RULINGS if rulings is None else rulings
     replies = {(arm, r["id"]): r.get("output") or ""
                for arm, rs in (run.get("arms") or {}).items() for r in rs}
     applied = []
     for r in rows:
-        if not r["needs_human"]:
-            continue
+        # D-0115: a ruling applies to its exact reply whether or not the
+        # keyword heuristic flagged it needs_human. The heuristic only decides
+        # which rows to ASK about; once the user has judged a reply, that
+        # judgement outranks the rule. MEASURED: the Q14 FA-RISK-002 reply
+        # lacks "غیرمنطقی", so the heuristic never flagged it, and the user's
+        # ruling on it would otherwise have been silently ignored. The hash
+        # key is what still keeps a ruling from leaking onto new text.
         key = (r["arm"], r["id"], reply_sha256(replies.get((r["arm"], r["id"]))))
         if key in rulings:
             cause, why = rulings[key]

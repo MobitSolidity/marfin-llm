@@ -34,6 +34,7 @@ ORACLE_TIMEOUT = 300
 ATTR = "scripts/attribute_failures.py"
 IMPACT = "tools/impact.py"
 GRAPH = "tools/graph_project.py"
+REGR = "scripts/regrade_eval.py"
 
 EQUIVALENT = {
     # MEASURED 2026-10-04: verify_claim never returns UNSUPPORTED for a
@@ -159,6 +160,33 @@ MUTATIONS = [
     (ATTR, "the ruling flips the case to MODEL instead of the user's cause",
      '            r["cause"], r["confidence"] = cause, "HUMAN"',
      '            r["cause"], r["confidence"] = "MODEL", "HUMAN"'),
+
+    # -- D-0115: rulings outrank the heuristic; opt-in rag regrade ----------
+    (ATTR, "D-0115 rulings again only apply to rows the heuristic flagged",
+     "    for r in rows:\n"
+     "        # D-0115: a ruling applies",
+     "    for r in rows:\n"
+     "        if not r[\"needs_human\"]:\n"
+     "            continue\n"
+     "        # D-0115: a ruling applies"),
+    (ATTR, "D-0115 the user's Q14 FA-RISK-002 ruling is dropped",
+     '     "6369ff553827441393aabc9deeb4540a321b25f57f6905b8bd317df4eb469433"):',
+     '     "0000000000000000000000000000000000000000000000000000000000000000"):'),
+    (REGR, "D-0115 the rag arm is never regraded",
+     '    rag_rows = new.get("arms", {}).get("rag") if rag_gold is not None else None',
+     '    rag_rows = None'),
+    (REGR, "D-0115 a gold-less regrade is mislabelled as the D-0115 one",
+     '        "decision": "D-0115" if rag_gold is not None else "D-0112",',
+     '        "decision": "D-0115",'),
+    (REGR, "D-0115 rag rows regraded but the summary is not recomputed",
+     '        new.setdefault("summaries", {})["rag"] = L.summarize_rag(rag_rows)',
+     '        pass'),
+    (REGR, "D-0115 rag regrade ignores the recorded retrieval",
+     '                                 r.get("retrieved"), r.get("citations"))',
+     '                                 [], r.get("citations"))'),
+    (REGR, "D-0115 rag regrade drops the outcome field",
+     'RAG_GRADING_FIELDS = ("abstained", "fabricated", "outcome", "value_ok",',
+     'RAG_GRADING_FIELDS = ("abstained", "fabricated", "value_ok",'),
 
     # -- graph_project (D-0109) ----------------------------------------------
     (GRAPH, "submodule imports dropped again (the D-0109 gap)",
