@@ -46,3 +46,4 @@ __pycache__/
 
 # graphify (dev-time cross-check only; rebuild: graphify update .) -- D-0109
 graphify-out/
+handoff/

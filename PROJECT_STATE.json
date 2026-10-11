@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": "4",
-  "phase_status": "FAIL_HARDWARE_BOUND_ALL_7_TASKS_COMPLETE_AWAITING_APPROVAL",
+  "current_phase": "6",
+  "phase_status": "PHASE_6_IN_PROGRESS_CODE_RED_TEAM_DONE_MODEL_RED_TEAM_PENDING_ON_I5_12400",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -381,7 +381,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0115",
+  "decisions_logged": "D-0001..D-0116",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -511,7 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": "Phase 4 acceptance (docs/phase-reports/phase-4.md): accept FAIL -- hardware-bound and continue to Phase 6 (Phase 5 skipped per Q13 = not now, D-0115), or request revisions",
+  "awaiting_approval_for": "NONE until the Phase 6 model red-team run (PHASE6_REDTEAM_RUN_FA.md) is returned; Phase 6 review follows",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2467,6 +2467,52 @@
       "evidence/phase4_merged_2026-10-09_q14_regraded_D0115.json",
       "evidence/phase4_verdict_2026-10-09_q14_post-D0115.json",
       "evidence/phase4_attribution_2026-10-09_q14_post-D0115.json"
+    ]
+  },
+  "D-0116_phase6_start_2026_10_10": {
+    "decision": "D-0116",
+    "date": "2026-10-10",
+    "trigger": "user: 'approve phase 4 and continue to phase 6' (and push D-0115)",
+    "phase_4": "APPROVED by the user as FAIL -- hardware-bound; Phase 5 skipped (Q13 not now)",
+    "push": "GitHub token unavailable in sandbox; D-0115 delivered as patch + bundle (handoff/), verified to apply cleanly on origin/main ace951d with 3874/3874 green",
+    "phase_6_code_half": {
+      "suite": "tests/test_redteam.py (184 asserts), battery tests/mutate_redteam.py 22/22 killed",
+      "new_module": "src/safety/untrusted.py: SS.10 envelope, control-token defang, EN/FA instruction detection; never safe_for live_execution",
+      "defect_1": "VERIFIED: llama-cpp tokenizes str prompts with special=True, so '<|im_end|>' inside a retrieved passage or tool error would become the real control token and could forge a system turn. Fixed: build_rag_prompt and tool_response_content defang; 0 of 95 eval rows change (byte-identical prompts)",
+      "defect_2": "MEASURED: NaN/inf/'1e400' reached 8 tools with ok=True (58 of 764 probes; cagr(start=inf) = -1.0). Fixed at registry._coerce + non-finite result guard; sweep 0/714",
+      "defect_3": "test_phase4_harness leaked 2 temp dirs per run (~24k dirs filled /tmp to 88%); fixed",
+      "covered": [
+        "webhook injection",
+        "replay",
+        "duplicates",
+        "stale alerts",
+        "paper/live confusion",
+        "preview bypass",
+        "kill-switch bypass",
+        "risk bypass",
+        "write tools",
+        "malformed tool calls",
+        "stale/conflicting data",
+        "currency/period/scale confusion",
+        "low-trust sources",
+        "control-token injection",
+        "tool-output injection (code side)"
+      ]
+    },
+    "phase_6_model_half": {
+      "status": "PENDING on i5-12400",
+      "instructions": "PHASE6_REDTEAM_RUN_FA.md",
+      "sets": [
+        "evals/redteam_eval_v1.jsonl (9)",
+        "evals/redteam_gold_v1.jsonl (4) over evals/redteam_corpus_v1.jsonl (21+4 adversarial)"
+      ],
+      "builder": "tools/build_redteam_eval.py",
+      "grader": "unchanged Phase 4 graders"
+    },
+    "not_covered_yet": [
+      "long-context tests (8K/16K) -- needs model run",
+      "screenshot misreading -- needs OCR/vision path",
+      "partial fills / rejected orders / disconnected broker -- no broker adapter exists (writes are refused unconditionally)"
     ]
   }
 }

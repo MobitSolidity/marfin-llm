@@ -118,7 +118,8 @@ tests/test_screenshot.py \
 tests/test_phase4_harness.py \
 tests/test_llm_providers.py \
 tests/test_console.py \
-tests/test_attribution.py"
+tests/test_attribution.py \
+tests/test_redteam.py"
 
 for t in $SUITES; do
   echo
@@ -553,6 +554,17 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: attribution/impact source not restored, or its oracle is red"
     fail=1; }
   [ $atm_status -ne 0 ] && fail=1
+
+  echo
+  echo "--- Phase 6 red team (D-0116) -----------------------------------------"
+  rtm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_redteam.py)
+  rtm_status=$?
+  echo "$rtm" | grep -E "seeded [0-9]+"
+  echo "$rtm" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$rtm" | grep -q "restored+green True" || {
+    echo "  ERROR: red-team source not restored, or its oracle is red"
+    fail=1; }
+  [ $rtm_status -ne 0 ] && fail=1
 fi
 
 echo

@@ -65,6 +65,7 @@ sys.path.insert(0, os.path.join(_ROOT, "src"))
 sys.path.insert(0, _HERE)
 
 import phase4_lib as L  # noqa: E402
+from safety.untrusted import neutralize_control_tokens as _defang  # noqa: E402
 
 # Make the console safe BEFORE anything Persian can reach it.
 CONSOLE_UTF8 = L.make_console_safe()
@@ -805,7 +806,10 @@ def tool_response_content(executed):
         else:
             out.append(json.dumps({"name": e["name"], "error": e.get("error")},
                                   **keep))
-    return out
+    # D-0116: a tool result is UNTRUSTED (SS.10). An error message can echo
+    # caller-supplied text, and "</tool_response>" inside it would close the
+    # response block early. Defanged; ordinary results are unchanged.
+    return [_defang(x) for x in out]
 
 
 def build_tools_followup_prompt(first, first_reply, executed):
@@ -914,8 +918,15 @@ def build_rag_prompt(question, passages, refusal_language=False):
             tag += "[entity: %s] " % str(entity).strip()
         if units and str(units).strip():
             tag += "[figures in %s] " % str(units).strip()
-        ev.append("[%d] (%s) %s%s"
-                  % (i, ps.provenance.citation(), tag, ps.text))
+        # D-0116 (Phase 6). Everything from the corpus is UNTRUSTED (SS.10).
+        # llama-cpp tokenizes a str prompt with special=True, so a literal
+        # "<|im_end|>" in a document would become the real end-of-turn token
+        # and let the document forge a system turn. Defanged here, at the one
+        # place corpus text enters a prompt. MEASURED: no row of any eval
+        # corpus contains such a string, so every prompt the project has
+        # rendered is byte-identical (pinned in tests/test_redteam.py).
+        ev.append(_defang("[%d] (%s) %s%s"
+                          % (i, ps.provenance.citation(), tag, ps.text)))
     return _prompt(
         _with_refusal_language(SYSTEM_RAG, refusal_language),
         "Evidence:\n%s\n\nQuestion: %s"

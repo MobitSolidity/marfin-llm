@@ -1842,7 +1842,7 @@ def _run_diagnostic(model_obj, extra_argv):
     saved_argv = sys.argv
     saved_diag = sys.modules.pop("diagnose_zero_tokens", None)
     sys.modules["llama_cpp"] = fake
-    gguf = os.path.join(tempfile.mkdtemp(prefix="p4diag_"), "fake.gguf")
+    gguf = os.path.join(_tempdir(), "fake.gguf")   # D-0116: was a leaked mkdtemp("p4diag_")
     with open(gguf, "wb") as f:
         f.write(b"x")
     sys.argv = (["diagnose_zero_tokens.py", "--model", gguf] + extra_argv)
@@ -4281,7 +4281,7 @@ def _run_forced(model_obj, extra_argv):
     saved_argv = sys.argv
     saved = sys.modules.pop("diagnose_forced_answer", None)
     sys.modules["llama_cpp"] = fake
-    gguf = os.path.join(tempfile.mkdtemp(prefix="p4fa_"), "fake.gguf")
+    gguf = os.path.join(_tempdir(), "fake.gguf")   # D-0116: was a leaked mkdtemp("p4fa_")
     with open(gguf, "wb") as f:
         f.write(b"x")
     sys.argv = ["diagnose_forced_answer.py", "--model", gguf] + extra_argv

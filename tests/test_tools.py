@@ -112,8 +112,10 @@ cases = [
      "invalid_argument"),
     ("ambiguous numeral", "cagr", {"start": "1,5", "end": 200, "years": 1},
      "invalid_argument"),
+    # D-0116: refused one layer earlier now -- the registry gateway rejects
+    # non-finite numbers before the calculator sees them. Still a refusal.
     ("nan injected", "annualized_volatility",
-     {"returns": [0.01, float("nan"), 0.02]}, "ValueError"),
+     {"returns": [0.01, float("nan"), 0.02]}, "invalid_argument"),
     ("arguments not a dict", "cagr", "not a dict", "bad_arguments"),
 ]
 for desc, name, args, want_err in cases:
