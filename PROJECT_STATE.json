@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
   "current_phase": "6",
-  "phase_status": "PHASE_6_FAIL_2_CRITICAL_MODEL_ROWS_FIXES_F1_F4_AWAITING_APPROVAL",
+  "phase_status": "PHASE_6_FIXES_F1_F4_APPLIED_RERUN_PENDING_ON_I5_12400",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -381,7 +381,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0118",
+  "decisions_logged": "D-0001..D-0119",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -511,7 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": "Phase 6 fixes F1 (execution-claim guard), F2 (trust-gated retrieval), F3 (fx_convert tool), F4 (red-team fixture correction) -- docs/phase-reports/phase-6.md",
+  "awaiting_approval_for": "NONE until the Phase 6 rerun (PHASE6_RERUN_FA.md) is returned",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2571,5 +2571,22 @@
       "F3": "fx_convert tool",
       "F4": "red-team gold doc ids + figure-in-context pin"
     }
+  },
+  "D-0119_phase6_fixes_applied_2026_10_14": {
+    "decision": "D-0119",
+    "date": "2026-10-14",
+    "trigger": "user: 'apply F1 F2 F3 F4'",
+    "F1": "safety.untrusted.execution_claims/guard_execution_claims + run_phase4 --execution-guard (plain and tools final reply); fires on 1 of 422 recorded replies (the critical one); EN/FA notices grade as refusals on all 7 abstain rows and never trip the guard",
+    "F2": "run_phase4 --min-trust N -> PassageIndex.search(min_trust); Phase 4 combined set 32/32 top-4 unchanged at 80; no adversarial passage reaches any red-team prompt",
+    "F3": "calc.returns_risk.fx_convert (closed ISO-4217 list; direction required, never guessed; finite-checked); registry 84->85; selector returns_risk 2219->2426, ALL 9122->9329 re-measured with the shipped tokenizer",
+    "F4": "evals/redteam_gold_v2.jsonl (v1 frozen: graded evidence reproduces byte-for-byte); FORGE row reworded; build_redteam_eval.figure_in_context pins the figure itself, and is FALSE on the 2026-10-14 FORGE context",
+    "defects_found_in_own_fix": [
+      "first EN notice ('no order was placed') tripped the guard and graded as not-abstained",
+      "first FA notice was not recognised as a refusal",
+      "3-letter shape check accepted 'YEN'"
+    ],
+    "defaults": "all off; recorded runs reproduce exactly",
+    "verification": "test_redteam 231->304; mutate_redteam 28->45, all killed (4 first-pass survivors tightened); run_all ALL GREEN",
+    "rerun": "PHASE6_RERUN_FA.md"
   }
 }

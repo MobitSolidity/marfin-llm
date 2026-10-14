@@ -66,6 +66,7 @@ sys.path.insert(0, _HERE)
 
 import phase4_lib as L  # noqa: E402
 from safety.untrusted import neutralize_control_tokens as _defang  # noqa: E402
+from safety.untrusted import guard_execution_claims  # noqa: E402
 
 # Make the console safe BEFORE anything Persian can reach it.
 CONSOLE_UTF8 = L.make_console_safe()
@@ -995,12 +996,28 @@ def assert_no_execution_capability():
 # The three arms.
 # ---------------------------------------------------------------------------
 
-def run_arm_plain(runner, cases, schemas_by_name, refusal_language=False):
+def _apply_execution_guard(text, lang, enabled):
+    """
+    F1 / D-0119. When enabled, a reply that claims an order/trade HAPPENED is
+    replaced by a fixed notice BEFORE grading, because that is what the user
+    would see. Returns (text, record); record is None when the guard is off.
+    """
+    if not enabled:
+        return text, None
+    r = guard_execution_claims(text, lang=lang)
+    return r["text"], {"blocked": r["blocked"], "claims": r["claims"],
+                       "original": r["original"]}
+
+
+def run_arm_plain(runner, cases, schemas_by_name, refusal_language=False,
+                  execution_guard=False):
     out = []
     for c in cases:
         text, m = runner.generate(build_plain_prompt(
             c["prompt"], refusal_language=refusal_language))
+        text, guard = _apply_execution_guard(text, c.get("lang"), execution_guard)
         g = L.grade_case(c, text, schemas_by_name)
+        g["execution_guard"] = guard
         g["arm"] = "plain"
         # The QUESTION is written to the file, not just the answer. Every case
         # carries human_grade=None and persian_fluency_regression is PENDING
@@ -1053,7 +1070,7 @@ def total_fabrications(summaries):
 
 
 def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
-                  refusal_language=False):
+                  refusal_language=False, execution_guard=False):
     """
     The tools arm. With second_turn=True (Q14 / D-0113) every reply that made
     at least one call gets the tool results handed back and is asked again;
@@ -1131,6 +1148,20 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
                             "seconds": round(m["seconds"] + m2["seconds"], 3)}
             m = g["metrics"]
 
+        # F1 / D-0119: guard the FINAL reply (what the user reads), then
+        # re-grade its prose fields. Call fields stay those of the executed turn.
+        g["execution_guard"] = None
+        if execution_guard:
+            guarded, guard = _apply_execution_guard(g["output"], c.get("lang"), True)
+            g["execution_guard"] = guard
+            if guard["blocked"]:
+                gg = L.grade_case(c, guarded, schemas_by_name)
+                for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",
+                          "value_ok", "persian_script", "latin_ratio", "empty_output"):
+                    if k in gg:
+                        g[k] = gg[k]
+                g["output"] = guarded
+
         # If a tool produced the right value, the ANSWER is right even when the
         # model's prose has not yet restated it. Recording that separately
         # keeps tool-routing success distinct from prose quality.
@@ -1149,11 +1180,19 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
     return out
 
 
-def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False):
+def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
+                min_trust=0):
+    """
+    `min_trust` (F2 / D-0119) is passed to PassageIndex.search: passages below
+    that authority never reach the prompt. 0 (the default) reproduces every
+    recorded run; 80 is the floor answer_gate already applies to quoted
+    figures, so the model is never shown evidence it would not be allowed to
+    quote.
+    """
     from rag.citations import verify_claim
     out = []
     for gold in gold_rows:
-        res = index.search(gold["query"], top_k=top_k)
+        res = index.search(gold["query"], top_k=top_k, min_trust=min_trust)
         passages = list(res.hits)
         text, m = runner.generate(build_rag_prompt(
             gold["query"], passages, refusal_language=refusal_language))
@@ -1436,6 +1475,12 @@ def main(argv=None):
     ap.add_argument("--refusal-language", action="store_true",
                     help="add the 'refuse in the language of the question' "
                          "sentence to every arm's system prompt (Q14)")
+    ap.add_argument("--execution-guard", action="store_true",
+                    help="F1 (D-0119): replace any reply claiming an order or "
+                         "trade happened with a fixed notice before grading")
+    ap.add_argument("--min-trust", type=int, default=0,
+                    help="F2 (D-0119): RAG retrieval authority floor; 80 = "
+                         "EXCHANGE and above, the answer_gate quoting floor")
     a = ap.parse_args(argv)
 
     # ---- provider selection -------------------------------------------
@@ -1658,7 +1703,7 @@ def main(argv=None):
         p("-" * 78)
         report["arms"]["plain"] = run_arm_plain(
             runner, cases, schemas_by_name,
-            refusal_language=a.refusal_language)
+            refusal_language=a.refusal_language, execution_guard=a.execution_guard)
         report["summaries"]["plain"] = L.summarize_eval(
             report["arms"]["plain"])
 
@@ -1669,7 +1714,8 @@ def main(argv=None):
         p("-" * 78)
         report["arms"]["tools"] = run_arm_tools(
             runner, cases, schemas_by_name, second_turn=a.second_turn,
-            refusal_language=a.refusal_language)
+            refusal_language=a.refusal_language,
+            execution_guard=a.execution_guard)
         report["summaries"]["tools"] = L.summarize_eval(
             report["arms"]["tools"])
 
@@ -1681,7 +1727,7 @@ def main(argv=None):
         p("-" * 78)
         report["arms"]["rag"] = run_arm_rag(
             runner, gold_rows, index, a.top_k,
-            refusal_language=a.refusal_language)
+            refusal_language=a.refusal_language, min_trust=a.min_trust)
         report["summaries"]["rag"] = L.summarize_rag(report["arms"]["rag"])
 
     peak, peak_label = peak_rss_gib(proc)
@@ -1907,10 +1953,14 @@ def main(argv=None):
                   # Q14 / D-0113. Written into the payload, and into the
                   # merge signature, so a run with either change can never be
                   # merged with -- or mistaken for -- one without it.
-                  "prompt_options": {
-                      "second_turn": bool(a.second_turn),
-                      "refusal_language": bool(a.refusal_language),
-                  },
+                  "prompt_options": dict(
+                      {"second_turn": bool(a.second_turn),
+                       "refusal_language": bool(a.refusal_language)},
+                      # F1/F2 (D-0119). Written ONLY when on, so a run without
+                      # them has the exact pre-D-0119 options and still merges
+                      # with recorded files.
+                      **({"execution_guard": True} if a.execution_guard else {}),
+                      **({"min_trust": int(a.min_trust)} if a.min_trust else {})),
                   # The tool-call cap is written into the payload so a capped
                   # run can never be mistaken for an uncapped one. It changes
                   # the tool_calls_attempted denominator, and a metric whose

@@ -3,6 +3,8 @@
 Project: marfin-llm · Date: 2026-10-14 · Governing prompt: SYSTEM_PROMPT.md v2.0 (SS.24 Phase 6, SS.20.7, SS.10)
 Mode: `ANALYSIS_ONLY` · Live trading: `DISABLED` · Label key: (V) VERIFIED · (M) MEASURED · (C) COMPUTED · (E) ESTIMATED
 
+> **Update 2026-10-14 (D-0119):** you approved F1–F4, and all four are applied. They are opt-in flags plus an additive tool and fixture, so recorded runs reproduce exactly. Tests: red team 304, battery 45/45 killed. The verdict below stands until the rerun in `PHASE6_RERUN_FA.md` is measured.
+
 ## Status: **FAIL** (two critical model failures; both have proposed deterministic fixes awaiting approval)
 
 The code-side red team passed. The model-side run (M, i5-12400, 2026-10-14) found **2 critical failures**. Both

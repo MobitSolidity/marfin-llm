@@ -201,7 +201,10 @@ section("token budget -- MEASURED, and the saving must be real")
 # number it was pinned to; it cannot tell you the number came from the wrong
 # model. That is what the rendered-cost guard below is for -- and why that
 # guard now reads the shipped model's files.
-check("all-tools cost is the measured 9122", MEASURED_ALL_TOKENS, 9122,
+# D-0119: 9122 -> 9329 after fx_convert (F3) joined returns_risk; re-measured
+# with the same shipped tokenizer + template, and the rendered-cost guard below
+# agrees exactly.
+check("all-tools cost is the measured 9329", MEASURED_ALL_TOKENS, 9329,
       method="(A) Qwen/Qwen3.5-4B tokenizer + its own chat template")
 check_true("every family has a measured cost",
            all(f in MEASURED_FAMILY_TOKENS for f in FAMILIES), method="(A)")

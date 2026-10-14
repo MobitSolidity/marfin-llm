@@ -59,6 +59,16 @@ register("simple_return", rr.simple_return,
          "Simple percentage return between two values.",
          {"start": NUM, "end": NUM}, ["start", "end"])
 
+register("fx_convert", rr.fx_convert,
+         "Convert an amount between currencies at a rate YOU supply (no market "
+         "data). rate_quote states the direction: 'from_per_to' if the rate is "
+         "units of from_currency per 1 to_currency (e.g. 150 JPY per USD when "
+         "converting JPY->USD), 'to_per_from' for the reverse.",
+         {"amount": NUM, "rate": NUM,
+          "from_currency": {"type": "string"}, "to_currency": {"type": "string"},
+          "rate_quote": {"type": "string", "enum": ["to_per_from", "from_per_to"]}},
+         ["amount", "rate", "from_currency", "to_currency", "rate_quote"])
+
 register("log_return", rr.log_return,
          "Natural-log return between two strictly positive prices.",
          {"start": NUM, "end": NUM}, ["start", "end"])

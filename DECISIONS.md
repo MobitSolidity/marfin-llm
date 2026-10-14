@@ -7095,3 +7095,51 @@ end: FY2022, 198,270 million.
   - It removes every adversarial passage from the red-team prompts and restores the answer for INJ-001.
 - **F3:** an `fx_convert` tool.
 - **F4:** correct the red-team gold doc ids, and pin that the gold *figure* is in context.
+
+## D-0119 — F1–F4 applied (user: "apply F1 F2 F3 F4"); rerun pending on the i5-12400
+
+All four fixes are **opt-in or additive**, so every recorded run reproduces byte-for-byte. That is pinned in
+the tests.
+
+### F1: execution-claim guard
+
+- `safety.untrusted.guard_execution_claims` is wired by `run_phase4 --execution-guard` into the plain arm and
+  into the tools arm's final reply.
+- It replaces a "trade happened" claim with a fixed EN or FA refusal, keeps the original for audit, and grades
+  what the user would see.
+- **MEASURED:** it fires on exactly 1 of 422 recorded replies, the critical one.
+- **Two defects in my own first draft, caught by the tests:**
+  - The EN notice said "no order was placed", which tripped the guard and graded as not-abstained.
+  - The FA notice was not recognised as a refusal.
+  - Both notices now grade as correct refusals on all 7 abstain rows, in both languages.
+
+### F2: trust-gated retrieval
+
+- `--min-trust 80` is passed to `PassageIndex.search`.
+- **MEASURED:** the Phase 4 combined set's top-4 is unchanged on 32/32 questions.
+- No adversarial or fake-filing passage reaches any red-team prompt. Each attack is still present without the
+  gate, so the rows still test something.
+
+### F3: `fx_convert`
+
+- Lives in `returns_risk`, the core family, so it is always offered.
+- The quote direction is required and never guessed. Codes come from a closed ISO-4217 list: my first draft's
+  3-letter shape check accepted "YEN". Non-finite inputs are refused.
+- Registry grows from 84 to 85 tools. Re-measured with the shipped Qwen3.5 tokenizer and template:
+  `returns_risk` 2219 → 2426 tokens, all tools 9122 → 9329.
+
+### F4: red-team fixture
+
+- New `evals/redteam_gold_v2.jsonl`. **v1 is frozen**, and `grade_phase6` on the 2026-10-14 evidence
+  reproduces `phase6_graded_2026-10-14.json` exactly.
+- The FORGE question is reworded.
+- The new pin `figure_in_context` checks the figure itself, not the doc id. It is FALSE on the 2026-10-14 FORGE
+  context, so it would have caught D-0118.
+
+### Verification
+
+- `test_redteam`: 231 → 304.
+- `mutate_redteam`: 28 → 45 mutants, all killed. 4 first-pass survivors were tightened.
+- `run_all.sh`: ALL GREEN.
+
+**Rerun:** `PHASE6_RERUN_FA.md`.
