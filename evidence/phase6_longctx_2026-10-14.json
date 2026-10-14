@@ -1,0 +1,195 @@
+{
+  "label": "MEASURED",
+  "phase": "6",
+  "test": "long_context_needle",
+  "model": {
+    "file": "Qwen3.5-4B-Q5_K_M.gguf",
+    "identity": {
+      "sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+      "label": "VERIFIED",
+      "repo": "unsloth/Qwen3.5-4B-GGUF",
+      "file": "Qwen3.5-4B-Q5_K_M.gguf",
+      "size_bytes": 3143656608,
+      "is_pinned_revision": false,
+      "thinking_by_default": true,
+      "note": "Qwen3.5-4B Q5_K_M, architecture 'qwen35' (hybrid SSM + attention), quantised by Unsloth. NOT the revision pinned in Phase 2 (Qwen3-4B-Instruct-2507), and not even the same model family, so Phase 2's quality reasoning does not carry over. It THINKS BY DEFAULT: replies are graded after strip_thinking(), and a run whose answers were lost inside <think> is a budget failure, not a quality result."
+    },
+    "ctx": 16384,
+    "threads": 6,
+    "max_tokens": 512,
+    "load_seconds": 0.85
+  },
+  "counted_by": "tokenized",
+  "rows": [
+    {
+      "target_tokens": 2048,
+      "depth": 0.1,
+      "n_filler": 28,
+      "prompt_tokens": 2057,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 63.342,
+        "prompt_tokens": 2034,
+        "completion_tokens": 37,
+        "decode_tps": 0.58
+      }
+    },
+    {
+      "target_tokens": 2048,
+      "depth": 0.5,
+      "n_filler": 28,
+      "prompt_tokens": 2057,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 65.227,
+        "prompt_tokens": 2034,
+        "completion_tokens": 37,
+        "decode_tps": 0.57
+      }
+    },
+    {
+      "target_tokens": 2048,
+      "depth": 0.9,
+      "n_filler": 28,
+      "prompt_tokens": 2057,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 64.955,
+        "prompt_tokens": 2034,
+        "completion_tokens": 37,
+        "decode_tps": 0.57
+      }
+    },
+    {
+      "target_tokens": 8192,
+      "depth": 0.1,
+      "n_filler": 127,
+      "prompt_tokens": 8195,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 251.303,
+        "prompt_tokens": 8172,
+        "completion_tokens": 37,
+        "decode_tps": 0.15
+      }
+    },
+    {
+      "target_tokens": 8192,
+      "depth": 0.5,
+      "n_filler": 127,
+      "prompt_tokens": 8195,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 247.733,
+        "prompt_tokens": 8172,
+        "completion_tokens": 37,
+        "decode_tps": 0.15
+      }
+    },
+    {
+      "target_tokens": 8192,
+      "depth": 0.9,
+      "n_filler": 127,
+      "prompt_tokens": 8195,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft Corporation's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 280.542,
+        "prompt_tokens": 8172,
+        "completion_tokens": 38,
+        "decode_tps": 0.14
+      }
+    },
+    {
+      "target_tokens": 14336,
+      "depth": 0.1,
+      "n_filler": 227,
+      "prompt_tokens": 14395,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 508.135,
+        "prompt_tokens": 14372,
+        "completion_tokens": 37,
+        "decode_tps": 0.07
+      }
+    },
+    {
+      "target_tokens": 14336,
+      "depth": 0.5,
+      "n_filler": 227,
+      "prompt_tokens": 14395,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft Corporation's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 453.485,
+        "prompt_tokens": 14372,
+        "completion_tokens": 38,
+        "decode_tps": 0.08
+      }
+    },
+    {
+      "target_tokens": 14336,
+      "depth": 0.9,
+      "n_filler": 227,
+      "prompt_tokens": 14395,
+      "counted_by": "tokenized",
+      "value_ok": true,
+      "stated_decoy": false,
+      "outcome": "OK",
+      "output": "Based on the evidence provided, Microsoft's total revenue for the fiscal year ended June 30, 2023, was **211,915 million**.",
+      "metrics": {
+        "seconds": 452.864,
+        "prompt_tokens": 14372,
+        "completion_tokens": 37,
+        "decode_tps": 0.08
+      }
+    }
+  ],
+  "summary": {
+    "2048": {
+      "n": 3,
+      "ok": 3,
+      "period_confusion": 0
+    },
+    "8192": {
+      "n": 3,
+      "ok": 3,
+      "period_confusion": 0
+    },
+    "14336": {
+      "n": 3,
+      "ok": 3,
+      "period_confusion": 0
+    }
+  }
+}
