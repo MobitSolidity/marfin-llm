@@ -68,9 +68,22 @@ def _schemas_by_name():
     return out
 
 
-def regrade_run(run, cases, schemas_by_name=None):
+# grade_rag_case's outputs a vocabulary fix can move (D-0115). The recorded
+# retrieval list and citation envelopes are INPUTS here, passed back in
+# unchanged: they are facts about the run, and the citation metrics have their
+# own regrade path (regrade_citations.py).
+RAG_GRADING_FIELDS = ("abstained", "fabricated", "outcome", "value_ok",
+                      "retrieval_ok", "persian_script", "empty_output")
+
+
+def regrade_run(run, cases, schemas_by_name=None, rag_gold=None):
     """
     (new_run, changes). `changes` lists every (arm, id, field, old, new).
+
+    `rag_gold` (id -> gold row) is OPT-IN (D-0115). Without it the rag arm is
+    copied untouched, exactly as D-0112 did, so that regrade stays
+    reproducible. With it, the rag rows are re-graded by grade_rag_case from
+    their recorded output, retrieval and citations.
     """
     schemas_by_name = schemas_by_name or _schemas_by_name()
     new = copy.deepcopy(run)
@@ -92,6 +105,19 @@ def regrade_run(run, cases, schemas_by_name=None):
         # summarize_eval reads tool_value_ok / executed from the rows; those
         # were copied through, so the tool-assisted metric is preserved.
         new.setdefault("summaries", {})[arm] = summ
+    rag_rows = new.get("arms", {}).get("rag") if rag_gold is not None else None
+    if rag_rows:
+        for r in rag_rows:
+            gold = rag_gold.get(r["id"])
+            if gold is None:
+                raise KeyError("no rag gold row for rag::%s" % r["id"])
+            g = L.grade_rag_case(gold, r.get("output") or "",
+                                 r.get("retrieved"), r.get("citations"))
+            for k in RAG_GRADING_FIELDS:
+                if k in g and r.get(k) != g[k]:
+                    changes.append(("rag", r["id"], k, r.get(k), g[k]))
+                    r[k] = g[k]
+        new.setdefault("summaries", {})["rag"] = L.summarize_rag(rag_rows)
     new.pop("threshold_verdicts", None)
     new["threshold_verdicts_status"] = (
         "DROPPED by scripts/regrade_eval.py: grade the merged summaries with "
@@ -99,12 +125,14 @@ def regrade_run(run, cases, schemas_by_name=None):
     new["label"] = "RECOMPUTED_FROM_RECORDED_OUTPUT"
     new["regraded"] = {
         "by": "scripts/regrade_eval.py",
-        "decision": "D-0112",
+        "decision": "D-0115" if rag_gold is not None else "D-0112",
         "from_label": run.get("label"),
         "model_re_run": False,
-        "arms_regraded": [a for a in EVAL_ARMS if (run.get("arms") or {}).get(a)],
+        "arms_regraded": [a for a in EVAL_ARMS if (run.get("arms") or {}).get(a)]
+        + (["rag"] if rag_rows else []),
         "arms_copied_untouched": sorted(
-            a for a in (run.get("arms") or {}) if a not in EVAL_ARMS),
+            a for a in (run.get("arms") or {})
+            if a not in EVAL_ARMS and not (a == "rag" and rag_rows)),
         "fields_recomputed": list(GRADING_FIELDS),
         "n_changes": len(changes),
     }
@@ -117,6 +145,9 @@ def main(argv=None):
     ap.add_argument("--eval", default=os.path.join(
         ROOT, "evals", "bilingual_eval_v1.jsonl"))
     ap.add_argument("--out", default=None)
+    ap.add_argument("--rag-gold", default=None,
+                    help="also re-grade the rag arm against this gold file "
+                         "(D-0115); omitted = rag copied untouched (D-0112)")
     a = ap.parse_args(argv)
 
     run = json.load(open(a.run, encoding="utf-8"))
@@ -125,7 +156,14 @@ def main(argv=None):
         if line.strip():
             c = json.loads(line)
             cases[c["id"]] = c
-    new, changes = regrade_run(run, cases)
+    rag_gold = None
+    if a.rag_gold:
+        rag_gold = {}
+        for line in open(a.rag_gold, encoding="utf-8"):
+            if line.strip():
+                g = json.loads(line)
+                rag_gold[g["id"]] = g
+    new, changes = regrade_run(run, cases, rag_gold=rag_gold)
     new["regraded"]["source_file"] = os.path.basename(a.run)
 
     p = print
@@ -137,12 +175,13 @@ def main(argv=None):
     if not changes:
         p("  no grading field changed")
     p("")
-    for arm in EVAL_ARMS:
+    for arm in EVAL_ARMS + (("rag",) if rag_gold is not None else ()):
         o = (run.get("summaries") or {}).get(arm) or {}
         n = new["summaries"].get(arm) or {}
         for k in ("correct_abstention_pct", "fabricated_financial_data_count",
                   "deterministic_calc_correctness_pct",
-                  "tool_call_schema_validity_pct", "banned_phrase_cases"):
+                  "tool_call_schema_validity_pct", "banned_phrase_cases",
+                  "answer_correct_pct", "fa_not_in_persian"):
             flag = "" if o.get(k) == n.get(k) else "   <== CHANGED"
             p("  %-5s %-40s %s -> %s%s" % (arm, k, o.get(k), n.get(k), flag))
     if a.out:

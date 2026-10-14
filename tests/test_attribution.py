@@ -320,6 +320,67 @@ check_true("D-0112 the substring/quote/vocabulary GRADER rows are gone",
                 and r["cause"] == "GRADER" and r["confidence"] != "HUMAN"], "(M)")
 
 # ---------------------------------------------------------------------------
+section("D-0115: Q14 run regraded with G1/G2; the user's FA-RISK-002 ruling")
+# ---------------------------------------------------------------------------
+_q14 = json.load(open(os.path.join(ROOT, "evidence",
+                                   "phase4_merged_2026-10-09_q14.json"), encoding="utf-8"))
+_q14_rg, _q14_chg = RE.regrade_run(_q14, cases, rag_gold=gold)
+_q14_set = sorted({(a, i) for a, i, _k, _o, _n in _q14_chg})
+check("D-0115 the regrade moves exactly 6 rows", len(_q14_set), 6, method="(M)")
+check_true("D-0115 ... and they are the 4 G1 refusals and the 2 G2 percent answers",
+           _q14_set == [("rag", "RAG-ABST-003"), ("rag", "RAG2-ABST-003"),
+                        ("rag", "RAG2-ABST-006"), ("tools", "EN-CALC-002"),
+                        ("tools", "FA-ABST-001"), ("tools", "FA-CALC-002")], "(M)")
+check_true("D-0115 the regrade never touches a reply, retrieval or citation",
+           all(a["output"] == b["output"] and a.get("retrieved") == b.get("retrieved")
+               and a.get("citations") == b.get("citations")
+               for arm in ("plain", "tools", "rag")
+               for a, b in zip(_q14["arms"][arm], _q14_rg["arms"][arm])), "(V)")
+check("D-0115 tools calc 75 -> 100",
+      _q14_rg["summaries"]["tools"]["deterministic_calc_correctness_pct"], 100.0, method="(M)")
+check("D-0115 tools abstention 66.67 -> 77.78",
+      _q14_rg["summaries"]["tools"]["correct_abstention_pct"], 77.78, method="(M)")
+check("D-0115 rag fabrication 3 -> 0",
+      _q14_rg["summaries"]["rag"]["fabricated_financial_data_count"], 0, method="(M)")
+check("D-0115 plain calc stays 75 (the MODEL regression is not graded away)",
+      _q14_rg["summaries"]["plain"]["deterministic_calc_correctness_pct"], 75.0, method="(M)")
+check_true("D-0115 rag answers are unchanged by the regrade",
+           _q14_rg["summaries"]["rag"]["answer_correct_pct"]
+           == _q14["summaries"]["rag"]["answer_correct_pct"]
+           and _q14_rg["summaries"]["rag"]["citation_correctness_pct"]
+           == _q14["summaries"]["rag"]["citation_correctness_pct"], "(V)")
+_q14_nr, _ = RE.regrade_run(_q14, cases)
+check_true("D-0115 without --rag-gold the rag arm is copied untouched (D-0112 behaviour)",
+           _q14_nr["arms"]["rag"] == _q14["arms"]["rag"]
+           and _q14_nr["regraded"]["decision"] == "D-0112", "(V)")
+_q14_v = json.load(open(os.path.join(ROOT, "evidence",
+                                     "phase4_verdict_2026-10-09_q14_post-D0115.json"),
+                        encoding="utf-8"))
+_q14_res = A.attribute(_q14_rg, index, gold, _q14_v, 4, cases)
+check_true("D-0115 the user's ruling on the NEW FA-RISK-002 reply is applied",
+           _q14_res["human_rulings_applied"] == ["tools::FA-RISK-002", "tools::FA-RISK-002"]
+           and all(r["cause"] == "GRADER" and r["confidence"] == "HUMAN"
+                   for r in _q14_res["rows"] if r["id"] == "FA-RISK-002"), "(V)")
+check_true("D-0115 a ruling applies even when the heuristic did not flag needs_human",
+           not any(r["needs_human"] for r in A.attribute_eval(
+               "tools", _q14_rg["arms"]["tools"], cases)[0] if r["id"] == "FA-RISK-002"),
+           "(M) the Q14 reply lacks 'غیرمنطقی'")
+check_true("D-0115 the D-0111 ruling (old hash) does not apply to the Q14 reply",
+           A.apply_rulings(A.attribute_eval("tools", _q14_rg["arms"]["tools"], cases)[0],
+                           _q14_rg, rulings={k: v for k, v in A.HUMAN_RULINGS.items()
+                                             if k[2].startswith("62ff10f1")}) == [], "(B)")
+_q14_th = {t["threshold"]: t["causes"] for t in _q14_res["failing_thresholds"]}
+check_true("D-0115 deterministic_calc is held by MODEL alone (plain CAGR x2)",
+           _q14_th.get("deterministic_calc_correctness_pct_min") == {"MODEL": 2}, "(M)")
+check_true("D-0115 abstention: 1 MODEL (EN-RISK-002) + 1 HUMAN-ruled GRADER",
+           _q14_th.get("correct_abstention_pct_min") == {"MODEL": 1, "GRADER": 1}, "(M)")
+check_true("D-0115 fabrication is held only by the ruled FA-RISK-002",
+           _q14_th.get("fabricated_financial_data_count_max") == {"GRADER": 1}, "(M)")
+check_true("D-0115 the official verdict is still 3 PASS / 7 FAIL / 2 UNMEASURED",
+           sorted(r["verdict"] for r in _q14_v["results"])
+           == sorted(["PASS"] * 3 + ["FAIL"] * 7 + ["UNMEASURED"] * 2), "(M)")
+
+# ---------------------------------------------------------------------------
 section("graph_project: submodule imports are edges (D-0109)")
 # ---------------------------------------------------------------------------
 g = I.import_graph()
@@ -337,8 +398,8 @@ check_true("the new edges add no import cycle",
 # ---------------------------------------------------------------------------
 section("impact: the incidents it exists for, and its negatives")
 # ---------------------------------------------------------------------------
-check("run_all.sh SUITES read, not re-declared", len(I.suites()), 19,
-      method="(V) 18 + test_attribution.py")
+check("run_all.sh SUITES read, not re-declared", len(I.suites()), 20,
+      method="(V) 18 + test_attribution.py + test_redteam.py (D-0116)")
 r = I.analyse(["src/rag/normalize.py"])
 bats = {b["battery"] for b in r["batteries"]}
 check_true("normalize.py reaches mutate_phase4.py -- the battery D-0107 missed",

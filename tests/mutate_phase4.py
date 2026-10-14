@@ -295,13 +295,15 @@ MUTATIONS = [
 
     # -- value matching: the gate itself ------------------------------------
     (LIB, "value_matches accepts any answer at all",
-     "    for n in found:\n"
-     "        if abs(n - float(expected)) <= tol:\n"
-     "            return True\n"
+     # Re-anchored D-0115: G2's percent loop now sits between the bare loop
+     # and the final return, so the fall-through is anchored on the new tail.
+     "        for n in _percent_values(text):\n"
+     "            if abs(n - float(expected)) <= tol:\n"
+     "                return True\n"
      "    return False",
-     "    for n in found:\n"
-     "        if abs(n - float(expected)) <= tol:\n"
-     "            return True\n"
+     "        for n in _percent_values(text):\n"
+     "            if abs(n - float(expected)) <= tol:\n"
+     "                return True\n"
      "    return True"),
     (LIB, "value_matches rejects every answer",
      "        if abs(n - float(expected)) <= tol:\n"
@@ -331,6 +333,47 @@ MUTATIONS = [
     (LIB, "the RAG arm ignores scale words (the 10^6 error returns)",
      "    found = extract_magnitudes(text) if scaled else extract_numbers(text)",
      "    found = extract_numbers(text)"),
+
+    # -- D-0115: G1 Persian refusal pattern; G2 percent-aware value match ---
+    (LIB, "D-0115 G1 pattern removed (Q14 Persian refusals miss again)",
+     '    re.compile(r"\\u0627\\u0637\\u0644\\u0627\\u0639\\u0627\\u062a\\u06cc?"\n'
+     '               r"[^.!?\\n\\u061f]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),\n',
+     ''),
+    (LIB, "D-0115 G1 gap narrowed to 60 (observed 62-char refusal missed)",
+     '               r"[^.!?\\n\\u061f]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[^.!?\\n\\u061f]{0,60}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0115 G1 gap unbounded (pairs across any length)",
+     '               r"[^.!?\\n\\u061f]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[^.!?\\n\\u061f]*?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0115 G1 pairs across a Persian question mark",
+     '               r"[^.!?\\n\\u061f]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[^.!?\\n]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0115 G1 pairs across a full stop / newline",
+     '               r"[^.!?\\n\\u061f]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[\\s\\S]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0115 G2 percent reading removed",
+     "        for n in _percent_values(text):\n",
+     "        for n in []:\n"),
+    (LIB, "D-0115 G2 percent reading applied to scaled RAG magnitudes too",
+     "    if not scaled:\n        # G2,",
+     "    if True:\n        # G2,"),
+    (LIB, "D-0115 G2 percent not divided by 100 (10% == 10)",
+     "            out.append(float(m.group(1)) / 100.0)",
+     "            out.append(float(m.group(1)))"),
+    (LIB, "D-0115 G2 every number read as a percent (no % required)",
+     '_PERCENT_RE = re.compile(r"([-+]?\\d+(?:\\.\\d+)?)[ \\t\\u00a0\\u200c]*[%\\u066a]")',
+     '_PERCENT_RE = re.compile(r"([-+]?\\d+(?:\\.\\d+)?)[ \\t\\u00a0\\u200c]*[%\\u066a]?")'),
+    (LIB, "D-0115 G2 Persian percent sign not recognised",
+     '_PERCENT_RE = re.compile(r"([-+]?\\d+(?:\\.\\d+)?)[ \\t\\u00a0\\u200c]*[%\\u066a]")',
+     '_PERCENT_RE = re.compile(r"([-+]?\\d+(?:\\.\\d+)?)[ \\t\\u00a0\\u200c]*[%]")'),
+    (LIB, "D-0115 G2 Persian digits not folded before the percent search",
+     "    for m in _PERCENT_RE.finditer(_normalise_separators(text)):",
+     "    for m in _PERCENT_RE.finditer(text):"),
+    (LIB, "D-0115 G2 percent tolerance ignored (any percent passes)",
+     "        for n in _percent_values(text):\n"
+     "            if abs(n - float(expected)) <= tol:",
+     "        for n in _percent_values(text):\n"
+     "            if True:"),
 
     # -- D-0113 (Q14): tools-arm second turn + refusal-language option ------
     (RUN, "D-0113 the second turn drops the empty think block (template drift)",

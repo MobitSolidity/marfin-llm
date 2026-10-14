@@ -18,6 +18,7 @@ SECURITY POSTURE (SS.11):
 
 from typing import Any, Dict, Callable
 import inspect
+import math
 
 from calc import returns_risk as rr
 from calc import valuation as val
@@ -548,8 +549,17 @@ def _coerce(value, spec):
         if isinstance(value, bool):
             raise TypeError("boolean supplied where number expected")
         if isinstance(value, (int, float)):
-            return float(value)
-        return parse_number(value)          # handles ۸٫۴ , ۱۰۰٬۰۰۰ etc.
+            f = float(value)
+        else:
+            f = parse_number(value)         # handles ۸٫۴ , ۱۰۰٬۰۰۰ etc.
+        # D-0116 (Phase 6 red team, MEASURED): NaN / inf / "1e400" reached 8
+        # tools and came back ok=True -- cagr(start=inf) returned -1.0, a
+        # confident -100% built from no data. Every comparison with NaN is
+        # False, so the calculators' own "> 0" guards let it through. A model
+        # can emit these; refuse them at the one gateway every call crosses.
+        if not math.isfinite(f):
+            raise ValueError("non-finite number %r refused" % (value,))
+        return f
     if t == "integer":
         # Periods, steps and coupon frequencies must be whole numbers. A
         # model emitting 14.0 is fine; 14.5 is a real error and is refused
@@ -624,6 +634,15 @@ def call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         res = entry["fn"](**kwargs)
     except Exception as e:
         return {"ok": False, "error": type(e).__name__, "message": str(e),
+                "guidance": "Report this refusal to the user. Do NOT substitute "
+                            "an estimated value."}
+
+    # D-0116: a finite input can still overflow (e.g. a huge exponent). A
+    # non-finite RESULT is not a calculation the model may quote.
+    vals = res.value if isinstance(res.value, (list, tuple)) else [res.value]
+    if any(isinstance(v, float) and not math.isfinite(v) for v in vals):
+        return {"ok": False, "error": "non_finite_result",
+                "message": "%s produced a non-finite value" % name,
                 "guidance": "Report this refusal to the user. Do NOT substitute "
                             "an estimated value."}
 

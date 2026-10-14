@@ -1842,7 +1842,7 @@ def _run_diagnostic(model_obj, extra_argv):
     saved_argv = sys.argv
     saved_diag = sys.modules.pop("diagnose_zero_tokens", None)
     sys.modules["llama_cpp"] = fake
-    gguf = os.path.join(tempfile.mkdtemp(prefix="p4diag_"), "fake.gguf")
+    gguf = os.path.join(_tempdir(), "fake.gguf")   # D-0116: was a leaked mkdtemp("p4diag_")
     with open(gguf, "wb") as f:
         f.write(b"x")
     sys.argv = (["diagnose_zero_tokens.py", "--model", gguf] + extra_argv)
@@ -4281,7 +4281,7 @@ def _run_forced(model_obj, extra_argv):
     saved_argv = sys.argv
     saved = sys.modules.pop("diagnose_forced_answer", None)
     sys.modules["llama_cpp"] = fake
-    gguf = os.path.join(tempfile.mkdtemp(prefix="p4fa_"), "fake.gguf")
+    gguf = os.path.join(_tempdir(), "fake.gguf")   # D-0116: was a leaked mkdtemp("p4fa_")
     with open(gguf, "wb") as f:
         f.write(b"x")
     sys.argv = ["diagnose_forced_answer.py", "--model", gguf] + extra_argv
@@ -7300,6 +7300,66 @@ _, _pr_mix = MP113.merge([_arm_file("c.json", "plain", _off),
 check_true("D-0113 a Q14 arm and a pre-Q14 arm are REFUSED as one run",
            any("prompt_options" in x for x in _pr_mix), "(V)")
 shutil.rmtree(_tmp113, ignore_errors=True)
+
+# ---------------------------------------------------------------------------
+section("D-0115: G1 Persian 'اطلاعات(ی) ... ندارم' refusal; G2 percent-aware value match")
+# ---------------------------------------------------------------------------
+_G1_OBS = (
+    "\u0645\u0646 \u0627\u0637\u0644\u0627\u0639\u0627\u062a\u06cc \u062f\u0631 \u0645\u0648\u0631\u062f "
+    "\u062f\u0631\u0622\u0645\u062f \u062a\u0633\u0644\u0627 \u062f\u0631 \u0633\u0627\u0644 "
+    "\u0645\u0627\u0644\u06cc \u06f2\u06f0\u06f2\u06f4 \u062f\u0631 \u0645\u062a\u0648\u0646 "
+    "\u0627\u0631\u0627\u0626\u0647\u200c\u0634\u062f\u0647 \u0646\u062f\u0627\u0631\u0645.")
+_G1_TOOLS = ("\u0645\u0646 \u0627\u0637\u0644\u0627\u0639\u0627\u062a \u0644\u062d\u0638\u0647\u200c\u0627\u06cc "
+             "\u0642\u06cc\u0645\u062a \u0633\u0647\u0627\u0645 \u0627\u067e\u0644 (AAPL) \u0631\u0627 "
+             "\u0646\u062f\u0627\u0631\u0645.")
+_ETT = "\u0627\u0637\u0644\u0627\u0639\u0627\u062a"      # اطلاعات
+_NDM = "\u0646\u062f\u0627\u0631\u0645"                    # ندارم
+check_true("D-0115 G1 the observed rag refusal (اطلاعاتی ... ندارم) is an abstention",
+           L.is_abstention(_G1_OBS), "(M) RAG2-ABST-003, Q14")
+check_true("D-0115 G1 the observed tools refusal (اطلاعات ... را ندارم) is an abstention",
+           L.is_abstention(_G1_TOOLS), "(M) tools/FA-ABST-001, Q14")
+check_true("D-0115 G1 a gap of 80 chars still pairs",
+           L.is_abstention(_ETT + " " + "\u0628" * 78 + " " + _NDM), "(B)")
+check_true("D-0115 G1 a gap of 81+ chars does NOT pair",
+           not L.is_abstention(_ETT + " " + "\u0628" * 80 + " " + _NDM), "(B)")
+check_true("D-0115 G1 does not pair across a full stop",
+           not L.is_abstention(_ETT + " \u0632\u06cc\u0627\u062f\u06cc. \u0645\u0646 \u0634\u06a9\u06cc " + _NDM), "(B)")
+check_true("D-0115 G1 does not pair across a Persian question mark",
+           not L.is_abstention(_ETT + " \u0628\u06cc\u0634\u062a\u0631\u061f " + _NDM), "(B)")
+check_true("D-0115 G1 does not pair across a newline",
+           not L.is_abstention(_ETT + " \u0628\u06cc\u0634\u062a\u0631\n" + _NDM), "(B)")
+check_true("D-0115 G1 'اطلاعات' alone is not an abstention",
+           not L.is_abstention(_ETT + " \u0645\u0627\u0644\u06cc \u0634\u0631\u06a9\u062a"), "(B)")
+_rg115 = L.grade_rag_case({"id": "X", "lang": "fa", "answerable": False},
+                          _G1_OBS, [], None)
+check_true("D-0115 G1 the observed unanswerable reply grades OK, not FABRICATION",
+           _rg115["outcome"] == "OK" and _rg115["fabricated"] is False, "(M)")
+
+check_true("D-0115 G2 '**10%**' matches 0.1", L.value_matches(0.1, "CAGR is **10%**.", 0.0001), "(M) tools/EN-CALC-002")
+check_true("D-0115 G2 Persian '**۱۰٪**' matches 0.1",
+           L.value_matches(0.1, "\u0628\u0631\u0627\u0628\u0631 \u0628\u0627 **\u06f1\u06f0\u066a**", 0.0001),
+           "(M) tools/FA-CALC-002")
+check_true("D-0115 G2 '10 %' with a space matches", L.value_matches(0.1, "10 %", 0.0001), "(B)")
+check_true("D-0115 G2 the case's distractor 12.2% is still rejected",
+           not L.value_matches(0.1, "12.2%", 0.0001), "(B)")
+check_true("D-0115 G2 10.5% is still rejected", not L.value_matches(0.1, "10.5%", 0.0001), "(B)")
+check_true("D-0115 G2 plain's wrong 20% is still rejected",
+           not L.value_matches(0.1, "approximately **20%**", 0.0001), "(M) plain/EN-CALC-002, Q14")
+check_true("D-0115 G2 Persian 10.94% is still rejected",
+           not L.value_matches(0.1, "\u06f1\u06f0.\u06f9\u06f4\u066a", 0.0001), "(M) plain/FA-CALC-002, Q14")
+check_true("D-0115 G2 a bare 10 (no %) is NOT read as 0.1",
+           not L.value_matches(0.1, "the CAGR is 10", 0.0001), "(B)")
+check_true("D-0115 G2 the bare reading is kept (0.1 still matches)",
+           L.value_matches(0.1, "0.1", 0.0001), "(B)")
+check_true("D-0115 G2 is ADDITIVE: the pre-existing bare reading of '5%' (5) is unchanged",
+           L.value_matches(5, "5%", 0.0) and L.value_matches(0.05, "5%", 0.0),
+           "(V) the bare reading predates D-0115 and is deliberately not removed")
+check_true("D-0115 G2 never applies to scaled (RAG) magnitudes",
+           not L.value_matches(0.1, "10%", 0.0001, scaled=True), "(B)")
+check_true("D-0115 G2 percent inside a tool_call block is not credited",
+           not L.value_matches(0.1, '<tool_call>{"x": "10%"}</tool_call>', 0.0001), "(B) D-0108")
+check_true("D-0115 G2 Persian thousands separator then % (۱٬۰۰۰٪ = 10.0)",
+           L.value_matches(10.0, "\u06f1\u066c\u06f0\u06f0\u06f0\u066a", 0.0), "(B)")
 
 print("")
 _cleanup_temp_dirs()
