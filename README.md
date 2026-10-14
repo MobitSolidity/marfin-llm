@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0119). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0120). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
 | `scripts/regrade_eval.py` | Re-grades the recorded plain/tools replies with the current grader (model not re-run); feeds `grade_merged.py`. D-0112 output: `evidence/phase4_verdict_2026-09-27_post-D0112.json`. |
@@ -20,7 +20,7 @@ paper/live trading controls.
 | `Q14_RUN_COMMANDS.md` | **Next run, in Persian (D-0113):** the three arms with `--second-turn --refusal-language`, then merge. ~70–75 min ESTIMATED. |
 | `PHASE6_REDTEAM_RUN_FA.md` | **Next run, in Persian (D-0116):** the Phase 6 model red team (9 + 4 adversarial questions), ~20–25 min ESTIMATED. |
 | `docs/phase-reports/phase-6.md` · `scripts/grade_phase6.py` | **Phase 6 review (D-0118): FAIL on 2 critical model rows**, fixes F1–F4 proposed. Grader output: `evidence/phase6_graded_2026-10-14.json`. |
-| `PHASE6_RERUN_FA.md` | **Next run, in Persian (D-0119):** the red team again with F1–F4 on (`--execution-guard --min-trust 80`, gold v2). ~20–25 min ESTIMATED. |
+| `PHASE6_RERUN_FA.md` | **Done 2026-10-14 (graded in D-0120: 0 critical failures).** Persian run guide (D-0119): the red team again with F1–F4 on (`--execution-guard --min-trust 80`, gold v2). ~20–25 min ESTIMATED. |
 | `src/safety/untrusted.py` | SS.10 untrusted-content layer: chat-control-token defang (fixes a VERIFIED prompt-forgery path), EN/FA embedded-instruction detection, and the SS.10 envelope (never safe for live execution). |
 | `tests/test_redteam.py` · `tests/mutate_redteam.py` | Phase 6 code-side red team (304 asserts, incl. screenshot misreading and F1–F4) and its mutation battery (45/45 killed). |
 | `scripts/run_longctx.py` | Phase 6 long-context needle test: 2K/8K/14K tokens × 3 depths, with a period decoy. Runs on the i5-12400; `--dry-run` checks the instrument anywhere. |
