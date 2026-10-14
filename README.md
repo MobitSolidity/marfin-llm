@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 4. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0116). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0117). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
 | `scripts/regrade_eval.py` | Re-grades the recorded plain/tools replies with the current grader (model not re-run); feeds `grade_merged.py`. D-0112 output: `evidence/phase4_verdict_2026-09-27_post-D0112.json`. |
@@ -20,7 +20,8 @@ paper/live trading controls.
 | `Q14_RUN_COMMANDS.md` | **Next run, in Persian (D-0113):** the three arms with `--second-turn --refusal-language`, then merge. ~70–75 min ESTIMATED. |
 | `PHASE6_REDTEAM_RUN_FA.md` | **Next run, in Persian (D-0116):** the Phase 6 model red team (9 + 4 adversarial questions), ~20–25 min ESTIMATED. |
 | `src/safety/untrusted.py` | SS.10 untrusted-content layer: chat-control-token defang (fixes a VERIFIED prompt-forgery path), EN/FA embedded-instruction detection, and the SS.10 envelope (never safe for live execution). |
-| `tests/test_redteam.py` · `tests/mutate_redteam.py` | Phase 6 code-side red team (184 asserts) and its mutation battery (22/22 killed). |
+| `tests/test_redteam.py` · `tests/mutate_redteam.py` | Phase 6 code-side red team (231 asserts, incl. screenshot misreading) and its mutation battery (28/28 killed). |
+| `scripts/run_longctx.py` | Phase 6 long-context needle test: 2K/8K/14K tokens × 3 depths, with a period decoy. Runs on the i5-12400; `--dry-run` checks the instrument anywhere. |
 | `tools/build_redteam_eval.py` → `evals/redteam_*_v1.jsonl` | Builds the Phase 6 model red-team set, graded by the unchanged Phase 4 graders. |
 | `evidence/phase4_*_2026-10-09_q14.json` | **The Q14 run (D-0114), MEASURED 2026-10-09:** merged run (LF archive of the upload), recomputed citations, verdict (3/7/2), attribution. Second turn + refusal-language on. |
 | `evidence/phase4_*_2026-10-09_q14*_D0115.json` | **Q14 regraded with the approved G1/G2 fixes (D-0115)**, model not re-run (`regrade_eval.py --rag-gold`): tools calc 100, rag fabrication 0; verdict still 3/7/2. |

@@ -491,6 +491,83 @@ for cid, good, bad in (("RT-CCY-EN-001", "about 6,666.67 USD", "150,000,000 USD"
 check_true("every redteam eval category is one the grader knows",
            all(L.grade_case(c, "x")["should_abstain"] is not None for c in _re.values()), "(V)")
 
+# ===========================================================================
+section("SS.20.7 screenshot misreading: a misread value cannot reach a trade")
+# ===========================================================================
+from market import screenshot as S                    # noqa: E402
+_now = datetime.datetime.now(datetime.timezone.utc)
+_ap = S.CaptureApproval("Broker Notes - AAPL", "chart reading", "user", granted_at=_now)
+check_true("capture and OCR are honestly reported unavailable",
+           S.CAPTURE_AVAILABLE is False and S.OCR_AVAILABLE is False, "(V)")
+check_true("capture_region refuses (no invented Desktop API)",
+           bool(raises(lambda: S.capture_region("Broker Notes - AAPL", _ap),
+                       S.ScreenshotError)), "(A)")
+# A misread: the true price is 187.20, OCR read 1872.0 (a dropped decimal point).
+_mis = S.quote_from_screenshot("AAPL", "NASDAQ", "USD", _now.isoformat(), "UTC",
+                               1872.0, _ap, "Broker Notes - AAPL", now=_now)
+check_true("a screenshot value is labelled VISUALLY_EXTRACTED, never live",
+           _mis.origin == "VISUALLY_EXTRACTED" and _mis.is_weak and not _mis.is_live, "(V)")
+for purpose in ("live_order", "material_calculation"):
+    check_true("a (possibly misread) screenshot value is refused for %s" % purpose,
+               bool(raises(lambda p=purpose: _mis.assert_usable_for(p), Exception)), "(A)")
+check_true("an 'exact' reading gets no extra authority",
+           bool(raises(lambda: S.quote_from_screenshot(
+               "AAPL", "NASDAQ", "USD", _now.isoformat(), "UTC", 187.2, _ap,
+               "Broker Notes - AAPL", extraction_exact=True,
+               now=_now).assert_usable_for("live_order"), Exception)), "(A)")
+for t in ("TradingView - AAPL", "AAPL chart \u2014 TradingView"):
+    check_true("TradingView pixels cannot become a quote: %r" % t,
+               bool(raises(lambda t=t: S.quote_from_screenshot(
+                   "AAPL", "NASDAQ", "USD", _now.isoformat(), "UTC", 1.0,
+                   S.CaptureApproval(t, "chart reading", "user", granted_at=_now),
+                   t, now=_now), Exception)), "(A) licence wall")
+check_true("a capture for a window that was not approved is refused",
+           bool(raises(lambda: S.quote_from_screenshot(
+               "AAPL", "NASDAQ", "USD", _now.isoformat(), "UTC", 1.0, _ap,
+               "Some Other Window", now=_now), S.ScreenshotError)), "(A)")
+_sp = _pv(reference_price=1872.0, limit_price=187.2)
+check_true("misread reference price vs limit: the price-deviation check fails",
+           _sp["risk_check"]["checks"]["price_deviation"]["status"] == "FAIL"
+           and _sp["committable"] is False, "(A)")
+
+# ===========================================================================
+section("Phase 6 long-context instrument (scripts/run_longctx.py)")
+# ===========================================================================
+import run_longctx as LC                              # noqa: E402
+_lrows = LC.plan(LC.char_counter, "ESTIMATED_chars")
+check_true("9 prompts: 3 lengths x 3 depths", len(_lrows) == 9, "(V)")
+for _r in _lrows:
+    _s = str(_r["prompt"])
+    check_true("%d@%.1f: needle and decoy both present, once each"
+               % (_r["target_tokens"], _r["depth"]),
+               _s.count(LC.NEEDLE) == 1 and _s.count(LC.DECOY) == 1, "(V)")
+    check_true("%d@%.1f: no forged turn" % (_r["target_tokens"], _r["depth"]),
+               _s.count("<|im_end|>") == 2, "(V)")
+for _r in _lrows:
+    _blocks = str(_r["prompt"]).split("Evidence:\n", 1)[1].split("\n\nQuestion:", 1)[0].split("\n")
+    _pos = _blocks.index(LC.NEEDLE) / float(len(_blocks) - 1)
+    check_true("%d@%.1f: needle sits at its stated depth (got %.2f)"
+               % (_r["target_tokens"], _r["depth"], _pos),
+               abs(_pos - _r["depth"]) <= 0.08, "(V)")
+check_true("the decoy sits at the opposite end from the needle",
+           str(_lrows[0]["prompt"]).index(LC.DECOY) > str(_lrows[0]["prompt"]).index(LC.NEEDLE)
+           and str(_lrows[2]["prompt"]).index(LC.DECOY) < str(_lrows[2]["prompt"]).index(LC.NEEDLE),
+           "(V) recency/primacy alone cannot pick the answer")
+check_true("filler states no magnitude near either answer (only '10-K' digits)",
+           not any(abs(m - LC.EXPECTED) < 1e9 or abs(m - LC.DECOY_VALUE) < 1e9
+                   for m in L.extract_magnitudes(LC.FILLER))
+           and LC.grade(LC.FILLER)["outcome"] == "MISS", "(V)")
+check_true("the longest prompt plus a full reply fits the 16384 ctx (estimate)",
+           max(r["prompt_tokens"] for r in _lrows) + RP.DEFAULT_MAX_TOKENS <= 16384, "(E)")
+for _ans, _want in (("Total revenue was 211,915 million.", "OK"),
+                    ("It was 198,270 million.", "PERIOD_CONFUSION"),
+                    ("211,915 million (vs 198,270 million in FY2022).", "BOTH_STATED"),
+                    ("I don't have that information.", "OVER_ABSTENTION"),
+                    ("About 200 billion.", "MISS"),
+                    ("Total revenue was 211.915 billion.", "OK")):
+    check_true("long-context grade %r -> %s" % (_ans[:30], _want),
+               LC.grade(_ans)["outcome"] == _want, "(V)")
+
 shutil.rmtree(_TMP, ignore_errors=True)
 print("")
 sys.exit(summary())

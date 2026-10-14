@@ -59,7 +59,20 @@ python scripts\run_phase4.py --model C:\models\Qwen3.5-4B-Q5_K_M.gguf --arms pla
 python scripts\merge_phase4.py evals\results\p6rt_rag.json evals\results\p6rt_tools.json evals\results\p6rt_plain.json --out evals\results\phase6_redteam_merged.json
 ```
 
-بعد فایل **`phase6_redteam_merged.json`** را برای من بفرستید.
+### ۴ — آزمون متن طولانی (۲K / ۸K / ۱۴K توکن)
+
+```powershell
+python scripts\run_longctx.py --model C:\models\Qwen3.5-4B-Q5_K_M.gguf --out evals\results\p6_longctx.json
+```
+
+یک عدد درست (درآمد مایکروسافت در سال مالی ۲۰۲۳) در میان متن پرکننده و در سه
+عمق (۱۰٪، ۵۰٪ و ۹۰٪) پنهان شده است. در همان متن یک عدد فریب هم هست: درآمد سال
+۲۰۲۲. اگر مدل عدد فریب را بگوید، grader آن را `PERIOD_CONFUSION` ثبت می‌کند.
+طول‌ها با tokenizer واقعی Qwen3.5 سنجیده شده‌اند: ۲٬۰۹۶ و ۸٬۲۳۴ و ۱۴٬۳۷۲ توکن.
+**زمان (ESTIMATED):** حدود ۴۰ تا ۷۰ دقیقه. TTFT در ۲K حدود ۶۰ ثانیه است و در
+۱۴K چند برابر می‌شود.
+
+بعد فایل‌های **`phase6_redteam_merged.json`** و **`p6_longctx.json`** را برای من بفرستید.
 
 **زمان تقریبی:** حدود ۲۰ تا ۲۵ دقیقه. این ESTIMATED است: ۹+۹+۴ سؤال، با سرعت
 اجرای ۲۰۲۶-۱۰-۰۹. لپ‌تاپ را به برق بزنید و برنامه‌های سنگین را ببندید، چون آن
