@@ -101,6 +101,68 @@ def simple_return(start: float, end: float) -> CalcResult:
                       {"start": start, "end": end}, "fraction")
 
 
+#: Active ISO-4217 codes accepted by fx_convert (D-0119). A closed list, not a
+#: 3-letter shape check: "YEN" has the shape and is not a currency, and a
+#: tool that converts into a typo returns a confident number in no unit.
+ISO_4217 = frozenset("""
+AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL
+BSD BTN BWP BYN BZD CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK DOP DZD EGP
+ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR
+IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL
+LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN NIO NOK NPR
+NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD
+SHP SLE SOS SRD SSP STN SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD
+UYU UZS VES VND VUV WST XAF XCD XOF XPF YER ZAR ZMW ZWL
+""".split())
+
+
+def fx_convert(amount: float, rate: float, from_currency: str,
+               to_currency: str, rate_quote: str) -> CalcResult:
+    """
+    F3 / D-0119. Convert an amount between two currencies at a GIVEN rate.
+
+    MEASURED 2026-10-14 (D-0118, tools/RT-CCY-EN-001): with no FX tool the
+    model routed "1,000,000 JPY at 150 JPY per USD" to simple_return and
+    stated nothing. The plain arm got 6,666.67 right; the tools arm had no
+    correct tool to call. That is a missing tool, not a model failure.
+
+    THE QUOTE DIRECTION IS REQUIRED, never guessed. "150" is USD/JPY: 150 JPY
+    per 1 USD. Multiplying instead of dividing is the classic 22,500x error
+    (150,000,000 USD), so the caller must state which currency the rate is
+    priced IN:
+        rate_quote = "to_per_from"   -> rate units of to_currency per 1 from
+        rate_quote = "from_per_to"   -> rate units of from_currency per 1 to
+    "150 JPY per USD" converting JPY -> USD is "from_per_to".
+
+    This tool supplies NO rate. A rate is market data; the caller must bring
+    one, and the result is only as current as that rate (SS.5.5).
+    """
+    if not isinstance(from_currency, str) or not isinstance(to_currency, str):
+        raise TypeError("fx_convert: currencies must be ISO-4217 code strings")
+    fc, tc = from_currency.strip().upper(), to_currency.strip().upper()
+    for c in (fc, tc):
+        if c not in ISO_4217:
+            raise ValueError("fx_convert: %r is not an ISO-4217 currency code "
+                             "(JPY, not YEN; IRR, not RIAL)" % c)
+    if fc == tc:
+        raise ValueError("fx_convert: from and to currency are both %s" % fc)
+    if rate <= 0:
+        raise ValueError("fx_convert: rate must be > 0")
+    if rate_quote == "to_per_from":
+        v = amount * rate
+        formula = "amount * rate  (rate = %s per 1 %s)" % (tc, fc)
+    elif rate_quote == "from_per_to":
+        v = amount / rate
+        formula = "amount / rate  (rate = %s per 1 %s)" % (fc, tc)
+    else:
+        raise ValueError("fx_convert: rate_quote must be 'to_per_from' or "
+                         "'from_per_to'; the direction is never guessed")
+    return CalcResult("fx_convert", v, formula,
+                      {"amount": amount, "rate": rate, "from_currency": fc,
+                       "to_currency": tc, "rate_quote": rate_quote}, tc,
+                      notes="rate supplied by the caller; not market data")
+
+
 def log_return(start: float, end: float) -> CalcResult:
     if start <= 0 or end <= 0:
         raise ValueError("log_return: requires strictly positive prices")

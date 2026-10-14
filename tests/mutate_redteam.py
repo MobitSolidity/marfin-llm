@@ -19,6 +19,8 @@ UNT = "src/safety/untrusted.py"
 REG = "src/tools/registry.py"
 RUN = "scripts/run_phase4.py"
 LCX = "scripts/run_longctx.py"
+RR = "src/calc/returns_risk.py"
+BRE = "tools/build_redteam_eval.py"
 
 MUTATIONS = [
     (UNT, "control tokens no longer defanged",
@@ -98,6 +100,57 @@ MUTATIONS = [
     (LCX, "scale words ignored (211.915 billion misses)",
      "    found = L.value_matches(EXPECTED, answer, TOL, scaled=True)",
      "    found = L.value_matches(EXPECTED, answer, TOL, scaled=False)"),
+    # -- D-0119 F1: execution-claim guard ------------------------------------
+    (UNT, "F1 guard never blocks",
+     "    claims = execution_claims(text)\n    if not claims:",
+     "    claims = []\n    if not claims:"),
+    (UNT, "F1 Persian completion verbs dropped",
+     '    r"|(?:\\u0627\\u0646\\u062c\\u0627\\u0645\\s*\\u0634\\u062f|"',
+     '    r"|(?:NEVERMATCH|"'),
+    (UNT, "F1 Persian word-end check removed (participle fires)",
+     '    r"\\u0627\\u062c\\u0631\\u0627\\s*\\u0634\\u062f)(?![\\u0600-\\u06ff\\u200c])",',
+     '    r"\\u0627\\u062c\\u0631\\u0627\\s*\\u0634\\u062f)",'),
+    (UNT, "F1 'has been placed' form dropped (the measured critical reply)",
+     '    r"\\b(?:has|have|had)\\s+been\\s+(?:successfully\\s+)?(?:placed|executed|submitted|"',
+     '    r"\\bNEVERMATCH(?:placed|executed|submitted|"'),
+    (UNT, "F1 tool-call blocks no longer excluded",
+     '    s = re.sub(r"<tool_call>.*?</tool_call>", " ", s, flags=re.S)\n', ""),
+    (UNT, "F1 Persian question gets the English notice",
+     '    notice = EXECUTION_GUARD_NOTICE_FA if lang == "fa" else EXECUTION_GUARD_NOTICE_EN',
+     '    notice = EXECUTION_GUARD_NOTICE_EN'),
+    (UNT, "F1 original reply discarded (no audit trail)",
+     '    return {"text": notice, "blocked": True, "claims": claims, "original": text}',
+     '    return {"text": notice, "blocked": True, "claims": claims, "original": None}'),
+    (RUN, "F1 plain arm ignores the guard flag",
+     '        text, guard = _apply_execution_guard(text, c.get("lang"), execution_guard)',
+     '        text, guard = _apply_execution_guard(text, c.get("lang"), False)'),
+    (RUN, "F1 tools arm guards but keeps grading the original",
+     '                g["output"] = guarded\n',
+     '                pass\n'),
+    # -- D-0119 F2: trust-gated retrieval -------------------------------------
+    (RUN, "F2 min_trust not passed to retrieval",
+     '        res = index.search(gold["query"], top_k=top_k, min_trust=min_trust)',
+     '        res = index.search(gold["query"], top_k=top_k)'),
+    (RUN, "F2 gate always on (recorded runs no longer reproducible)",
+     '        res = index.search(gold["query"], top_k=top_k, min_trust=min_trust)',
+     '        res = index.search(gold["query"], top_k=top_k, min_trust=80)'),
+    # -- D-0119 F3: fx_convert ------------------------------------------------
+    (RR, "F3 direction swapped (the 22,500x error)",
+     '        v = amount / rate\n', '        v = amount * rate\n'),
+    (RR, "F3 unknown rate_quote guessed instead of refused",
+     "    else:\n        raise ValueError(\"fx_convert: rate_quote must be",
+     "    else:\n        v, formula = amount / rate, 'guessed'\n    if False:\n        raise ValueError(\"fx_convert: rate_quote must be"),
+    (RR, "F3 non-ISO code accepted",
+     '        if c not in ISO_4217:', '        if len(c) != 3:'),
+    (RR, "F3 zero/negative rate accepted",
+     '    if rate <= 0:\n        raise ValueError("fx_convert: rate must be > 0")',
+     '    if rate == 0:\n        raise ValueError("fx_convert: rate must be > 0")'),
+    (RR, "F3 same-currency conversion accepted",
+     '    if fc == tc:\n        raise', '    if False:\n        raise'),
+    # -- D-0119 F4: fixture -----------------------------------------------------
+    (BRE, "F4 figure pin checks nothing",
+     "    return any(f in p.text for p in passages for f in GOLD_FIGURE_TEXT.get(gid, ()))",
+     "    return True"),
 ]
 
 

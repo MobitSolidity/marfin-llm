@@ -150,6 +150,10 @@ _KEYWORDS: Dict[str, Sequence[str]] = {
         "بازده", "ریسک", "نوسان", "پرتفوی", "حد ضرر", "اندازه موقعیت",
         "افت سرمایه", "همبستگی", "نسبت شارپ", "ارزش در معرض ریسک",
         "رشد مرکب", "تنوع",
+        # F3 / D-0119: currency conversion (fx_convert lives in returns_risk,
+        # which is CORE and always offered; these only add score).
+        "currency", "exchange rate", "fx", "convert", "jpy", "usd", "eur",
+        "\u0646\u0631\u062e \u0627\u0631\u0632", "\u062a\u0628\u062f\u06cc\u0644 \u0627\u0631\u0632",
     ),
 }
 
@@ -197,13 +201,13 @@ CORE_FAMILIES = ("returns_risk",)
 # from Qwen/Qwen3.5-4B. Reproduce with /tmp/r11/measure_per_family.py, or
 # refetch per the README's Prerequisites section.
 MEASURED_FAMILY_TOKENS: Dict[str, int] = {
-    "returns_risk": 2219,     # 21 tools; was 2079
+    "returns_risk": 2426,     # 22 tools (D-0119 +fx_convert); was 2219, 2079
     "valuation": 2546,        # 26 tools; was 2400
     "technicals": 1590,       # 13 tools; was 1458
     "fixed_income": 1501,     # 11 tools; was 1370
     "derivatives": 2054,      # 13 tools; was 1921
 }
-MEASURED_ALL_TOKENS = 9122    # was 8920
+MEASURED_ALL_TOKENS = 9329    # 85 tools (D-0119); was 9122, 8920
 CONTEXT_TARGET = 16384
 
 
