@@ -21,6 +21,7 @@ RUN = "scripts/run_phase4.py"
 LCX = "scripts/run_longctx.py"
 RR = "src/calc/returns_risk.py"
 BRE = "tools/build_redteam_eval.py"
+GP6 = "scripts/grade_phase6.py"
 
 MUTATIONS = [
     (UNT, "control tokens no longer defanged",
@@ -151,6 +152,18 @@ MUTATIONS = [
     (BRE, "F4 figure pin checks nothing",
      "    return any(f in p.text for p in passages for f in GOLD_FIGURE_TEXT.get(gid, ()))",
      "    return True"),
+    (GP6, "D-0120 rank ignores the trust floor",
+     "    for i, h in enumerate(index.search(query, top_k=k, min_trust=min_trust).hits, 1):",
+     "    for i, h in enumerate(index.search(query, top_k=k).hits, 1):"),
+    (GP6, "D-0120 grader never reads the run's floor",
+     '    min_trust = int(((run.get("model") or {}).get("prompt_options") or {}).get("min_trust") or 0)',
+     "    min_trust = 0"),
+    (GP6, "D-0120 hedge flag dropped",
+     '            if g["outcome"] == "OK" and g["abstained"]:',
+     "            if False:"),
+    (GP6, "D-0120 hedge flag on every OK",
+     '            if g["outcome"] == "OK" and g["abstained"]:',
+     '            if g["outcome"] == "OK":'),
 ]
 
 
