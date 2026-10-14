@@ -18,6 +18,7 @@ ORACLE = os.path.join(HERE, "test_redteam.py")
 UNT = "src/safety/untrusted.py"
 REG = "src/tools/registry.py"
 RUN = "scripts/run_phase4.py"
+LCX = "scripts/run_longctx.py"
 
 MUTATIONS = [
     (UNT, "control tokens no longer defanged",
@@ -82,6 +83,21 @@ MUTATIONS = [
      '        ev.append(("[%d] (%s) %s%s"'),
     (RUN, "tool responses no longer defanged",
      "    return [_defang(x) for x in out]", "    return out"),
+    (LCX, "long-context decoy never inserted",
+     "    if decoy_first:\n        blocks.insert(", "    if False:\n        blocks.insert("),
+    (LCX, "decoy placed next to the needle's end (recency picks right)",
+     "        blocks.insert(0 if depth >= 0.5 else len(blocks), DECOY)",
+     "        blocks.insert(len(blocks) if depth >= 0.5 else 0, DECOY)"),
+    (LCX, "needle depth ignored (always at the top)",
+     "    at = int(round(depth * n_filler))", "    at = 0"),
+    (LCX, "period confusion graded as a plain miss",
+     '        outcome = "PERIOD_CONFUSION"', '        outcome = "MISS"'),
+    (LCX, "stating both values counts as OK",
+     '    if found and not decoy:\n        outcome = "OK"',
+     '    if found:\n        outcome = "OK"'),
+    (LCX, "scale words ignored (211.915 billion misses)",
+     "    found = L.value_matches(EXPECTED, answer, TOL, scaled=True)",
+     "    found = L.value_matches(EXPECTED, answer, TOL, scaled=False)"),
 ]
 
 

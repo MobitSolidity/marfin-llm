@@ -7002,3 +7002,51 @@ have exactly 2 `<|im_end|>`. Run commands: `PHASE6_REDTEAM_RUN_FA.md`.
 - `tests/mutate_redteam.py`: 22 seeded, 22 killed. The first run had 3
   survivors, which exposed 3 untested claims; all were tightened.
 - `run_all.sh`: 20 suites.
+
+## D-0117 — D-0115/D-0116 pushed and merged (PR #4); Phase 6 adds screenshot-misreading and long-context coverage
+
+**Trigger, 2026-10-11:** the user supplied a GitHub token and asked for the last
+bundle to be pushed and the build to continue.
+
+### Push
+
+- PR #4 was created and **merged into main** (merge commit `6d9fd19`). It carries
+  D-0115 and D-0116.
+- **Token handling:** the token stays in the user's uploaded `.env` and is read
+  only at call time, by a temporary credential helper outside the repo.
+- **VERIFIED** absent from: the working tree, every commit in the history,
+  `.git/config`, `~/.gitconfig`, `~/.git-credentials`, and gh `hosts.yml`.
+
+### Screenshot misreading (SS.20.7): code-side, done
+
+There is no OCR in the runtime, and the module says so (`OCR_AVAILABLE = False`),
+so the question tested is what a misread value could *do*. MEASURED:
+
+- A `VISUALLY_EXTRACTED` quote is refused for `live_order` and
+  `material_calculation`.
+- `extraction_exact=True` adds no authority.
+- A window that was not approved is refused, and so are TradingView titles (the
+  licence wall).
+- A 10× misread used as the reference price makes `price_deviation` FAIL, and the
+  preview is never committable.
+
+### Long context (Phase 6 task; SS.20.4 2K/8K/16K): instrument built, not run
+
+`scripts/run_longctx.py` buries one needle at 10 %, 50 % and 90 % depth: MSFT
+FY2023 total revenue, 211,915 million. It adds a period decoy at the opposite
+end: FY2022, 198,270 million.
+
+- **Lengths:** measured with the real Qwen3.5 tokenizer at 2,096, 8,234, and
+  14,372 tokens. That is 14K, not 16K, so a 512-token reply still fits ctx 16384
+  and nothing is truncated silently.
+- **Grading:** the unchanged Phase 4 value grader. Outcomes are OK,
+  PERIOD_CONFUSION, BOTH_STATED, OVER_ABSTENTION, and MISS.
+- **Pinned:** every prompt contains the needle and the decoy once each; the
+  needle sits at its stated depth (±0.08); the decoy sits opposite the needle;
+  the filler grades as MISS; and every grade class is reachable.
+
+### Verification
+
+- `test_redteam`: 184 → 231.
+- `mutate_redteam`: 22 → 28, all killed. One first-pass survivor ("needle depth
+  ignored") exposed a too-weak depth assertion, which was tightened.
