@@ -398,8 +398,8 @@ check_true("the new edges add no import cycle",
 # ---------------------------------------------------------------------------
 section("impact: the incidents it exists for, and its negatives")
 # ---------------------------------------------------------------------------
-check("run_all.sh SUITES read, not re-declared", len(I.suites()), 20,
-      method="(V) 18 + test_attribution.py + test_redteam.py (D-0116)")
+check("run_all.sh SUITES read, not re-declared", len(I.suites()), 21,
+      method="(V) 18 + test_attribution.py + test_redteam.py (D-0116) + test_phase7.py (D-0121)")
 r = I.analyse(["src/rag/normalize.py"])
 bats = {b["battery"] for b in r["batteries"]}
 check_true("normalize.py reaches mutate_phase4.py -- the battery D-0107 missed",

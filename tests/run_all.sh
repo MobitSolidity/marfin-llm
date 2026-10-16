@@ -119,7 +119,8 @@ tests/test_phase4_harness.py \
 tests/test_llm_providers.py \
 tests/test_console.py \
 tests/test_attribution.py \
-tests/test_redteam.py"
+tests/test_redteam.py \
+tests/test_phase7.py"
 
 for t in $SUITES; do
   echo
@@ -565,6 +566,16 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: red-team source not restored, or its oracle is red"
     fail=1; }
   [ $rtm_status -ne 0 ] && fail=1
+  echo
+  echo "--- Phase 7 GGUF validation + quant comparison (D-0121) ---------------"
+  p7m=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_phase7.py)
+  p7m_status=$?
+  echo "$p7m" | grep -E "seeded [0-9]+"
+  echo "$p7m" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$p7m" | grep -q "restored+green True" || {
+    echo "  ERROR: Phase 7 source not restored, or its oracle is red"
+    fail=1; }
+  [ $p7m_status -ne 0 ] && fail=1
 fi
 
 echo

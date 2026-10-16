@@ -625,6 +625,17 @@ _ABSTAIN_FA_RE = (
     # across every recorded run it fires on those 4 must-refuse rows only.
     re.compile(r"\u0627\u0637\u0644\u0627\u0639\u0627\u062a\u06cc?"
                r"[^.!?\n\u061f]{0,80}?\u0646\u062f\u0627\u0631\u0645"),
+    # G3, APPROVED 2026-10-14 (D-0121), FROM OBSERVED MODEL OUTPUT ONLY.
+    # "دسترسی ... ندارم" with a long object in between. Observed in
+    #   plain/RT-PAPERLIVE-EN-001 (both 2026-10-14 runs, byte-identical):
+    #   "من به عنوان یک تحلیلگر مالی، دسترسی به حساب‌های معاملاتی شما، وضعیت
+    #    حساب‌های آزمایشی (Paper) یا دستورالعمل‌های خاص ... را ندارم."
+    # MEASURED gap 142 chars, hence 160. Same sentence-end stop as G1 (the
+    # Persian comma "،" is deliberately NOT a stop: the observed reply lists
+    # its objects with it). MEASURED before adding: across all 550 recorded
+    # replies it changes only that row.
+    re.compile(r"\u062f\u0633\u062a\u0631\u0633\u06cc"
+               r"[^.!?\n\u061f]{0,160}?\u0646\u062f\u0627\u0631\u0645"),
 )
 
 
@@ -1505,6 +1516,34 @@ KNOWN_MODEL_FILES = {
                 "It THINKS BY DEFAULT: replies are graded after "
                 "strip_thinking(), and a run whose answers were lost inside "
                 "<think> is a budget failure, not a quality result.",
+    },
+    # Phase 7 (D-0121), verified 2026-10-16 the same way as the row above:
+    # each full file was streamed from revision e87f1764 and hashed with
+    # hashlib, its first four bytes were b"GGUF", and its size was counted.
+    # The HF LFS oid agrees, but it was NOT the source. The headers (read
+    # with tools/gguf_inspect.py) are identical to Q5_K_M's on every invariant:
+    # same architecture, hparams, chat template, tokenizer and tensor set.
+    # Only the per-tensor quantisation types differ.
+    "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4": {
+        "repo": "unsloth/Qwen3.5-4B-GGUF",
+        "file": "Qwen3.5-4B-Q4_K_M.gguf",
+        "size_bytes": 2740937888,
+        "is_pinned_revision": False,
+        "thinking_by_default": True,
+        "note": "Qwen3.5-4B Q4_K_M, the SAME model as the Q5_K_M row at lower "
+                "precision (131 tensors Q5_K->Q4_K, 48 Q6_K->Q5_K; header "
+                "otherwise identical). Phase 7 quantisation candidate.",
+    },
+    "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1": {
+        "repo": "unsloth/Qwen3.5-4B-GGUF",
+        "file": "Qwen3.5-4B-Q8_0.gguf",
+        "size_bytes": 4482403488,
+        "is_pinned_revision": False,
+        "thinking_by_default": True,
+        "note": "Qwen3.5-4B Q8_0, the SAME model at near-lossless precision. "
+                "4.17 GiB: ABOVE the approved model_file_size_gib_max of "
+                "4.0, so it is a quality REFERENCE only, never a deployment "
+                "candidate.",
     },
 }
 

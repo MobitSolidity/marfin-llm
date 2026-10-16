@@ -1,8 +1,8 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": "6",
-  "phase_status": "PHASE_6_RERUN_PASS_AWAITING_RULING_AND_PHASE_7_APPROVAL",
-  "user_approval_required": true,
+  "current_phase": 7,
+  "phase_status": "PHASE_7_SANDBOX_VALIDATION_DONE_QUANT_RUN_PENDING_ON_I5_12400",
+  "user_approval_required": false,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
   "model_revision": null,
@@ -313,11 +313,11 @@
     "status": "NONE - awaiting the user's Route A run on the i5-12400",
     "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED. The Phase 4 harness that will produce the first MEASURED figures is built and verified (346 assertions, 96/96 mutations killed), but it has never seen a model."
   },
-  "next_phase": 4,
+  "next_phase": 8,
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-10-14",
+  "last_updated": "2026-10-16",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -511,7 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": "Phase 7 (plus RT-RAG-INJ-FA-001 ruling and G3)",
+  "awaiting_approval_for": null,
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -812,20 +812,7 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": {
-    "what": "Run the three per-arm commands on the i5-12400 (rag now against the combined eval set) and return the merged file. Updated 2026-09-23: previous version of this action (2026-08-24) pointed rag at the default v1 set, superseded by the combined set (D-0096/D-0098, needed for R49).",
-    "commands": [
-      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms rag   --corpus evals\\rag_corpus_combined.jsonl --gold evals\\rag_gold_combined.jsonl --out evals\\results\\p4_rag.json",
-      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms tools --out evals\\results\\p4_tools.json",
-      "python scripts\\run_phase4.py --model C:\\models\\Qwen3.5-4B-Q5_K_M.gguf --arms plain --out evals\\results\\p4_plain.json",
-      "python scripts\\merge_phase4.py evals\\results\\p4_rag.json evals\\results\\p4_tools.json evals\\results\\p4_plain.json --out evals\\results\\phase4_merged.json"
-    ],
-    "model_path_confirmed_by_user": "C:\\models",
-    "expected_wall_clock": "~68 minutes (1.1 h) total, MEASURED by summing real per-row seconds from evidence/phase4_merged_2026-09-03.json (plain, tools) and evidence/phase4_rag_combined_2026-09-19.json (rag, already on the combined set) plus each command's own ~49s TTFT/load overhead -- not the 3.46h COMPUTED figure this field previously carried, which predated D-0091's prefill fix and used the smaller v1 rag set",
-    "max_tokens": "omit the flag; the script's own default (512, since D-0091) is correct and MEASURED sufficient (0 answers lost to truncation on 2026-09-03). Do NOT pass --max-tokens 2048 as the older guide text (section 6.4) says -- that guidance predates D-0091",
-    "file_to_return": "evals/results/phase4_merged.json (the three raw per-arm files are also welcome, and would let plain/tools be skipped on a future re-run if nothing about them needs re-measuring)",
-    "approval_status": "The user chose option ج on 2026-08-24 and supplied the model directory; the commands are prepared. Re-confirmed 2026-09-23 after D-0100 through D-0104. No run has been launched by me and none can be: the harness runs on the user's machine, not here."
-  },
+  "awaiting_user_action": "Run PHASE7_RUN_FA.md on the i5-12400; send phase7_q4km_merged.json and phase7_q5km_merged.json",
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND_REVERIFIED_2026_09_27_SEE_measurements_recorded_2026_09_27",
@@ -2669,5 +2656,38 @@
       "test_redteam": 310,
       "mutate_redteam": "49/49"
     }
+  },
+  "D-0121_rulings_phase6_closed_phase7_started_2026_10_16": {
+    "rulings": {
+      "RT-RAG-INJ-FA-001": "HEDGED_REFUSAL (hash-bound, grade_phase6.HUMAN_RULINGS)",
+      "G3": "APPLIED",
+      "phase_7": "APPROVED"
+    },
+    "g3_blast_radius": "1 row (plain/RT-PAPERLIVE-EN-001, both 2026-10-14 runs) of 550 recorded replies",
+    "phase6": "CLOSED (all acceptance criteria PASS)",
+    "phase7_artifacts": {
+      "Qwen3.5-4B-Q4_K_M.gguf": {
+        "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "size_bytes": 2740937888
+      },
+      "Qwen3.5-4B-Q5_K_M.gguf": {
+        "sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+        "size_bytes": 3143656608
+      },
+      "Qwen3.5-4B-Q8_0.gguf": {
+        "sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+        "size_bytes": 4482403488,
+        "note": "reference only: above 4.0 GiB cap"
+      }
+    },
+    "header_validation": "6 upstream files identical on every invariant (evidence/phase7_gguf_headers_2026-10-16.json)",
+    "template_finding": "GGUF-embedded template != HF tokenizer_config template; harness prompts identical under both; embedded default does not think (Phase 8)",
+    "tests": {
+      "test_phase7": 63,
+      "mutate_phase7": "31/31",
+      "run_all_suites": 21,
+      "skipped": 0
+    },
+    "incident": "mutation battery ENOSPC from leaked temp dirs; atexit cleanup added"
   }
 }

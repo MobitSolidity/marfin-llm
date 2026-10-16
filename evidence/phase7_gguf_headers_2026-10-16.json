@@ -1,0 +1,274 @@
+{
+  "label": "MEASURED (headers read by HTTP Range requests; Q4_K_M and Q8_0 also hashed from a full streamed download)",
+  "date": "2026-10-16",
+  "repo": "unsloth/Qwen3.5-4B-GGUF",
+  "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+  "tool": "tools/gguf_inspect.py",
+  "full_file_hashes": {
+    "Qwen3.5-4B-Q4_K_M.gguf": {
+      "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "size_bytes": 2740937888,
+      "magic": "GGUF",
+      "hf_lfs_oid": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "agrees": true
+    },
+    "Qwen3.5-4B-Q8_0.gguf": {
+      "sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+      "size_bytes": 4482403488,
+      "magic": "GGUF",
+      "hf_lfs_oid": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+      "agrees": true
+    }
+  },
+  "headers": {
+    "Qwen3.5-4B-BF16.gguf": {
+      "gguf_version": 3,
+      "architecture": "qwen35",
+      "file_type": 32,
+      "quantized_by": "Unsloth",
+      "n_tensors": 426,
+      "n_params": 4205751296,
+      "params_by_type": {
+        "BF16": 4204789760,
+        "F32": 961536
+      },
+      "hparams_sha256": "ee60ad9d358694664ce51fbd13550e630c7c5cbfcc98318b709c79ddd0e3ae36",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "chat_template_chars": 7816,
+      "tokenizer_model": "gpt2",
+      "tokenizer_pre": "qwen35",
+      "vocab_size": 248320,
+      "tokens_sha256": "49d2b7a591524ed8445681d348f965ed46110e5717924418e866a378bd0b8ed0",
+      "token_type_sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+      "merges_n": 247587,
+      "merges_sha256": "84dfecf21066c3a0c8b4ecdfea31e7d3592d1de26092955c437d211c44c0e867",
+      "special_token_ids": {
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055
+      },
+      "special_tokens": {
+        "tokenizer.ggml.eos_token_id": "<|im_end|>",
+        "tokenizer.ggml.padding_token_id": "<|vision_pad|>"
+      },
+      "tensor_names_sha256": "17292a1deb3fbde1b054f6a2bc10920c419a8d59bea6996f1efbf2be61a2c6ca",
+      "tensor_shapes_sha256": "dc89125ff71f72c13898efda005221d2d7fb6839e3b1f8c2af896e1070c3ed4b",
+      "tensor_order_sha256": "1f875017742d884631c5f376385a1a05b19834b9382b7230cd4558c2c6a25561",
+      "header_bytes": 10967960,
+      "bytes_fetched": 16777216
+    },
+    "Qwen3.5-4B-Q4_K_M.gguf": {
+      "gguf_version": 3,
+      "architecture": "qwen35",
+      "file_type": 15,
+      "quantized_by": "Unsloth",
+      "n_tensors": 426,
+      "n_params": 4205751296,
+      "params_by_type": {
+        "F32": 961536,
+        "Q4_K": 2419589120,
+        "Q5_K": 754974720,
+        "Q6_K": 1026293760,
+        "Q8_0": 3932160
+      },
+      "hparams_sha256": "ee60ad9d358694664ce51fbd13550e630c7c5cbfcc98318b709c79ddd0e3ae36",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "chat_template_chars": 7816,
+      "tokenizer_model": "gpt2",
+      "tokenizer_pre": "qwen35",
+      "vocab_size": 248320,
+      "tokens_sha256": "49d2b7a591524ed8445681d348f965ed46110e5717924418e866a378bd0b8ed0",
+      "token_type_sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+      "merges_n": 247587,
+      "merges_sha256": "84dfecf21066c3a0c8b4ecdfea31e7d3592d1de26092955c437d211c44c0e867",
+      "special_token_ids": {
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055
+      },
+      "special_tokens": {
+        "tokenizer.ggml.eos_token_id": "<|im_end|>",
+        "tokenizer.ggml.padding_token_id": "<|vision_pad|>"
+      },
+      "tensor_names_sha256": "17292a1deb3fbde1b054f6a2bc10920c419a8d59bea6996f1efbf2be61a2c6ca",
+      "tensor_shapes_sha256": "dc89125ff71f72c13898efda005221d2d7fb6839e3b1f8c2af896e1070c3ed4b",
+      "tensor_order_sha256": "d156f90dcf4f6599f2743024b5299435b58bfe2fd8ff2b26b3ea2a377f0f8171",
+      "header_bytes": 10968206,
+      "bytes_fetched": 16777216
+    },
+    "Qwen3.5-4B-Q5_K_M.gguf": {
+      "gguf_version": 3,
+      "architecture": "qwen35",
+      "file_type": 17,
+      "quantized_by": "Unsloth",
+      "n_tensors": 426,
+      "n_params": 4205751296,
+      "params_by_type": {
+        "F32": 961536,
+        "Q5_K": 2419589120,
+        "Q6_K": 1781268480,
+        "Q8_0": 3932160
+      },
+      "hparams_sha256": "ee60ad9d358694664ce51fbd13550e630c7c5cbfcc98318b709c79ddd0e3ae36",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "chat_template_chars": 7816,
+      "tokenizer_model": "gpt2",
+      "tokenizer_pre": "qwen35",
+      "vocab_size": 248320,
+      "tokens_sha256": "49d2b7a591524ed8445681d348f965ed46110e5717924418e866a378bd0b8ed0",
+      "token_type_sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+      "merges_n": 247587,
+      "merges_sha256": "84dfecf21066c3a0c8b4ecdfea31e7d3592d1de26092955c437d211c44c0e867",
+      "special_token_ids": {
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055
+      },
+      "special_tokens": {
+        "tokenizer.ggml.eos_token_id": "<|im_end|>",
+        "tokenizer.ggml.padding_token_id": "<|vision_pad|>"
+      },
+      "tensor_names_sha256": "17292a1deb3fbde1b054f6a2bc10920c419a8d59bea6996f1efbf2be61a2c6ca",
+      "tensor_shapes_sha256": "dc89125ff71f72c13898efda005221d2d7fb6839e3b1f8c2af896e1070c3ed4b",
+      "tensor_order_sha256": "d156f90dcf4f6599f2743024b5299435b58bfe2fd8ff2b26b3ea2a377f0f8171",
+      "header_bytes": 10968206,
+      "bytes_fetched": 16777216
+    },
+    "Qwen3.5-4B-Q6_K.gguf": {
+      "gguf_version": 3,
+      "architecture": "qwen35",
+      "file_type": 18,
+      "quantized_by": "Unsloth",
+      "n_tensors": 426,
+      "n_params": 4205751296,
+      "params_by_type": {
+        "F32": 961536,
+        "Q6_K": 3949199360,
+        "Q8_0": 255590400
+      },
+      "hparams_sha256": "ee60ad9d358694664ce51fbd13550e630c7c5cbfcc98318b709c79ddd0e3ae36",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "chat_template_chars": 7816,
+      "tokenizer_model": "gpt2",
+      "tokenizer_pre": "qwen35",
+      "vocab_size": 248320,
+      "tokens_sha256": "49d2b7a591524ed8445681d348f965ed46110e5717924418e866a378bd0b8ed0",
+      "token_type_sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+      "merges_n": 247587,
+      "merges_sha256": "84dfecf21066c3a0c8b4ecdfea31e7d3592d1de26092955c437d211c44c0e867",
+      "special_token_ids": {
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055
+      },
+      "special_tokens": {
+        "tokenizer.ggml.eos_token_id": "<|im_end|>",
+        "tokenizer.ggml.padding_token_id": "<|vision_pad|>"
+      },
+      "tensor_names_sha256": "17292a1deb3fbde1b054f6a2bc10920c419a8d59bea6996f1efbf2be61a2c6ca",
+      "tensor_shapes_sha256": "dc89125ff71f72c13898efda005221d2d7fb6839e3b1f8c2af896e1070c3ed4b",
+      "tensor_order_sha256": "d156f90dcf4f6599f2743024b5299435b58bfe2fd8ff2b26b3ea2a377f0f8171",
+      "header_bytes": 10968206,
+      "bytes_fetched": 16777216
+    },
+    "Qwen3.5-4B-Q8_0.gguf": {
+      "gguf_version": 3,
+      "architecture": "qwen35",
+      "file_type": 7,
+      "quantized_by": "Unsloth",
+      "n_tensors": 426,
+      "n_params": 4205751296,
+      "params_by_type": {
+        "F32": 961536,
+        "Q8_0": 4204789760
+      },
+      "hparams_sha256": "ee60ad9d358694664ce51fbd13550e630c7c5cbfcc98318b709c79ddd0e3ae36",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "chat_template_chars": 7816,
+      "tokenizer_model": "gpt2",
+      "tokenizer_pre": "qwen35",
+      "vocab_size": 248320,
+      "tokens_sha256": "49d2b7a591524ed8445681d348f965ed46110e5717924418e866a378bd0b8ed0",
+      "token_type_sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+      "merges_n": 247587,
+      "merges_sha256": "84dfecf21066c3a0c8b4ecdfea31e7d3592d1de26092955c437d211c44c0e867",
+      "special_token_ids": {
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055
+      },
+      "special_tokens": {
+        "tokenizer.ggml.eos_token_id": "<|im_end|>",
+        "tokenizer.ggml.padding_token_id": "<|vision_pad|>"
+      },
+      "tensor_names_sha256": "17292a1deb3fbde1b054f6a2bc10920c419a8d59bea6996f1efbf2be61a2c6ca",
+      "tensor_shapes_sha256": "dc89125ff71f72c13898efda005221d2d7fb6839e3b1f8c2af896e1070c3ed4b",
+      "tensor_order_sha256": "d156f90dcf4f6599f2743024b5299435b58bfe2fd8ff2b26b3ea2a377f0f8171",
+      "header_bytes": 10968206,
+      "bytes_fetched": 16777216
+    },
+    "Qwen3.5-4B-UD-Q4_K_XL.gguf": {
+      "gguf_version": 3,
+      "architecture": "qwen35",
+      "file_type": 15,
+      "quantized_by": "Unsloth",
+      "n_tensors": 426,
+      "n_params": 4205751296,
+      "params_by_type": {
+        "F16": 3932160,
+        "F32": 961536,
+        "IQ4_XS": 235929600,
+        "Q4_K": 1523056640,
+        "Q5_K": 1179648000,
+        "Q6_K": 1010565120,
+        "Q8_0": 251658240
+      },
+      "hparams_sha256": "ee60ad9d358694664ce51fbd13550e630c7c5cbfcc98318b709c79ddd0e3ae36",
+      "chat_template_sha256": "7f0e529032c25183bcd66c7f238da2d377f43be754a94e2725a58c4e16d2ed67",
+      "chat_template_chars": 7816,
+      "tokenizer_model": "gpt2",
+      "tokenizer_pre": "qwen35",
+      "vocab_size": 248320,
+      "tokens_sha256": "49d2b7a591524ed8445681d348f965ed46110e5717924418e866a378bd0b8ed0",
+      "token_type_sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b",
+      "merges_n": 247587,
+      "merges_sha256": "84dfecf21066c3a0c8b4ecdfea31e7d3592d1de26092955c437d211c44c0e867",
+      "special_token_ids": {
+        "tokenizer.ggml.eos_token_id": 248046,
+        "tokenizer.ggml.padding_token_id": 248055
+      },
+      "special_tokens": {
+        "tokenizer.ggml.eos_token_id": "<|im_end|>",
+        "tokenizer.ggml.padding_token_id": "<|vision_pad|>"
+      },
+      "tensor_names_sha256": "17292a1deb3fbde1b054f6a2bc10920c419a8d59bea6996f1efbf2be61a2c6ca",
+      "tensor_shapes_sha256": "dc89125ff71f72c13898efda005221d2d7fb6839e3b1f8c2af896e1070c3ed4b",
+      "tensor_order_sha256": "d156f90dcf4f6599f2743024b5299435b58bfe2fd8ff2b26b3ea2a377f0f8171",
+      "header_bytes": 10968206,
+      "bytes_fetched": 16777216
+    }
+  },
+  "hparams_Q5_K_M": {
+    "qwen35.block_count": 32,
+    "qwen35.context_length": 262144,
+    "qwen35.embedding_length": 2560,
+    "qwen35.feed_forward_length": 9216,
+    "qwen35.attention.head_count": 16,
+    "qwen35.attention.head_count_kv": 4,
+    "qwen35.rope.freq_base": 10000000.0,
+    "qwen35.attention.layer_norm_rms_epsilon": 9.999999974752427e-07,
+    "qwen35.attention.key_length": 256,
+    "qwen35.attention.value_length": 256,
+    "qwen35.ssm.conv_kernel": 4,
+    "qwen35.ssm.state_size": 128,
+    "qwen35.ssm.group_count": 16,
+    "qwen35.ssm.time_step_rank": 32,
+    "qwen35.ssm.inner_size": 4096,
+    "qwen35.full_attention_interval": 4,
+    "qwen35.rope.dimension_count": 64
+  },
+  "tensor_type_change_Q5_K_M_to_Q4_K_M": {
+    "F32->F32": 177,
+    "Q6_K->Q6_K": 22,
+    "Q5_K->Q4_K": 131,
+    "Q6_K->Q5_K": 48,
+    "Q8_0->Q8_0": 48
+  },
+  "invariant_differences": {},
+  "note": "All 6 files agree on every invariant field: architecture, hparams, chat template, tokenizer (vocab, types, merges, special ids) and the set of tensor names and shapes. BF16 lists its tensors in a different ORDER; order is reported (tensor_order_sha256) but is not an invariant."
+}
