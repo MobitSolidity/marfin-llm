@@ -351,6 +351,23 @@ MUTATIONS = [
     (LIB, "D-0115 G1 pairs across a full stop / newline",
      '               r"[^.!?\\n\\u061f]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
      '               r"[\\s\\S]{0,80}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    # -- D-0121: G3 Persian "دسترسی ... ندارم" ------------------------------
+    (LIB, "D-0121 G3 pattern removed (RT-PAPERLIVE refusal missed again)",
+     '    re.compile(r"\\u062f\\u0633\\u062a\\u0631\\u0633\\u06cc"\n'
+     '               r"[^.!?\\n\\u061f]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),\n',
+     ''),
+    (LIB, "D-0121 G3 gap narrowed to 140 (observed 142-char refusal missed)",
+     '               r"[^.!?\\n\\u061f]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[^.!?\\n\\u061f]{0,140}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0121 G3 gap unbounded",
+     '               r"[^.!?\\n\\u061f]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[^.!?\\n\\u061f]*?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0121 G3 pairs across sentence ends",
+     '               r"[^.!?\\n\\u061f]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[\\s\\S]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
+    (LIB, "D-0121 G3 stops at a Persian comma (observed list form missed)",
+     '               r"[^.!?\\n\\u061f]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),',
+     '               r"[^.!?\\n\\u061f\\u060c]{0,160}?\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
     (LIB, "D-0115 G2 percent reading removed",
      "        for n in _percent_values(text):\n",
      "        for n in []:\n"),
@@ -404,8 +421,13 @@ MUTATIONS = [
      '            first["output"] = text\n',
      '            first["output"] = text2\n'),
     (RUN, "D-0113 schema validity is re-graded on the un-executed second turn",
-     '            for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",',
-     '            for k in ("schema_valid_calls", "banned_hits", "abstained", "abstention_ok", "fabricated",'),
+     # Re-anchored D-0121: F1's guard (D-0119) added a second copy of the
+     # one-line anchor, so the mutant was SKIPPED as ambiguous. The second
+     # line's wrapping differs between the two copies; this pins the first.
+     '            for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",\n'
+     '                      "value_ok", "persian_script", "latin_ratio",\n',
+     '            for k in ("schema_valid_calls", "banned_hits", "abstained", "abstention_ok", "fabricated",\n'
+     '                      "value_ok", "persian_script", "latin_ratio",\n'),
     (RUN, "D-0113 the refusal-language sentence is ON by default",
      "def build_plain_prompt(question, refusal_language=False):",
      "def build_plain_prompt(question, refusal_language=True):"),
@@ -416,8 +438,10 @@ MUTATIONS = [
      '    return system_base(True) + system[len(SYSTEM_BASE):]',
      '    return system'),
     (RUN, "D-0113 the run file no longer records which options were used",
-     '                      "second_turn": bool(a.second_turn),',
-     '                      "second_turn": False,'),
+     # Re-anchored D-0121: D-0119 wrapped the options in dict(...), so the
+     # old anchor no longer existed and the mutant was SKIPPED.
+     '{"second_turn": bool(a.second_turn),',
+     '{"second_turn": False,'),
     ("scripts/merge_phase4.py", "D-0113 merge ignores prompt_options",
      '            json.dumps(m.get("prompt_options")',
      '            json.dumps(None and m.get("prompt_options")'),
@@ -1511,9 +1535,12 @@ MUTATIONS = [
      '               r"\\u0646\\u062f\\u0627\\u0631\\u0645"),',
      '    re.compile(r"\\u0627\\u0645\\u06a9\\u0627\\u0646[\\s\\S]{0,40}?"\n'
      '               r"\\u0646\\u062f\\u0627\\u0631\\u0645"),'),
-    (LIB, "the observed refusal phrase is removed from the vocabulary",
-     '    "\\u062f\\u0633\\u062a\\u0631\\u0633\\u06cc \\u0646\\u062f\\u0627\\u0631\\u0645",  # دسترسی ندارم',
-     "    "),
+    # RETIRED D-0121: "the observed refusal phrase is removed from the
+    # vocabulary" (the fixed substring "دسترسی ندارم"). G3 (approved
+    # 2026-10-14) matches "دسترسی" + 0-160 non-terminal chars + "ندارم",
+    # a strict superset of that substring, so removing it cannot change any
+    # result: an EQUIVALENT mutant, which survives by construction. Removing
+    # G3 itself is covered by "D-0121 G3 pattern removed" (killed).
     (LIB, "the refusal check requires only the negative verb",
      '    re.compile(r"\\u0627\\u0645\\u06a9\\u0627\\u0646[^.!?\\n]{0,40}?"\n'
      '               r"\\u0646\\u062f\\u0627\\u0631\\u0645"),',
