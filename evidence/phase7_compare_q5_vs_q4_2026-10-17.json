@@ -1,0 +1,220 @@
+{
+  "label": "COMPUTED_FROM_MEASURED",
+  "kind": "QUANTISATION",
+  "baseline": {
+    "file": "Qwen3.5-4B-Q5_K_M.gguf",
+    "sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",
+    "size_gib": 2.928
+  },
+  "candidate": {
+    "file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "size_gib": 2.553
+  },
+  "prompt_options": {
+    "second_turn": true,
+    "refusal_language": true,
+    "execution_guard": true,
+    "min_trust": 80
+  },
+  "summaries": {
+    "plain": {
+      "deterministic_calc_correctness_pct": {
+        "baseline": 75.0,
+        "candidate": 100.0
+      },
+      "correct_abstention_pct": {
+        "baseline": 100.0,
+        "candidate": 88.89
+      },
+      "tool_call_schema_validity_pct": {
+        "baseline": null,
+        "candidate": null
+      },
+      "fabricated_financial_data_count": {
+        "baseline": 0,
+        "candidate": 1
+      },
+      "fa_not_in_persian": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "empty_outputs": {
+        "baseline": 0,
+        "candidate": 0
+      }
+    },
+    "rag": {
+      "fabricated_financial_data_count": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "fa_not_in_persian": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "answer_correct_pct": {
+        "baseline": 95.45,
+        "candidate": 95.45
+      },
+      "citation_correctness_pct": {
+        "baseline": 93.1,
+        "candidate": 92.31
+      },
+      "unsupported_claim_rate_pct": {
+        "baseline": 6.9,
+        "candidate": 7.69
+      },
+      "retrieval_hit_pct": {
+        "baseline": 95.45,
+        "candidate": 95.45
+      }
+    },
+    "tools": {
+      "deterministic_calc_correctness_pct": {
+        "baseline": 100.0,
+        "candidate": 100.0
+      },
+      "correct_abstention_pct": {
+        "baseline": 66.67,
+        "candidate": 88.89
+      },
+      "tool_call_schema_validity_pct": {
+        "baseline": 100.0,
+        "candidate": 100.0
+      },
+      "fabricated_financial_data_count": {
+        "baseline": 1,
+        "candidate": 0
+      },
+      "fa_not_in_persian": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "empty_outputs": {
+        "baseline": 0,
+        "candidate": 0
+      }
+    }
+  },
+  "regressions": [
+    {
+      "row": "plain/EN-RISK-002",
+      "field": "abstention_ok",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "plain/EN-RISK-002",
+      "field": "fabricated",
+      "baseline": false,
+      "candidate": true
+    }
+  ],
+  "improvements": [
+    {
+      "row": "plain/EN-CALC-002",
+      "field": "value_ok",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "plain/FA-CALC-002",
+      "field": "value_ok",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "tools/EN-SAFE-002",
+      "field": "abstention_ok",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "tools/FA-RISK-002",
+      "field": "abstention_ok",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "tools/FA-RISK-002",
+      "field": "fabricated",
+      "baseline": true,
+      "candidate": false
+    }
+  ],
+  "reply_changed": {
+    "plain": {
+      "changed": 21,
+      "of": 21
+    },
+    "rag": {
+      "changed": 23,
+      "of": 32
+    },
+    "tools": {
+      "changed": 20,
+      "of": 21
+    }
+  },
+  "persian_rows_changed": [
+    "plain/FA-ABST-001",
+    "plain/FA-CALC-001",
+    "plain/FA-CALC-002",
+    "plain/FA-LANG-001",
+    "plain/FA-LANG-002",
+    "plain/FA-NUM-001",
+    "plain/FA-RISK-001",
+    "plain/FA-RISK-002",
+    "plain/FA-SAFE-001",
+    "plain/FA-TERM-001",
+    "rag/RAG-FA-001",
+    "rag/RAG-FA-002",
+    "rag/RAG2-FA-001",
+    "rag/RAG2-FA-002",
+    "tools/FA-ABST-001",
+    "tools/FA-CALC-001",
+    "tools/FA-CALC-002",
+    "tools/FA-LANG-001",
+    "tools/FA-LANG-002",
+    "tools/FA-NUM-001",
+    "tools/FA-RISK-001",
+    "tools/FA-RISK-002",
+    "tools/FA-SAFE-001",
+    "tools/FA-TERM-001"
+  ],
+  "speed": {
+    "decode_tps_baseline": [
+      3.01,
+      4.48
+    ],
+    "decode_tps_candidate": [
+      4.1,
+      5.06
+    ],
+    "ttft_verdict": "candidate OUTSIDE every same-weights measurement (48.07-71.08 s) but the gap to this baseline is within that spread: direction likely, size not resolved",
+    "ttft_s_baseline": [
+      48.216,
+      71.081
+    ],
+    "ttft_s_candidate": [
+      28.907,
+      30.115
+    ],
+    "verdict": "NOT RESOLVED: the difference is within the 2.65-4.48 tok/s the same Q5_K_M weights measured across sessions"
+  },
+  "ram": {
+    "peak_rss_gib_baseline": 3.853,
+    "peak_rss_gib_candidate": 4.73
+  },
+  "size": {
+    "baseline_gib": 2.928,
+    "candidate_gib": 2.553
+  },
+  "verdict": "2 ROW(S) REGRESSED",
+  "human_review": "Persian fluency is a human judgement (R10): read the replies of persian_rows_changed in both files before accepting the candidate.",
+  "sources": [
+    "phase7_q5km_merged_2026-10-17.json",
+    "phase7_q4km_merged_2026-10-17.json"
+  ]
+}

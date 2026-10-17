@@ -24,7 +24,7 @@ WHAT IT DOES NOT CLAIM
   whose reply changed, for a human to read.
 * Latency measured on different days is confounded by machine state. The
   MEASURED spread of the same Q5_K_M weights across three sessions
-  (2026-10-09, -14 first run, -14 rerun) is 2.65-4.37 tok/s decode. A speed
+  (21 distinct probes, 2026-08 .. 2026-10-17) is 2.65-4.48 tok/s decode. A speed
   difference smaller than that spread is reported as NOT RESOLVED.
 """
 import argparse
@@ -35,8 +35,14 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 #: Decode tok/s observed for ONE set of weights (Q5_K_M, sha 8814232b) on the
-#: i5-12400 across sessions (M): min 2.65 (2026-10-09), max 4.37 (2026-10-14).
-SAME_WEIGHTS_DECODE_SPREAD = (2.65, 4.37)
+#: i5-12400 across sessions (M): min 2.65 (2026-10-09), max 4.48 (2026-10-17).
+#: 21 distinct probe measurements, 2026-08 .. 2026-10-17 (D-0122 widened the
+#: max from 4.37 when the Phase 7 Q5_K_M run measured 4.48).
+SAME_WEIGHTS_DECODE_SPREAD = (2.65, 4.48)
+
+#: TTFT at ~2K prompt tokens for the same Q5_K_M weights, across every recorded
+#: session up to and including 2026-10-17 (21 distinct measurements, M): 48.07-71.08 s.
+SAME_WEIGHTS_TTFT_SPREAD = (48.07, 71.08)
 
 #: Per-row booleans the graders write. A flip True->False is a regression.
 ROW_FIELDS = {
@@ -152,7 +158,24 @@ def compare(base, cand):
         else:
             resolved = ("NOT RESOLVED: the difference is within the %.2f-%.2f tok/s the same "
                         "Q5_K_M weights measured across sessions" % (lo, hi))
+    tb = (lb.get("ttft_seconds_min"), lb.get("ttft_seconds_max"))
+    tc = (lc.get("ttft_seconds_min"), lc.get("ttft_seconds_max"))
+    ttft_v = None
+    if None not in tb + tc:
+        tmargin = SAME_WEIGHTS_TTFT_SPREAD[1] - SAME_WEIGHTS_TTFT_SPREAD[0]
+        if tb[0] - tc[1] > tmargin:
+            ttft_v = "candidate FASTER to first token, beyond the same-weights spread"
+        elif tc[0] - tb[1] > tmargin:
+            ttft_v = "candidate SLOWER to first token, beyond the same-weights spread"
+        elif tc[1] < SAME_WEIGHTS_TTFT_SPREAD[0] or tc[0] > SAME_WEIGHTS_TTFT_SPREAD[1]:
+            ttft_v = ("candidate OUTSIDE every same-weights measurement (%.2f-%.2f s) but the "
+                      "gap to this baseline is within that spread: direction likely, size not "
+                      "resolved" % SAME_WEIGHTS_TTFT_SPREAD)
+        else:
+            ttft_v = ("NOT RESOLVED: within the %.2f-%.2f s the same Q5_K_M weights measured "
+                      "across sessions" % SAME_WEIGHTS_TTFT_SPREAD)
     out["speed"] = {"decode_tps_baseline": db, "decode_tps_candidate": dc,
+                    "ttft_verdict": ttft_v,
                     "ttft_s_baseline": (lb.get("ttft_seconds_min"), lb.get("ttft_seconds_max")),
                     "ttft_s_candidate": (lc.get("ttft_seconds_min"), lc.get("ttft_seconds_max")),
                     "verdict": resolved}

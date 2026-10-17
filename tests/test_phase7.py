@@ -354,12 +354,12 @@ check_true("rag: an answerable row that starts abstaining is a REGRESSION",
                for e in CQ.compare(_base, _rag2)["regressions"]), "(A)")
 check_true("a speed difference inside the measured same-weights spread is NOT RESOLVED",
            CQ.compare(_base, _as(_base, _q4sha, "q4", 2.553, (3.0, 4.0)))["speed"]["verdict"]
-           .startswith("NOT RESOLVED"), "(A) 2.65-4.37 tok/s for ONE set of weights (M)")
+           .startswith("NOT RESOLVED"), "(A) 2.65-4.48 tok/s for ONE set of weights (M)")
 check_true("a speed difference beyond the spread is reported, with its direction",
            "FASTER" in CQ.compare(_base, _as(_base, _q4sha, "q4", 2.553, (6.0, 6.5)))
            ["speed"]["verdict"], "(N)")
-check_true("the same-weights spread is the measured 2.65-4.37",
-           CQ.SAME_WEIGHTS_DECODE_SPREAD == (2.65, 4.37), "(M)")
+check_true("the same-weights spread is the measured 2.65-4.48",
+           CQ.SAME_WEIGHTS_DECODE_SPREAD == (2.65, 4.48), "(M) 21 distinct Q5_K_M probes")
 
 # ===========================================================================
 section("the GGUF-embedded chat template vs what the harness sends")
@@ -400,6 +400,34 @@ try:
                _dflt.endswith("<think>\n\n</think>\n\n"), "(M) differs from the HF config default")
 except ImportError:
     print("  SKIP  jinja2 absent: the embedded-template assertions did NOT run")
+
+# ===========================================================================
+section("compare_quants: time-to-first-token resolution (D-0122)")
+# ===========================================================================
+def _tt(run, lo, hi):
+    r = copy.deepcopy(run)
+    r["latency_spread"] = dict(r.get("latency_spread") or {}, ttft_seconds_min=lo, ttft_seconds_max=hi)
+    return r
+_b48 = _tt(_base, 48.2, 71.1)
+check_true("TTFT inside the same-weights spread is NOT RESOLVED",
+           CQ.compare(_b48, _tt(_cand, 50.0, 60.0))["speed"]["ttft_verdict"].startswith("NOT RESOLVED"),
+           "(A)")
+check_true("TTFT below every same-weights measurement, gap within spread: direction only",
+           "OUTSIDE every same-weights" in CQ.compare(_b48, _tt(_cand, 28.9, 30.1))["speed"]["ttft_verdict"],
+           "(M) Q4_K_M 2026-10-17: 28.9-30.1 s vs Q5_K_M 48.2-71.1 s")
+check_true("TTFT faster beyond the spread is resolved FASTER",
+           "FASTER" in CQ.compare(_tt(_base, 70.0, 71.0), _tt(_cand, 20.0, 21.0))["speed"]["ttft_verdict"],
+           "(N)")
+check_true("TTFT slower beyond the spread is resolved SLOWER",
+           "SLOWER" in CQ.compare(_tt(_base, 20.0, 21.0), _tt(_cand, 70.0, 71.0))["speed"]["ttft_verdict"],
+           "(A)")
+check_true("the same-weights TTFT spread is the measured 48.07-71.08 s",
+           CQ.SAME_WEIGHTS_TTFT_SPREAD == (48.07, 71.08), "(M)")
+_ev7 = json.load(open(os.path.join(ROOT, "evidence", "phase7_compare_q5_vs_q4_2026-10-17.json"),
+                      encoding="utf-8"))
+check_true("recorded Phase 7 comparison: QUANTISATION, Q5_K_M baseline vs Q4_K_M candidate",
+           _ev7["kind"] == "QUANTISATION" and _ev7["baseline"]["sha256"].startswith("8814232b")
+           and _ev7["candidate"]["sha256"].startswith("00fe7986"), "(M)")
 
 print("")
 sys.exit(summary())
