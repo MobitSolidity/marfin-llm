@@ -1,0 +1,35 @@
+# marfin-llm -- Ollama Modelfile (Phase 8, D-0123)
+#
+# The weights: Qwen3.5-4B-Q4_K_M, chosen in D-0123 from the user's Persian
+# review (Q4 better 10 / Q5 better 7 / equal 7) plus every automatic measure.
+#   sha256 00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4
+#   Verify BEFORE `ollama create` (PowerShell):
+#   Get-FileHash C:\models\Qwen3.5-4B-Q4_K_M.gguf -Algorithm SHA256
+FROM C:\models\Qwen3.5-4B-Q4_K_M.gguf
+
+# The SAME ChatML the harness renders, with the think block PRE-CLOSED: every
+# measured run used exactly this (D-0091), and the embedded GGUF template's
+# behaviour differs from the HF one (D-0121). An explicit TEMPLATE removes any
+# dependence on which template Ollama would otherwise pick.
+# NOTE: the measurement harness bypasses this template entirely
+# (/api/generate raw=true). It matters only for interactive `ollama run` use.
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+
+SYSTEM """You are a bilingual Persian-English financial analyst. Answer in the language of the question. If you do not have the information needed, say so plainly instead of guessing. Never invent a figure. If you decline or say you do not have the information, write that refusal in the language of the question too. Write formulas in plain text with ordinary symbols, for example P/E = 150 / 8.40 = 17.86, never LaTeX such as \frac or \text. Write the whole answer in the language of the question; a key technical term may be repeated once in the other language in parentheses, nothing more. Be concise: give the answer first, then at most a few short lines of explanation, so the reply is complete."""
+
+# Greedy and seeded, as in every measured run; 16K context; 512-token budget.
+PARAMETER temperature 0
+PARAMETER seed 20260831
+PARAMETER num_ctx 16384
+PARAMETER num_predict 512
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>user"

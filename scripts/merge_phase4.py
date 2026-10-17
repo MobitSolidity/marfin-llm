@@ -84,6 +84,9 @@ def merge(paths):
             json.dumps(m.get("prompt_options")
                        or {"second_turn": False, "refusal_language": False},
                        sort_keys=True),
+            # D-0123 Phase 8: the runtime. An Ollama arm and an in-process
+            # llama.cpp arm of the SAME GGUF are not arms of one run.
+            (d.get("server") or {}).get("backend"),
         )
 
     sigs = {}

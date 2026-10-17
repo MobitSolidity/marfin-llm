@@ -183,3 +183,9 @@ which is fixed.
 
 Run `PHASE7_RUN_FA.md` on the i5-12400 and send `phase7_q4km_merged.json` and `phase7_q5km_merged.json`.
 Q5_K_M is run again under the same flags in the same session, so only the weights differ.
+
+## Closed (2026-10-17, D-0123)
+
+- Persian review returned: Q4 better 10, Q5 better 7, equal 7 (`evidence/phase7_persian_verdicts_2026-10-17.json`).
+- The three defects you named (LaTeX, language mixing, incomplete answers) are fixed behind `--style` (see phase-8.md).
+- Deployment quant: **Q4_K_M**. Phase 8 approved on condition, and the conditions are met.

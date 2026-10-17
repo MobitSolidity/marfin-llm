@@ -7277,3 +7277,64 @@ reproductions show the run is deterministic, so differences between the quants a
 2. Choose the deployment quant: keep Q5_K_M, or switch to Q4_K_M.
 3. Phase 8 approval.
 
+
+## D-0123 — Persian review applied, Q4_K_M chosen, Phase 8 approved (conditional) and tooled, thinking proposal (2026-10-17)
+
+**User (verbatim):** "I have sent the Persian judgment file for item #1; please select option #2 yourself, based
+on that file. Regarding option #3, I approve Phase 8, provided that items #1 and #2 are corrected. Additionally,
+please propose a solution or idea of your own to address the issue with the model's thinking process."
+
+**1. Persian review (V):** `evidence/phase7_persian_review_judged_2026-10-17.docx` was parsed into
+`evidence/phase7_persian_verdicts_2026-10-17.json`. n=24: **Q4 better 10, Q5 better 7, equal 7.**
+The user named three defects that no grader measured. Each was fixed behind the opt-in `--style` flag, so
+recorded runs still reproduce byte-for-byte:
+- (a) LaTeX in formulas. **(M)** 8 of 74 replies per quant contain it. Fixes: a prompt rule, plus a
+  deterministic rewrite `src/llm/style.py::plain_math` applied before display. It changes no grade on any of
+  the 148 recorded replies, and after it 0 of them still contain LaTeX. *Correction:* a first count of 13/14
+  was overstated because dollar amounts matched the pattern; inline `$..$` is now rewritten only when the
+  inside contains a command, `^`, `_` or `=`.
+- (b) Language mixing. Fixes: a prompt rule, plus the `latin_runs` check (4 or more consecutive English words
+  outside maths, code and parentheses). Across the 54 recorded Persian replies it flags exactly one
+  (Q4 plain/FA-CALC-002).
+- (c) Incomplete answers. **(M)** every row the user called incomplete hit the 512-token budget. Fixes: an
+  "answer first, concise" rule, plus a per-row `hit_budget` check.
+- `scripts/compare_style.py` compares style off and on with the same weights and runtime. It counts LaTeX the
+  model wrote separately from LaTeX the user sees.
+
+**2. Quant chosen: Q4_K_M (sha 00fe7986…).** Reasons: the user's majority (10 vs 7), deterministic_calc 100
+vs 75, 4/6 vs 3/7 PASS/FAIL, TTFT ~29–30 s vs 48–71 s, and a file 0.375 GiB smaller. Against it: peak RSS
+4.73 vs 3.85 GiB (unexplained, within the 6.0 cap); 1 wording regression (plain EN-RISK-002); 7 rows where Q5
+was judged better. 3 of those 7 hit the budget on both quants (plain FA-LANG-001, plain FA-TERM-001,
+tools FA-TERM-001) and are what `--style` targets.
+
+**3. Phase 8 approved (conditions 1 and 2 met) and tooled:**
+- `deploy/ollama/Modelfile`: FROM Q4_K_M; ChatML with a pre-closed think block; SYSTEM = harness prompt +
+  style rules (pinned); greedy, seed 20260831, ctx 16384, 512 tokens.
+- `src/llm/local_server.py` `ServerRunner`:
+  - talks to Ollama `/api/generate` with `raw:true` or LM Studio `/v1/completions`, so the harness's own
+    rendered prompt is sent and the D-0121 template-default problem is avoided;
+  - loopback only.
+- `run_phase4.py`: new flags `--server {ollama,lmstudio}` and `--server-url`. The label is
+  `MEASURED_LOCAL_SERVER`; server RSS is not visible to the harness, so that threshold stays PENDING.
+- `merge_phase4.py`: the backend is now part of the merge signature.
+- `compare_quants.py`: adds the RUNTIME kind, and refuses a pair where weights and runtime both differ.
+- Run guide: `PHASE8_RUN_FA.md`, ESTIMATED 2–2.5 h on the i5-12400.
+
+**4. Thinking proposal: "budgeted thinking, router-decided, orchestrator-enforced"** (`src/llm/thinking.py`):
+- The orchestrator renders the prompt and sends it raw, so no client's template default applies.
+- Only two modes exist: `off` and `budgeted`.
+- `budgeted` uses two calls. If the block has not closed after N tokens, we close it and request the answer
+  with its own budget, so the D-0085 "no answer" failure cannot occur.
+- A deterministic router picks the mode. It chooses `off` whenever a tool or RAG evidence is available, and
+  for refusal and safety. Unknown categories default to `off`. Every current eval category routes to `off`.
+- Benefit: **unmeasured**. An A/B on open-reasoning rows on the i5-12400 is proposed after the Phase 8 run.
+
+**Tests:**
+- `tests/test_phase8.py`: 78 assertions.
+- `tests/mutate_phase8.py`: 42/42 killed.
+- Re-anchored mutants: 6 in phase4 and 1 in phase7. These were silently SKIPPED after the `--style` and
+  D-0121 changes; each was verified killed. The phase7 battery is 34/34.
+- `run_all`: 22 suites.
+
+**Open (user):** run `PHASE8_RUN_FA.md` and send `phase8_style_merged.json`, `phase8_ollama_merged.json` and
+`p8lm_plain.json`, plus the server RSS from Task Manager.

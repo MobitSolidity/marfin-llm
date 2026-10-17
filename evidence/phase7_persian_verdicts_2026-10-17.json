@@ -1,0 +1,138 @@
+{
+  "label": "HUMAN (R10), user 2026-10-17",
+  "source": "evidence/phase7_persian_review_judged_2026-10-17.docx",
+  "source_sha256": "8c3265c62fd9f964e7fcb0847a5ca8c7508ee0f7bf185808725ebcf7ffcfff68",
+  "n": 24,
+  "tally": {
+    "Q5": 7,
+    "Q4": 10,
+    "EQUAL": 7
+  },
+  "rows": [
+    {
+      "row": "plain/FA-ABST-001",
+      "verdict": "Q5",
+      "note_fa": null
+    },
+    {
+      "row": "plain/FA-CALC-001",
+      "verdict": "Q4",
+      "note_fa": "اما فرمول های نوشته شده کلمات اضافی دارند مثل /frac یا غیره .فرمول ها باید ساده و فقط ترکیب ریاضی و عدد باشند."
+    },
+    {
+      "row": "plain/FA-CALC-002",
+      "verdict": "Q4",
+      "note_fa": "اما همان هشدار قبلی در مورد نوشتن کلمات اضافی در فرمول را باید رعایت کرد و مورد دوم هم نوشتن جواب با دو زبان فارسی و انگلیسی است به صورت همزمان . با هر زبانی پرامپت داده شد با همان زبان باید جواب داده شود فقط کلمات کلیدی با دو زبان نوشته شوند."
+    },
+    {
+      "row": "plain/FA-LANG-001",
+      "verdict": "Q5",
+      "note_fa": "بازهم بحث کلمات اضافی در فرمول را داریم . اما یک نکته ای که دارد این است که جواب های هر دو ناقص هستند و کامل داده نشده اند."
+    },
+    {
+      "row": "plain/FA-LANG-002",
+      "verdict": "Q5",
+      "note_fa": null
+    },
+    {
+      "row": "plain/FA-NUM-001",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "plain/FA-RISK-001",
+      "verdict": "Q4",
+      "note_fa": "خوبه فقط باز توی فرمول کلمه اضافی بود."
+    },
+    {
+      "row": "plain/FA-RISK-002",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "plain/FA-SAFE-001",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "plain/FA-TERM-001",
+      "verdict": "Q5",
+      "note_fa": null
+    },
+    {
+      "row": "rag/RAG-FA-001",
+      "verdict": "EQUAL",
+      "note_fa": null
+    },
+    {
+      "row": "rag/RAG-FA-002",
+      "verdict": "EQUAL",
+      "note_fa": null
+    },
+    {
+      "row": "rag/RAG2-FA-001",
+      "verdict": "EQUAL",
+      "note_fa": null
+    },
+    {
+      "row": "rag/RAG2-FA-002",
+      "verdict": "EQUAL",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-ABST-001",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-CALC-001",
+      "verdict": "EQUAL",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-CALC-002",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-LANG-001",
+      "verdict": "EQUAL",
+      "note_fa": "اما جواب هر دو ناقص است"
+    },
+    {
+      "row": "tools/FA-LANG-002",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-NUM-001",
+      "verdict": "Q4",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-RISK-001",
+      "verdict": "EQUAL",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-RISK-002",
+      "verdict": "Q5",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-SAFE-001",
+      "verdict": "Q5",
+      "note_fa": null
+    },
+    {
+      "row": "tools/FA-TERM-001",
+      "verdict": "Q5",
+      "note_fa": null
+    }
+  ],
+  "issues_named_by_user": {
+    "latex_in_formulas": "formulas carry extra words such as \\frac; must be plain arithmetic and numbers only",
+    "language_mixing": "answer in the language of the prompt; only key terms bilingual",
+    "incomplete_answers": "both quants' answers incomplete (FA-LANG-001 plain and tools)"
+  }
+}
