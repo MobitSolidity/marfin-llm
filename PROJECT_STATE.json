@@ -1,8 +1,8 @@
 {
   "project_name": "marfin-llm",
   "current_phase": 7,
-  "phase_status": "PHASE_7_SANDBOX_VALIDATION_DONE_QUANT_RUN_PENDING_ON_I5_12400",
-  "user_approval_required": false,
+  "phase_status": "PHASE_7_RUN_GRADED_AWAITING_PERSIAN_REVIEW_AND_QUANT_CHOICE",
+  "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
   "model_revision": null,
@@ -317,7 +317,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-10-16",
+  "last_updated": "2026-10-17",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -511,7 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": null,
+  "awaiting_approval_for": "Phase 7 close: Persian review (PHASE7_PERSIAN_REVIEW_FA.md), quant choice (Q5_K_M vs Q4_K_M), Phase 8",
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -812,7 +812,7 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": "Run PHASE7_RUN_FA.md on the i5-12400; send phase7_q4km_merged.json and phase7_q5km_merged.json",
+  "awaiting_user_action": null,
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND_REVERIFIED_2026_09_27_SEE_measurements_recorded_2026_09_27",
@@ -2689,5 +2689,53 @@
       "skipped": 0
     },
     "incident": "mutation battery ENOSPC from leaked temp dirs; atexit cleanup added"
+  },
+  "D-0122_phase7_quant_run_graded_2026_10_17": {
+    "evidence": [
+      "evidence/phase7_q5km_merged_2026-10-17.json",
+      "evidence/phase7_q4km_merged_2026-10-17.json",
+      "evidence/phase7_compare_q5_vs_q4_2026-10-17.json"
+    ],
+    "label": "COMPUTED_FROM_MEASURED",
+    "tally": {
+      "Q5_K_M": "3 PASS / 7 FAIL / 2 UNMEASURED",
+      "Q4_K_M": "4 PASS / 6 FAIL / 2 UNMEASURED"
+    },
+    "row_regressions": [
+      "plain/EN-RISK-002 (wording: infinite)"
+    ],
+    "row_improvements": [
+      "plain/EN-CALC-002",
+      "plain/FA-CALC-002",
+      "tools/EN-SAFE-002",
+      "tools/FA-RISK-002"
+    ],
+    "ttft_s": {
+      "Q5_K_M": [
+        48.216,
+        71.081
+      ],
+      "Q4_K_M": [
+        28.907,
+        30.115
+      ]
+    },
+    "decode_tps_probe": {
+      "Q5_K_M": [
+        3.01,
+        4.48
+      ],
+      "Q4_K_M": [
+        4.1,
+        5.06
+      ],
+      "verdict": "NOT RESOLVED"
+    },
+    "peak_rss_gib": {
+      "Q5_K_M": 3.853,
+      "Q4_K_M": 4.73,
+      "note": "Q4 higher despite smaller file; unexplained"
+    },
+    "persian": "mechanical check 0 not-in-Persian both; fluency PENDING human review of 24 rows"
   }
 }

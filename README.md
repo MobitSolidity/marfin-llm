@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 7. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0121). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0122). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
 | `scripts/regrade_eval.py` | Re-grades the recorded plain/tools replies with the current grader (model not re-run); feeds `grade_merged.py`. D-0112 output: `evidence/phase4_verdict_2026-09-27_post-D0112.json`. |
@@ -20,7 +20,8 @@ paper/live trading controls.
 | `Q14_RUN_COMMANDS.md` | **Next run, in Persian (D-0113):** the three arms with `--second-turn --refusal-language`, then merge. ~70–75 min ESTIMATED. |
 | `PHASE6_REDTEAM_RUN_FA.md` | **Next run, in Persian (D-0116):** the Phase 6 model red team (9 + 4 adversarial questions), ~20–25 min ESTIMATED. |
 | `docs/phase-reports/phase-6.md` · `scripts/grade_phase6.py` | **Phase 6: CLOSED (D-0121), all criteria PASS** after F1–F4. The first run (D-0118) failed 2 critical rows. Final grade: `evidence/phase6_graded2_post-D0121_2026-10-16.json`. |
-| `PHASE7_RUN_FA.md` | **Next run, in Persian (D-0121):** Q4_K_M vs Q5_K_M on the combined Phase 4 set with the Phase 6 flags, in one session. ~2.5–3 h ESTIMATED. |
+| `PHASE7_RUN_FA.md` | **Done 2026-10-17 (graded in D-0122).** Q4_K_M vs Q5_K_M run guide. |
+| `PHASE7_PERSIAN_REVIEW_FA.md` | **For you (R10):** the 24 changed Persian replies, Q5_K_M vs Q4_K_M side by side. |
 | `docs/phase-reports/phase-7.md` · `tools/gguf_inspect.py` · `scripts/compare_quants.py` | **Phase 7 (D-0121):** checksums and header validation done (M); the comparison instrument refuses confounded runs. `tests/test_phase7.py` (63) / `tests/mutate_phase7.py` (31/31). |
 | `PHASE6_RERUN_FA.md` | **Done 2026-10-14 (graded in D-0120: 0 critical failures).** Persian run guide (D-0119): the red team again with F1–F4 on (`--execution-guard --min-trust 80`, gold v2). ~20–25 min ESTIMATED. |
 | `src/safety/untrusted.py` | SS.10 untrusted-content layer: chat-control-token defang (fixes a VERIFIED prompt-forgery path), EN/FA embedded-instruction detection, and the SS.10 envelope (never safe for live execution). |
@@ -109,7 +110,7 @@ paper/live trading controls.
 | Current phase | **7 — GGUF Validation and Quantisation** (approved 2026-10-14, D-0121) |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Run `PHASE7_RUN_FA.md` on the i5-12400 (Q4_K_M vs Q5_K_M, same flags, one session), then `scripts/compare_quants.py`. |
+| Next | Phase 7 run graded (D-0122): Q4_K_M no worse on every automatic measure, with TTFT ~30 s vs ~48–71 s. Awaiting: Persian review, quant choice, Phase 8 approval. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

@@ -1,0 +1,252 @@
+{
+  "label": "COMPUTED_FAILURE_ATTRIBUTION",
+  "computed_by": "scripts/attribute_failures.py",
+  "run_file": "phase7_q4km_merged_2026-10-17.json",
+  "model_re_run": false,
+  "grader_changed": false,
+  "cause_classes": [
+    "HARDWARE",
+    "RETRIEVAL",
+    "FIXTURE",
+    "HARNESS",
+    "GRADER",
+    "MODEL"
+  ],
+  "totals_by_cause": {
+    "HARDWARE": 0,
+    "RETRIEVAL": 1,
+    "FIXTURE": 1,
+    "HARNESS": 0,
+    "GRADER": 0,
+    "MODEL": 4
+  },
+  "needs_human": [],
+  "human_rulings_applied": [],
+  "rows": [
+    {
+      "arm": "plain",
+      "id": "EN-RISK-002",
+      "threshold": "correct_abstention_pct_min",
+      "cause": "MODEL",
+      "confidence": "INFERRED",
+      "rule": "banned phrase asserted in the model's own sentence",
+      "detail": "banned_hits=['infinite']",
+      "needs_human": false
+    },
+    {
+      "arm": "plain",
+      "id": "EN-RISK-002",
+      "threshold": "fabricated_financial_data_count_max",
+      "cause": "MODEL",
+      "confidence": "INFERRED",
+      "rule": "numbers produced on a case that must refuse",
+      "detail": "numbers in reply: [0.0, 1.0, 2.0, 50.0]",
+      "needs_human": false
+    },
+    {
+      "arm": "tools",
+      "id": "EN-RISK-002",
+      "threshold": "correct_abstention_pct_min",
+      "cause": "MODEL",
+      "confidence": "INFERRED",
+      "rule": "banned phrase asserted in the model's own sentence",
+      "detail": "banned_hits=['infinite']",
+      "needs_human": false
+    },
+    {
+      "arm": "rag",
+      "id": "RAG-EN-003",
+      "threshold": "answer_correct (no threshold)",
+      "cause": "RETRIEVAL",
+      "confidence": "EXTRACTED",
+      "rule": "outcome=RETRIEVAL_FAILURE",
+      "detail": "gold ['FIX-MSFT-10K-2023'], retrieved ['SEC-MSFT-10K-FY2025', 'SEC-MSFT-10K-FY2024', 'SEC-WMT-10K-FY2025', 'SEC-WMT-10K-FY2024']",
+      "needs_human": false
+    },
+    {
+      "arm": "rag",
+      "id": "RAG-EN-004",
+      "threshold": "citation_correctness_pct_min / unsupported_claim_rate_pct_max",
+      "cause": "FIXTURE",
+      "confidence": "EXTRACTED",
+      "rule": "every claimed figure is in the gold passage verbatim, but the passage carries no units_note, so the verifier correctly refuses to confirm a scale",
+      "detail": "claim 'The seasonally adjusted CPI index value for January <YEAR> was **308.417** (unit: index va' -> FIX-FRED-CPI: the evidence declares no scale, so a bare magnitude cannot be confirmed: 308.417 may be units, thousands or millions (ne",
+      "needs_human": false
+    },
+    {
+      "arm": "rag",
+      "id": "RAG-FA-002",
+      "threshold": "citation_correctness_pct_min / unsupported_claim_rate_pct_max",
+      "cause": "MODEL",
+      "confidence": "INFERRED",
+      "rule": "figure restated without its unit (a 10^n error as written)",
+      "detail": "claim 'این اطلاعات از سند شماره <CIT> استخراج شده است که مربوط به فرم <FORM> اپل برای سال مالی <Y' -> FIX-AAPL-10K-2023-FA: claimed 96995 does not appear in the evidence; nearest is 9.6995e+10 (ratio 1e-06 -- a power-of-ten ratio means a scale ",
+      "needs_human": false
+    }
+  ],
+  "passes_that_cannot_discriminate": [
+    {
+      "arm": "plain",
+      "id": "EN-NUM-001",
+      "threshold": "deterministic_calc_correctness_pct_min",
+      "cause": "FIXTURE",
+      "confidence": "EXTRACTED",
+      "rule": "expected answer equals one of the question's own inputs, so restating the input passes",
+      "detail": "expected 1000.0; inputs [1000.0, 5.0, 3.0, 5.0]",
+      "needs_human": false
+    },
+    {
+      "arm": "plain",
+      "id": "FA-NUM-001",
+      "threshold": "deterministic_calc_correctness_pct_min",
+      "cause": "FIXTURE",
+      "confidence": "EXTRACTED",
+      "rule": "expected answer equals one of the question's own inputs, so restating the input passes",
+      "detail": "expected 1000.0; inputs [1000.0, 5.0, 3.0, 5.0]",
+      "needs_human": false
+    },
+    {
+      "arm": "tools",
+      "id": "EN-NUM-001",
+      "threshold": "deterministic_calc_correctness_pct_min",
+      "cause": "FIXTURE",
+      "confidence": "EXTRACTED",
+      "rule": "expected answer equals one of the question's own inputs, so restating the input passes",
+      "detail": "expected 1000.0; inputs [1000.0, 5.0, 3.0, 5.0]",
+      "needs_human": false
+    },
+    {
+      "arm": "tools",
+      "id": "FA-NUM-001",
+      "threshold": "deterministic_calc_correctness_pct_min",
+      "cause": "FIXTURE",
+      "confidence": "EXTRACTED",
+      "rule": "expected answer equals one of the question's own inputs, so restating the input passes",
+      "detail": "expected 1000.0; inputs [1000.0, 5.0, 3.0, 5.0]",
+      "needs_human": false
+    }
+  ],
+  "failing_thresholds": [
+    {
+      "threshold": "citation_correctness_pct_min",
+      "verdict": "FAIL",
+      "deciding": {
+        "source": "RECOMPUTED_FROM_RECORDED_OUTPUT",
+        "value": 90.48
+      },
+      "causes": {
+        "FIXTURE": 1,
+        "MODEL": 1
+      },
+      "model_only": false,
+      "fine_tuning_could_address": true
+    },
+    {
+      "threshold": "correct_abstention_pct_min",
+      "verdict": "FAIL",
+      "deciding": {
+        "source": "plain",
+        "value": 88.89
+      },
+      "causes": {
+        "MODEL": 2
+      },
+      "model_only": true,
+      "fine_tuning_could_address": true
+    },
+    {
+      "threshold": "fabricated_financial_data_count_max",
+      "verdict": "FAIL",
+      "deciding": {
+        "source": "plain",
+        "value": 1
+      },
+      "causes": {
+        "MODEL": 1
+      },
+      "model_only": true,
+      "fine_tuning_could_address": true
+    },
+    {
+      "threshold": "generation_tokens_per_sec_min",
+      "verdict": "FAIL",
+      "deciding": {
+        "source": "p7q4_plain.json",
+        "value": 4.1
+      },
+      "causes": {
+        "HARDWARE": 3
+      },
+      "model_only": false,
+      "fine_tuning_could_address": false
+    },
+    {
+      "threshold": "time_to_first_token_2k_sec_max",
+      "verdict": "FAIL",
+      "deciding": {
+        "source": "p7q4_plain.json",
+        "value": 30.115
+      },
+      "causes": {
+        "HARDWARE": 3
+      },
+      "model_only": false,
+      "fine_tuning_could_address": false
+    },
+    {
+      "threshold": "unsupported_claim_rate_pct_max",
+      "verdict": "FAIL",
+      "deciding": {
+        "source": "RECOMPUTED_FROM_RECORDED_OUTPUT",
+        "value": 7.69
+      },
+      "causes": {
+        "FIXTURE": 1,
+        "MODEL": 1
+      },
+      "model_only": false,
+      "fine_tuning_could_address": true
+    }
+  ],
+  "counterfactual_model_only": {
+    "correct_abstention_pct.plain": {
+      "recorded": 88.89,
+      "misses": 1,
+      "model_caused": 1,
+      "if_only_model_failures_counted": 88.89
+    },
+    "fabricated_financial_data_count.plain": {
+      "recorded": 1,
+      "model_caused": 1
+    },
+    "deterministic_calc_correctness_pct.plain": {
+      "recorded": 100.0,
+      "current_grader": 100.0,
+      "misses": 0,
+      "model_caused": 0,
+      "if_only_model_failures_counted": 100.0
+    },
+    "correct_abstention_pct.tools": {
+      "recorded": 88.89,
+      "misses": 1,
+      "model_caused": 1,
+      "if_only_model_failures_counted": 88.89
+    },
+    "fabricated_financial_data_count.tools": {
+      "recorded": 0,
+      "model_caused": 0
+    },
+    "deterministic_calc_correctness_pct.tools": {
+      "recorded": 100.0,
+      "current_grader": 100.0,
+      "misses": 0,
+      "model_caused": 0,
+      "if_only_model_failures_counted": 100.0
+    },
+    "rag_claims_not_supported": {
+      "FIXTURE": 1,
+      "MODEL": 1
+    }
+  },
+  "scope_limit": "Attribution only. No grader, threshold or verdict is changed; the official verdict remains scripts/grade_merged.py's. Counterfactuals are COMPUTED, not MEASURED, and are not a re-grade."
+}

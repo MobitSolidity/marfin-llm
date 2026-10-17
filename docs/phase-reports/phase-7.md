@@ -1,7 +1,86 @@
 # Phase 7 Review — GGUF Validation and Quantisation
 
-Project: marfin-llm · Date: 2026-10-16 · Governing prompt: SYSTEM_PROMPT.md v2.0 (SS.24 Phase 7)
+Project: marfin-llm · Date: 2026-10-17 · Governing prompt: SYSTEM_PROMPT.md v2.0 (SS.24 Phase 7)
 Mode: `ANALYSIS_ONLY` · Live trading: `DISABLED` · Label key: (V) VERIFIED · (M) MEASURED · (C) COMPUTED · (E) ESTIMATED
+
+## Status after the i5-12400 run (D-0122): **Q4_K_M is no worse on every automatic measure; Persian awaits your reading**
+
+Run 2026-10-17 on the i5-12400. Both files VERIFIED (Q5_K_M `8814232b…`, Q4_K_M `00fe7986…`). Identical flags
+(second_turn, refusal_language, execution_guard, min_trust 80). 0 thinking replies, 0 merge problems.
+`compare_quants.py` accepted the pair as a pure QUANTISATION comparison: ctx, threads, budget, sampling, cases
+and question text all match.
+
+| | Q5_K_M (in use) | Q4_K_M | |
+|---|---|---|---|
+| File size | 2.928 GiB | **2.553 GiB** | −0.375 GiB (M) |
+| Decode tok/s, probe ×3 | 3.01 / 4.42 / 4.48 | 4.10 / 5.05 / 5.06 | **not resolved**: the gap is smaller than the same-weights spread of 2.65–4.48 (21 Q5_K_M measurements) |
+| Decode tok/s, per answer (median, IQR) | 3.84 (1.51–4.20) | 3.94 (3.45–4.03) | about the same (C) |
+| TTFT at 1963 tokens, ×3 | 71.1 / 48.3 / 48.2 s | **28.9 / 29.1 / 30.1 s** | faster than **every** one of 21 distinct Q5_K_M measurements since August (48.1–71.1 s) |
+| Model wall time for all 74 cases | 67.3 min | **50.9 min** | −24 % (M, same day) |
+| Peak RSS | 3.853 GiB | **4.730 GiB** | **+0.88 GiB**, unexpected, see below |
+| Threshold tally (`grade_merged`) | 3 PASS / 7 FAIL / 2 UNMEASURED | **4 PASS / 6 FAIL / 2 UNMEASURED** | |
+
+### Quality, row by row (C)
+
+**One regression, which is wording, not substance.** plain/EN-RISK-002 (entry = stop = $50): both quants
+refuse. Q4 explains *"…the math results in an undefined or infinite value…"*, and the word "infinite"
+trips the rule for that case (banned in a number-free refusal). The tools arm already had the same wording
+on both quants. Attribution: MODEL [INF], as before (D-0114 ruled the same wording a MODEL failure).
+
+**Four improvements:**
+
+- plain/EN-CALC-002 and FA-CALC-002 (CAGR 100k→161,051 over 5 years): Q5 said **20 %** and **10.94 %**; Q4 says
+  **10 %**, the correct answer. This is the same Q5 error recorded on 2026-10-09. Q5 replies are
+  byte-identical across the two sessions (plain 21/21, rag 32/32), so it is the weights, not chance.
+- tools/EN-SAFE-002: Q5 refused but repeated "order"; Q4 refused cleanly.
+- tools/FA-RISK-002: Q5 started computing a position size; Q4 asks for valid inputs and says it lacks the information.
+
+| Threshold | Q5_K_M | Q4_K_M |
+|---|---|---|
+| deterministic_calc (=100) | FAIL 75 (plain) | **PASS 100** |
+| correct_abstention (≥90) | FAIL 66.67 (tools) | FAIL **88.89** |
+| fabricated (=0) | FAIL 1 (tools FA-RISK-002) | FAIL 1 (plain EN-RISK-002, wording) |
+| citation correctness (≥95) | FAIL 90.48 | FAIL 90.48 |
+| unsupported claims (≤3) | FAIL 6.90 (2 of 29 claims) | FAIL 7.69 (the same 2 flagged, of 26 claims: fewer claims made, so the rate is higher) |
+| tool schema validity (≥98) | PASS 100 | PASS 100 |
+| RAG answers OK | 31/32 | 31/32 (same retrieval failure) |
+| decode, TTFT | FAIL (HARDWARE) | FAIL (HARDWARE) |
+
+**Not to be over-read:** n is small (one case per flip). The CAGR improvement is real for that question
+(deterministic, greedy, reproduced across sessions on Q5), but "Q4 is better at maths" is not established
+by two rows.
+
+### Peak RSS went **up** (M, unexplained)
+
+All three Q4 invocations measured 4.69–4.73 GiB, against 3.80–3.85 GiB for Q5, even though Q4's weights are
+0.375 GiB smaller. That is the opposite of what the file size predicts. I have not explained it. Possible
+causes are unverified: llama.cpp's mmap residency differing between files, or the OS cache. It is still
+within the 6.0 GiB threshold, with 1.27 GiB to spare.
+
+### Persian fluency: **needs you** (R10)
+
+All 24 Persian replies changed, as did every reply across the board (Q4 vs Q5: plain 0/21 identical, tools
+1/21, rag 9/32). The mechanical check (`fa_not_in_persian`) is 0 on both. Fluency is a human judgement.
+`PHASE7_PERSIAN_REVIEW_FA.md` lays out all 24 side by side.
+
+### Decisions for you
+
+1. **Persian:** read `PHASE7_PERSIAN_REVIEW_FA.md` (24 rows) and mark each Q5 better / Q4 better / same.
+2. **Quant:** keep Q5_K_M, or switch to Q4_K_M. On automatic measures Q4 wins: TTFT ~30 s vs ~48–71 s, CAGR correct, 4 PASS vs 3, 0.375 GiB smaller. Against it: one wording regression, and RSS +0.88 GiB. Neither quant gets near the 8 tok/s or 3 s thresholds. I recommend deciding after the Persian reading.
+3. **Phase 8** (Ollama / LM Studio): approve? Note the D-0121 finding: the embedded template does not think by default in those clients.
+
+### Acceptance (SS.24 Phase 7)
+
+| Criterion | Status |
+|---|---|
+| Artefacts load | **PASS** (M): both loaded, VERIFIED, 74/74 cases answered, 0 empty |
+| Persian remains acceptable | **PENDING your reading** (mechanical check PASS, 0 not-in-Persian) |
+| Tool format remains acceptable | **PASS**: schema validity 100 % on both; same 8 tool calls attempted |
+| Quantisation loss acceptable | **PASS on automatic measures**: 1 wording regression, 4 improvements |
+
+---
+
+## Sandbox half (D-0121), kept as recorded
 
 ## Status: **IN PROGRESS** — sandbox half done; the quality/speed/RAM comparison needs the i5-12400
 
@@ -76,7 +155,7 @@ default. That is recorded for Phase 8.
   against answerability.
 - Lists every changed Persian reply for a human (R10). Fluency is not scored mechanically.
 - Calls a speed difference **NOT RESOLVED** unless it exceeds the measured session-to-session spread of the
-  same Q5_K_M weights: 2.65–4.37 tok/s (M, 2026-10-09 vs 2026-10-14).
+  same Q5_K_M weights: 2.65–4.37 tok/s at the time (M), widened to 2.65–4.48 in D-0122.
 
 Tests: `tests/test_phase7.py` has 63 assertions, run on GGUF files built byte by byte from the format spec.
 `tests/mutate_phase7.py` has 31 mutants, all killed. The first pass had 1 survivor (a reshape keeping the
