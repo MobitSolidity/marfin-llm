@@ -13,6 +13,13 @@ FROM C:\models\Qwen3.5-4B-Q4_K_M.gguf
 # dependence on which template Ollama would otherwise pick.
 # NOTE: the measurement harness bypasses this template entirely
 # (/api/generate raw=true). It matters only for interactive `ollama run` use.
+# D-0124, MEASURED on the user's smoke test 2026-10-18: `ollama run marfin-q4`
+# still printed a "Thinking Process:" block ending in </think>, i.e. this
+# TEMPLATE's pre-closed block was NOT what the model saw interactively (Ollama
+# ships its own qwen3.5 renderer and enables thinking in `run` by default).
+# Interactive use must therefore pass --think=false (or /set nothink). The
+# LaTeX rewrite also lives in the orchestrator, not in Ollama: an interactive
+# `ollama run` reply is the raw model text.
 TEMPLATE """{{ if .System }}<|im_start|>system
 {{ .System }}<|im_end|>
 {{ end }}<|im_start|>user
@@ -24,12 +31,17 @@ TEMPLATE """{{ if .System }}<|im_start|>system
 
 """
 
-SYSTEM """You are a bilingual Persian-English financial analyst. Answer in the language of the question. If you do not have the information needed, say so plainly instead of guessing. Never invent a figure. If you decline or say you do not have the information, write that refusal in the language of the question too. Write formulas in plain text with ordinary symbols, for example P/E = 150 / 8.40 = 17.86, never LaTeX such as \frac or \text. Write the whole answer in the language of the question; a key technical term may be repeated once in the other language in parentheses, nothing more. Be concise: give the answer first, then at most a few short lines of explanation, so the reply is complete."""
+SYSTEM """You are a bilingual Persian-English financial analyst. Answer in the language of the question. If you do not have the information needed, say so plainly instead of guessing. Never invent a figure. If you decline or say you do not have the information, write that refusal in the language of the question too. Write formulas in plain text with ordinary symbols, for example Ratio = 240 / 12 = 20, never LaTeX such as \frac or \text. Write the whole answer in the language of the question: an English question gets an English answer and a Persian question a Persian answer; a key technical term may be repeated once in the other language in parentheses, nothing more. Be concise: give the answer first, then at most a few short lines of explanation, so the reply is complete."""
 
 # Greedy and seeded, as in every measured run; 16K context; 512-token budget.
 PARAMETER temperature 0
 PARAMETER seed 20260831
 PARAMETER num_ctx 16384
 PARAMETER num_predict 512
+# D-0124: Ollama's default repeat_penalty is 1.1; llama-cpp-python's is 1.0.
+# Even at temperature 0 a repeat penalty changes WHICH token is the argmax, so
+# leaving it at the default made Ollama a different decoder, not just a
+# different runtime. Pinned to the measured in-process value.
+PARAMETER repeat_penalty 1.0
 PARAMETER stop "<|im_end|>"
 PARAMETER stop "<|im_start|>user"

@@ -1,0 +1,84 @@
+PS C:\models> ollama run marfin-q4 "نسبت P/E سهمی با قیمت ۱۵۰ و سود هر سهم ۸٫۴ چقدر است؟"
+Thinking Process:
+
+1.  **Analyze the Request:**
+    *   Input: A question in Persian asking for the Price-to-Earnings (P/E) ratio of a stock.
+    *   Given Data:
+        *   Stock Price (قیمت سهم): 150 (currency unit not specified, but implied).
+        *   Earnings Per Share (EPS/سود هر سهم): 8.4.
+    *   Task: Calculate the P/E ratio.
+
+2.  **Recall the Formula:**
+    *   P/E Ratio = Stock Price / Earnings Per Share (EPS)
+    *   P/E = قیمت سهم / سود هر سهم
+
+3.  **Perform Calculation:**
+    *   Price = 150
+    *   EPS = 8.4
+    *   P/E = 150 / 8.4
+
+    *   *Calculation:*
+        *   150 ÷ 8.4
+        *   Approximate: 150 ÷ 8 = 18.75
+        *   Precise:
+            *   1500 / 84 (multiply numerator and denominator by 10)
+            *   Simplify by dividing by 2: 750 / 42
+            *   Simplify by dividing by 6: 125 / 7
+            *   125 ÷ 7 = 17.85714...
+
+    *   Let's do standard division:
+        *   150 / 8.4 = 17.8571428...
+
+    *   Rounding: Usually, P/E ratios are rounded to one or two decimal places. Let's provide the result with reasonable precision (e.g.,
+17.86).
+
+4.  **Formulate the Output:**
+    *   State the formula used.
+    *   Show the calculation steps.
+    *   Provide the final answer.
+
+5.  **Drafting the Response (in Persian):**
+    *   فرمول محاسبه نسبت P/E: قیمت سهم تقسیم بر سود هر سهم.
+    *   محاسبات: 150 تقسیم بر 8.4.
+    *   نتیجه: تقریباً 17.86.
+
+6.  **Refining the Response:**
+    *   Make it clear and concise.
+    *   "نسبت P/E به صورت زیر محاسبه می‌شود:" (The P/E ratio is calculated as follows:)
+    *   Show the math clearly.
+
+7.  **Final Check:**
+    *   Price: 150
+    *   EPS: 8.4
+    *   150 / 8.4 = 17.857... -> Round to 17.86.
+    *   Language: Persian.
+
+8.  **Final Output Construction:**
+    *   Start with the direct answer.
+    *   Explain the calculation briefly.
+
+    *   Text: نسبت P/E برابر است با تقسیم قیمت سهم بر سود هر سهم (EPS).
+    *   Calculation: $ \frac{150}{8.4} \approx 17.86 $
+
+    Let's write it naturally in Persian.
+
+    "نسبت P/E با فرمول زیر محاسبه می‌شود:"
+    $$ P/E = \text{قیمت سهم} / \text{سود هر سهم} $$
+    $$ P/E = 150 / 8.4 $$
+    $$ P/E \approx 17.86 $$
+
+    Looks good. I will provide the answer now.cw
+</think>
+
+نسبت قیمت به درآمد (P/E) با تقسیم قیمت فعلی سهام بر سود هر سهم محاسبه می‌شود. فرمول آن به شرح زیر است:
+
+$$ P/E = \frac{\text{قیمت سهم}}{\text{سود هر سهم}} $$
+
+با جایگذاری اعداد شما:
+$$ P/E = \frac{150}{8.4} $$
+
+نتیجه محاسبه تقریباً برابر با **۱۷٫۸۶** است.
+
+
+...........................................
+میزان مصرف رم در حین کار 4.2 گیگابایت و میزان مصرف سی پی یو 81.5 درصد بود.

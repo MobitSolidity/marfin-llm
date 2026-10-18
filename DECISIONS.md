@@ -7338,3 +7338,59 @@ tools FA-TERM-001) and are what `--style` targets.
 
 **Open (user):** run `PHASE8_RUN_FA.md` and send `phase8_style_merged.json`, `phase8_ollama_merged.json` and
 `p8lm_plain.json`, plus the server RSS from Task Manager.
+
+## D-0124 — Phase 8 first run graded; style side-effects and five instrument defects fixed; rerun requested (2026-10-18)
+
+**Input (user):**
+- `p8lm_plain.json`, `phase8_ollama_merged.json`, `phase8_style_merged.json`, all on Q4_K_M sha 00fe7986 (VERIFIED).
+- `ollama run` smoke-test output.
+- Task Manager readings: `ollama run` 4.2 GB / 81.5 % CPU; in-process 2.1 GB / 98 %; Ollama eval 6.2 GB / 80 %;
+  LM Studio 2.7 GB / 53 %.
+- Stored under `evidence/phase8_*_2026-10-18.*`.
+
+**Graded (C), model not re-run.** Tallies:
+- Phase 7 Q4 baseline: 4 PASS / 6 FAIL / 2 UNMEASURED.
+- In-process + style: 3 / 7 / 2.
+- Ollama + style: 3 / 6 / 3. Citation correctness 95.24 is a PASS; RSS is now UNMEASURED.
+
+**User defects fixed (M, `compare_style`):**
+- LaTeX shown to the user 8 → 0.
+- Latin runs in Persian replies 1 → 0.
+- Budget hits 6 → 0.
+
+**New defects caused by `--style` (M):** 12 row regressions, from three causes.
+1. Tool calls where expected fell 8/10 → 2/10 in-process and 0/10 on Ollama ("answer first" overrode "use a tool").
+   Fix: `STYLE_TOOLS_NOTE`, tools arm only.
+2. The rule's example `P/E = 150 / 8.40 = 17.86` was the exact answer to EN/FA-CALC-001. Fix: the example is now
+   `240 / 12 = 20`, which appears in no eval file (pinned).
+3. 3 English tools rows were answered in Persian. Fix: the language rule now names both directions.
+
+**Runtime result:**
+- (M) 0/74 replies are byte-identical in-process vs Ollama, and 0/21 vs LM Studio, while prompt token counts match
+  on every comparable row.
+- (INFERRED) cause: `repeat_penalty` — llama-cpp-python's default is 1.0 (VERIFIED signature); Ollama and LM Studio
+  default to 1.1, and it was not sent.
+- Fix: `REPEAT_PENALTY = 1.0` is sent to both servers and pinned in the Modelfile.
+
+**Instrument defects in the D-0123 tooling (M, all fixed and pinned):**
+- No server token counter, so the TTFT prompt was 4433 tokens (estimated). Fix: `ServerRunner.count_tokens`.
+- The identical TTFT prompt hit the server's KV cache (1.04 s / 1.07 s vs 130 s). Fix: a unique prefix per probe.
+- `merge_phase4` dropped the `server` block. Fix: the block is carried through.
+- `grade_merged` passed a harness-only 0.05 GiB RSS. Fix: it is now UNMEASURED.
+- A server run recorded `sampling.applied: null`. Fix: it is now `true`, since every parameter is sent per request.
+
+**Smoke test:** `ollama run` printed a thinking block. Ollama's interactive path ignores the pre-closed TEMPLATE.
+The Modelfile now documents `--think=false`. The measured raw path had 0 thinking replies.
+
+**RAM:** the Ollama eval reading of 6.2 GB is over the 6.0 GiB cap if GiB, and 5.77 GiB if 10⁹ bytes. The units and
+the Task Manager column are unknown, so this is re-measured in the rerun.
+
+**Tests:**
+- `test_phase8`: 78 → 94 assertions.
+- `mutate_phase8`: 42 → 56 mutants, 56/56 killed.
+- `run_all`: 4383 assertions, 22 suites, 0 skipped.
+- The phase4 battery has 9 unanchored mutants, unchanged from the D-0123 tree (checked against HEAD~1).
+
+**Open (user):** run `PHASE8_RERUN_FA.md` (~2 h ESTIMATED). Send `phase8b_style_merged.json`,
+`phase8b_ollama_merged.json`, `p8b_lm_plain.json`, the `ollama run --think=false` output, and RAM with the column
+named.

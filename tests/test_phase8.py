@@ -225,7 +225,8 @@ check_true("Ollama: /api/generate with raw=true (no server-side template)",
            and _p["prompt"] == "PROMPT" and _p["stream"] is False, "(V)")
 check_true("Ollama: greedy, seed, budget, stop, ctx, threads all sent as options",
            _p["options"] == {"temperature": 0.0, "seed": 7, "num_predict": 512,
-                             "stop": ["<|im_end|>"], "num_ctx": 16384, "num_thread": 6}, "(V)")
+                             "stop": ["<|im_end|>"], "num_ctx": 16384, "num_thread": 6,
+                             "repeat_penalty": 1.0}, "(V)")
 _u2, _p2 = LS.build_request("lmstudio", None, "qwen3.5-4b", "PROMPT", 512, 0.0, 7, ["<|im_end|>"])
 check_true("LM Studio: /v1/completions (text completion, no chat template)",
            _u2 == "http://127.0.0.1:1234/v1/completions" and _p2["prompt"] == "PROMPT"
@@ -387,6 +388,88 @@ for _k, _v in (("temperature", "0"), ("seed", "20260831"), ("num_ctx", "16384"),
                "PARAMETER %s %s\n" % (_k, _v) in _mf, "(V)")
 check_true("both stop strings are set",
            'PARAMETER stop "<|im_end|>"' in _mf and 'PARAMETER stop "<|im_start|>user"' in _mf, "(V)")
+
+# ===========================================================================
+section("D-0124: fixes from the Phase 8 run (2026-10-18)")
+# ===========================================================================
+import glob as _glob                                   # noqa: E402
+import merge_phase4 as MG8                             # noqa: E402
+import grade_merged as GM8                             # noqa: E402
+_eval_text = "".join(open(f, encoding="utf-8").read()
+                     for f in _glob.glob(os.path.join(ROOT, "evals", "*.jsonl")))
+check_true("the style example is NOT an eval answer (was 150 / 8.40 = 17.86, EN/FA-CALC-001)",
+           "150 / 8.40" not in ST.STYLE_RULES and "17.86" not in ST.STYLE_RULES, "(A)")
+check_true("the new example's numbers (240, 12 -> 20) appear in no eval file",
+           "240" not in _eval_text and "Ratio = 240" in ST.STYLE_RULES, "(V)")
+check_true("the language rule names both directions (EN rows were answered in Persian)",
+           "English question gets an English answer" in ST.STYLE_RULES, "(V)")
+_tp = str(RP.build_tools_prompt("q?", [], style=True))
+check_true("tools arm with --style says: call the tool first (tool calls fell 8/10 -> 2/10)",
+           ST.STYLE_TOOLS_NOTE in _tp and _tp.index(ST.STYLE_RULES) < _tp.index(ST.STYLE_TOOLS_NOTE),
+           "(V)")
+check_true("the tool note is NOT in the plain or rag prompts, nor without --style",
+           ST.STYLE_TOOLS_NOTE not in str(RP.build_plain_prompt("q?", style=True))
+           and ST.STYLE_TOOLS_NOTE not in str(RP.build_rag_prompt("q?", [], style=True))
+           and ST.STYLE_TOOLS_NOTE not in str(RP.build_tools_prompt("q?", [])), "(A)")
+check_true("without --style the tools prompt is unchanged (recorded runs reproduce)",
+           str(RP.build_tools_prompt("q?", [])) == str(RP.build_tools_prompt("q?", [], style=False)),
+           "(V)")
+_u3, _p3 = LS.build_request("lmstudio", None, "m", "P", 5, 0.0, 7, [])
+check_true("repeat_penalty 1.0 is sent to BOTH servers (their default is 1.1)",
+           _p3["repeat_penalty"] == 1.0 and LS.REPEAT_PENALTY == 1.0, "(V)")
+check_true("the Modelfile pins repeat_penalty 1.0", "PARAMETER repeat_penalty 1.0\n" in _mf, "(V)")
+check_true("the Modelfile documents that interactive `ollama run` needs --think=false",
+           "--think=false" in _mf, "(V)")
+
+
+class _CountSrv(object):
+    def __init__(self):
+        self.prompts = []
+
+    def __call__(self, url, payload, timeout):
+        self.prompts.append(payload["prompt"])
+        n = len(payload["prompt"]) // 4
+        return {"response": "x", "eval_count": 1, "eval_duration": 1e9,
+                "prompt_eval_count": n, "prompt_eval_duration": 1e9}
+
+
+_cs8 = _CountSrv()
+_srv = LS.ServerRunner("ollama", "m", post=_cs8)
+check_true("ServerRunner counts tokens with the server (prompt_eval_count)",
+           _srv.count_tokens("abcdefgh") == 2, "(V)")
+check_true("a server runner records sampling as applied, not unknown",
+           _srv.sampling_supported is True and _srv.is_server is True, "(V)")
+_lat = RP.measure_latency(_srv)
+check_true("server TTFT prompt is TOKENIZED via the server (was 'estimated', 4433 tokens)",
+           _lat["ttft_prompt_built_by"] == "tokenized"
+           and 1638 <= _lat["ttft_prompt_tokens"] <= 2560, "(B) %r" % _lat["ttft_prompt_tokens"])
+_lat2 = RP.measure_latency(_srv)
+_probes = [p for p in _cs8.prompts if p.startswith("[ttft probe")]
+check_true("each server TTFT probe is unique, so the KV cache cannot serve it (1.04 s cache hit)",
+           len(_probes) == 2 and _probes[0] != _probes[1], "(A)")
+_dsrv = {"label": "MEASURED_LOCAL_SERVER", "server": {"backend": "ollama"},
+         "timestamp": "t", "arms": {"plain": []}, "summaries": {"plain": {}},
+         "model": {"file": "f", "ctx": 1, "threads": 1, "max_tokens": 1,
+                   "tool_call_cap": 8, "identity": {"sha256": "s"}},
+         "latency": {"ttft_seconds": 1, "decode_tokens_per_sec": 1},
+         "peak_rss_gib": 0.05,
+         "peak_rss_label": "MEASURED_PEAK_HARNESS_ONLY_MODEL_IN_SERVER_PROCESS"}
+import tempfile as _tf                                 # noqa: E402
+_td = _tf.mkdtemp()
+_fa, _fb = os.path.join(_td, "a.json"), os.path.join(_td, "b.json")
+_db = json.loads(json.dumps(_dsrv)); _db["arms"] = {"rag": []}; _db["summaries"] = {"rag": {}}
+json.dump(_dsrv, open(_fa, "w")); json.dump(_db, open(_fb, "w"))
+_mo = os.path.join(_td, "m.json")
+MG8.main([_fa, _fb, "--out", _mo])
+_merged = json.load(open(_mo))
+check_true("merge keeps the server block (it was dropped: Ollama merged looked in-process)",
+           (_merged.get("server") or {}).get("backend") == "ollama", "(V)")
+_g = GM8.grade_one("peak_rss_8k_gib_max", 6.0, GM8.SPEC["peak_rss_8k_gib_max"], _merged)
+check_true("a harness-only RSS (0.05 GiB) is UNMEASURED, not a PASS",
+           _g["verdict"] == "UNMEASURED", "(A) %r" % _g["verdict"])
+_g2 = GM8.grade_one("peak_rss_8k_gib_max", 6.0, GM8.SPEC["peak_rss_8k_gib_max"],
+                    {"peak_rss_gib": 4.71, "peak_rss_label": "MEASURED_PEAK"})
+check_true("an in-process RSS is still graded (4.71 <= 6.0 PASS)", _g2["verdict"] == "PASS", "(V)")
 
 print("")
 sys.exit(summary())

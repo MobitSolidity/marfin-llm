@@ -3,7 +3,7 @@
 Project: marfin-llm · Date: 2026-10-17 · Governing prompt: SYSTEM_PROMPT.md v2.0 (SS.24 Phase 8)
 Mode: `ANALYSIS_ONLY` · Live trading: `DISABLED` · Label key: (V) VERIFIED · (M) MEASURED · (C) COMPUTED · (E) ESTIMATED
 
-## Status: **IN PROGRESS** — the conditions are met and the tooling is built and tested; the run is pending on the i5-12400
+## Status: **IN PROGRESS** — first run graded 2026-10-18 (D-0124); defects found and fixed; rerun pending (`PHASE8_RERUN_FA.md`)
 
 Approved 2026-10-17 on condition that items 1 and 2 are corrected first ("I approve Phase 8, provided that items
 #1 and #2 are corrected"). Both are corrected below.
@@ -124,3 +124,107 @@ Run `PHASE8_RUN_FA.md` on the i5-12400:
 - LM Studio, plain arm only.
 
 Send `phase8_style_merged.json`, `phase8_ollama_merged.json` and `p8lm_plain.json`.
+
+
+---
+
+## First run, graded (2026-10-18, D-0124)
+
+The three files you sent are stored as `evidence/phase8_{style_merged,ollama_merged,lmstudio_plain}_2026-10-18.json`,
+along with the smoke-test output. They were graded with the D-0122 pipeline: `regrade_eval`, `regrade_citations`,
+`grade_merged` and `attribute_failures`, all with the model not re-run.
+
+### Threshold tally (worst arm decides)
+
+| Threshold | Phase 7 Q4 (no style) | Phase 8 in-process + style | Phase 8 Ollama + style |
+|---|---|---|---|
+| citation_correctness (≥95) | 90.48 | 76.19 | **95.24 PASS** |
+| unsupported_claim_rate (≤3) | 7.69 | 17.24 | 8.0 |
+| correct_abstention (≥90) | 88.89 | 66.67 | 77.78 |
+| deterministic_calc (100) | **100** | 87.5 | 50.0 |
+| fabricated (0) | 1 | 1 | 3 |
+| decode tok/s (≥8) | 4.10 | 3.96 | 3.71 |
+| TTFT @2K (≤3 s) | 30.1 | 32.9 | 130.2 (at 4433 tokens, not 2K: invalid) |
+| peak RSS (≤6.0 GiB) | 4.73 | 4.71 | **UNMEASURED** (the harness saw 0.05 GiB, its own process) |
+| tally | 4 PASS / 6 FAIL / 2 UNM | 3 / 7 / 2 | 3 / 6 / 3 |
+
+**Your Task Manager readings (M, read by eye):**
+
+| Run | RAM | CPU |
+|---|---|---|
+| `ollama run` | 4.2 GB | 81.5 % |
+| in-process | 2.1 GB | 98 % |
+| **Ollama evaluation run** | **6.2 GB** | 80 % |
+| LM Studio | 2.7 GB | 53 % |
+
+- 6.2 GB is above the 6.0 cap if it is GiB, and just below it (5.77 GiB) if Task Manager meant 10⁹ bytes.
+- The in-process value of 2.1 GB is lower than the 4.71 GiB peak that psutil recorded. Task Manager's default
+  column is the private working set, which excludes the memory-mapped weights. The rerun guide asks you to name the
+  column you read.
+
+### Your three defects: fixed (`compare_style`, Phase 7 → Phase 8 in-process)
+
+| | before | after |
+|---|---|---|
+| LaTeX shown to you | 8 | **0** |
+| LaTeX the model itself wrote | 8 | 3 (the rewrite caught all 3) |
+| English sentences in a Persian answer | 1 | **0** |
+| answers cut off at 512 tokens | 6 | **0** |
+
+### But the style rules caused 12 row regressions, for three reasons (all M)
+
+1. **The model stopped calling the calculator.**
+   - Measurement: where a tool was expected, calls fell from 8/10 to 2/10 in-process, and 0/10 through Ollama.
+   - Six `tool_value_ok` regressions follow from that. The answers were mostly still right, but the tool was skipped.
+   - Cause: "give the answer first" was read as covering the tool call too.
+   - Fix: `STYLE_TOOLS_NOTE`, tools arm only: "style rules apply to your final answer only; call the tool first".
+2. **My example leaked an answer.**
+   - The rule's example, `P/E = 150 / 8.40 = 17.86`, is exactly the answer to EN/FA-CALC-001, and the in-process
+     reply reproduced it verbatim.
+   - Fix: the example is now `240 / 12 = 20`. Neither 240 nor that formula appears in any eval file (pinned by a test).
+3. **English questions were answered in Persian.**
+   - 3 rows: tools EN-ABST-002, EN-SAFE-001 and EN-SAFE-002, which cost 1 abstention and 1 fabrication.
+   - Cause: "the language of the question" was read as Persian.
+   - Fix: the rule now spells out both directions.
+
+**Citations (in-process):** 3 of the 5 new CONTRADICTED claims are the model's added explanatory sentence, e.g.
+'This figure is explicitly stated in passage [4], which reports "Total net sales | 383,285"'. The value in each is
+correct, but the sentence has no scale word next to the bare number, so the verifier correctly refuses it (the
+D-0103 design). This is what "a few short lines of explanation" invited. Fix 2 removes the leaked example; whether
+the explanatory sentence persists is for the rerun to show.
+
+### Runtimes: not identical, and why (`evidence/phase8_runtime_compare_2026-10-18.json`)
+
+**Result:**
+- **0 of 74** in-process vs Ollama replies are byte-identical, and 0/21 in-process vs LM Studio.
+- Prompt token counts are equal on every comparable row, so the prompt was the same.
+- The difference is therefore in decoding.
+- **Cause (INFERRED):** `repeat_penalty`. llama-cpp-python's default is 1.0 (VERIFIED in its signature). Ollama and
+  LM Studio default to 1.1, and the D-0123 runner did not send it. A repeat penalty changes the greedy argmax even
+  at temperature 0.
+- **Fix:** 1.0 is now sent to both servers and pinned in the Modelfile. The rerun will confirm or rule out this cause.
+
+**Four more instrument defects in my Phase 8 tooling, all fixed and pinned:**
+
+| Defect | Effect | Fix |
+|---|---|---|
+| The server path had no token counter | The TTFT prompt fell back to the character estimate: 4433 tokens, not ~2048 | `ServerRunner.count_tokens` uses the server's prompt_eval_count |
+| The same TTFT prompt was sent 3 times | Invocations 2 and 3 were KV-cache hits (1.04 s and 1.07 s vs 130 s) | Every server probe gets a unique first line |
+| `merge_phase4` dropped the `server` block | The merged Ollama file looked in-process, and `compare_quants` refused it | The block is carried through |
+| `grade_merged` graded the harness's 0.05 GiB as peak RSS | A false PASS | Harness-only RSS is now UNMEASURED |
+
+**Smoke test (`ollama run`):** a "Thinking Process" block was printed, so the Modelfile's pre-closed TEMPLATE was not
+what Ollama used interactively. The measured path (raw `/api/generate`) is unaffected: 0 thinking replies. The
+Modelfile now documents that interactive use needs `--think=false`. The LaTeX rewrite lives in the orchestrator, so
+raw `ollama run` text can still contain LaTeX.
+
+### Phase 8 acceptance (SS.24): status after the first run
+
+| Criterion | Status |
+|---|---|
+| Runs within RAM | In-process 4.71 GiB PASS. Ollama 6.2 GB (your reading): over the cap if GiB. **Re-measure.** |
+| Meets or approaches speed target | No: 3.7–4.2 tok/s vs 8 (hardware-bound, as in Phase 4) |
+| Persian and English valid | Persian defects fixed. 3 EN→FA language swaps, now fixed in the rule |
+| Tool integration works through orchestrator | Schema validity 100 %, but tool use collapsed under `--style`; fix applied |
+
+**Next step:** `PHASE8_RERUN_FA.md`, about 2 h (ESTIMATED).

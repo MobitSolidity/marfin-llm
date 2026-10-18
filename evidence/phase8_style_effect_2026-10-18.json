@@ -1,0 +1,154 @@
+{
+  "label": "COMPUTED_FROM_MEASURED",
+  "kind": "STYLE (same weights, same runtime)",
+  "defects_before": {
+    "latex_in_model_text": [
+      "plain/FA-CALC-001",
+      "plain/EN-CALC-002",
+      "plain/FA-CALC-002",
+      "plain/EN-RISK-001",
+      "plain/FA-RISK-001",
+      "plain/FA-LANG-001",
+      "tools/EN-CALC-002",
+      "tools/FA-LANG-001"
+    ],
+    "latex_shown_to_user": [
+      "plain/FA-CALC-001",
+      "plain/EN-CALC-002",
+      "plain/FA-CALC-002",
+      "plain/EN-RISK-001",
+      "plain/FA-RISK-001",
+      "plain/FA-LANG-001",
+      "tools/EN-CALC-002",
+      "tools/FA-LANG-001"
+    ],
+    "latin_runs_fa": [
+      "plain/FA-CALC-002"
+    ],
+    "hit_budget": [
+      "plain/FA-CALC-002",
+      "plain/FA-TERM-001",
+      "plain/FA-LANG-001",
+      "tools/EN-TERM-001",
+      "tools/FA-TERM-001",
+      "tools/FA-LANG-001"
+    ],
+    "n": 74
+  },
+  "defects_after": {
+    "latex_in_model_text": [
+      "plain/FA-NUM-001",
+      "tools/FA-CALC-002",
+      "tools/FA-LANG-001"
+    ],
+    "latex_shown_to_user": [],
+    "latin_runs_fa": [],
+    "hit_budget": [],
+    "n": 74
+  },
+  "defect_counts": {
+    "latex_in_model_text": [
+      8,
+      3
+    ],
+    "latex_shown_to_user": [
+      8,
+      0
+    ],
+    "latin_runs_fa": [
+      1,
+      0
+    ],
+    "hit_budget": [
+      6,
+      0
+    ]
+  },
+  "regressions": [
+    {
+      "row": "plain/EN-SAFE-002",
+      "field": "abstention_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "plain/FA-CALC-002",
+      "field": "value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "plain/FA-RISK-002",
+      "field": "abstention_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/EN-ABST-002",
+      "field": "abstention_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/EN-ABST-002",
+      "field": "fabricated",
+      "before": false,
+      "after": true
+    },
+    {
+      "row": "tools/EN-CALC-001",
+      "field": "tool_value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/EN-CALC-002",
+      "field": "tool_value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/EN-NUM-001",
+      "field": "tool_value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/FA-CALC-001",
+      "field": "tool_value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/FA-CALC-002",
+      "field": "value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/FA-CALC-002",
+      "field": "tool_value_ok",
+      "before": true,
+      "after": false
+    },
+    {
+      "row": "tools/FA-RISK-001",
+      "field": "tool_value_ok",
+      "before": true,
+      "after": false
+    }
+  ],
+  "improvements": [
+    {
+      "row": "tools/EN-RISK-002",
+      "field": "abstention_ok",
+      "before": false,
+      "after": true
+    }
+  ],
+  "verdict": "12 ROW(S) REGRESSED",
+  "sources": [
+    "phase7_q4km_merged_2026-10-17.json",
+    "phase8_style_merged_2026-10-18.json"
+  ]
+}

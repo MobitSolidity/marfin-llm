@@ -26,6 +26,9 @@ import urllib.request
 
 BACKENDS = ("ollama", "lmstudio")
 DEFAULT_BASE = {"ollama": "http://127.0.0.1:11434", "lmstudio": "http://127.0.0.1:1234"}
+#: D-0124. llama-cpp-python's create_completion default (VERIFIED in its
+#: signature); Ollama and LM Studio default to 1.1. Sent explicitly.
+REPEAT_PENALTY = 1.0
 _LOOPBACK = re.compile(r"^http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?/?$")
 
 
@@ -56,8 +59,11 @@ def build_request(backend, base_url, model_id, prompt, max_tokens, temperature, 
     if not str(model_id or "").strip():
         raise ServerError("no --model-id: name the model as the server knows it")
     if backend == "ollama":
+        # repeat_penalty pinned to llama-cpp-python's 1.0 (D-0124): Ollama and
+        # LM Studio default to 1.1, which changes the greedy argmax.
         opts = {"temperature": float(temperature), "seed": int(seed),
-                "num_predict": int(max_tokens), "stop": list(stop)}
+                "num_predict": int(max_tokens), "stop": list(stop),
+                "repeat_penalty": REPEAT_PENALTY}
         if num_ctx:
             opts["num_ctx"] = int(num_ctx)
         if num_thread:
@@ -68,6 +74,7 @@ def build_request(backend, base_url, model_id, prompt, max_tokens, temperature, 
                                       "max_tokens": int(max_tokens),
                                       "temperature": float(temperature),
                                       "seed": int(seed), "stop": list(stop),
+                                      "repeat_penalty": REPEAT_PENALTY,
                                       "stream": False}
 
 
@@ -113,7 +120,11 @@ class ServerRunner(object):
         self.stop, self.num_ctx, self.num_thread = list(stop), num_ctx, num_thread
         self.timeout, self._post = timeout, post or _post
         self.calls = self.thinking_replies = self.truncated_thinking = 0
-        self.llm = None          # no in-process model: token counting falls back
+        self.llm = None          # no in-process model
+        # Every sampling parameter is sent explicitly in each request (D-0124:
+        # recorded as applied, like the in-process runner, not as unknown).
+        self.sampling_supported = True
+        self.is_server = True
         build_request(backend, base_url, model_id, "x", 1, temperature, seed, self.stop)
 
     def complete_raw(self, prompt, max_tokens):
@@ -125,6 +136,24 @@ class ServerRunner(object):
         js = self._post(url, payload, self.timeout)
         text, m = parse_response(self.backend, js, time.time() - t0)
         return text, m["completion_tokens"]
+
+    def count_tokens(self, text):
+        """
+        Token count of `text` as the SERVER tokenizes it (D-0124): a raw
+        1-token request, reading prompt_eval_count / usage.prompt_tokens.
+        MEASURED 2026-10-18: without a counter the TTFT prompt fell back to the
+        character estimate and came out at 4433 tokens, not ~2048.
+        Returns None if the server reports no count.
+        """
+        url, payload = build_request(self.backend, self.base_url, self.model_id, text, 1,
+                                     self.temperature, self.seed, self.stop,
+                                     self.num_ctx, self.num_thread)
+        try:
+            js = self._post(url, payload, self.timeout)
+            _t, m = parse_response(self.backend, js, 0.0)
+        except ServerError:
+            return None
+        return m["prompt_tokens"] or None
 
     def generate(self, prompt, max_tokens=None):
         import phase4_lib as L          # same splitter as every other runner
