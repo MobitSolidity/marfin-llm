@@ -12,7 +12,7 @@ paper/live trading controls.
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
 | `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 8. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0123). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0124). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
 | `scripts/regrade_eval.py` | Re-grades the recorded plain/tools replies with the current grader (model not re-run); feeds `grade_merged.py`. D-0112 output: `evidence/phase4_verdict_2026-09-27_post-D0112.json`. |
@@ -20,12 +20,13 @@ paper/live trading controls.
 | `Q14_RUN_COMMANDS.md` | **Next run, in Persian (D-0113):** the three arms with `--second-turn --refusal-language`, then merge. ~70–75 min ESTIMATED. |
 | `PHASE6_REDTEAM_RUN_FA.md` | **Next run, in Persian (D-0116):** the Phase 6 model red team (9 + 4 adversarial questions), ~20–25 min ESTIMATED. |
 | `docs/phase-reports/phase-6.md` · `scripts/grade_phase6.py` | **Phase 6: CLOSED (D-0121), all criteria PASS** after F1–F4. The first run (D-0118) failed 2 critical rows. Final grade: `evidence/phase6_graded2_post-D0121_2026-10-16.json`. |
-| `PHASE8_RUN_FA.md` | **Next run, in Persian (D-0123):** Q4_K_M with `--style` in-process, then via Ollama, then LM Studio (plain). ~2–2.5 h ESTIMATED. |
+| `PHASE8_RERUN_FA.md` | **Next run, in Persian (D-0124):** the Phase 8 rerun after the style and instrument fixes, ~2 h ESTIMATED. |
+| `PHASE8_RUN_FA.md` | **Done 2026-10-18 (graded in D-0124).** Q4_K_M with `--style` in-process, then via Ollama, then LM Studio (plain). ~2–2.5 h ESTIMATED. |
 | `docs/phase-reports/phase-8.md` · `deploy/ollama/Modelfile` | **Phase 8 (D-0123):** both conditions met, Q4_K_M chosen, Modelfile (pinned to the harness prompt), thinking proposal. |
 | `src/llm/style.py` · `scripts/compare_style.py` | Your Persian-review fixes behind `--style`: no LaTeX (`plain_math` rewrite), single-language check (`latin_runs`), `hit_budget`; and the off/on comparator. |
 | `src/llm/local_server.py` | `--server ollama` or `lmstudio`: sends the harness's own rendered prompt raw (no template defaults), loopback only. |
 | `src/llm/thinking.py` | Thinking proposal: `off` / `budgeted` only, router-decided, closed by the orchestrator (benefit unmeasured). |
-| `tests/test_phase8.py` · `tests/mutate_phase8.py` | 78 asserts / 42 of 42 mutants killed. |
+| `tests/test_phase8.py` · `tests/mutate_phase8.py` | 94 asserts / 56 of 56 mutants killed. |
 | `PHASE7_RUN_FA.md` | **Done 2026-10-17 (graded in D-0122).** Q4_K_M vs Q5_K_M run guide. |
 | `PHASE7_PERSIAN_REVIEW_FA.md` | **For you (R10):** the 24 changed Persian replies, Q5_K_M vs Q4_K_M side by side. |
 | `docs/phase-reports/phase-7.md` · `tools/gguf_inspect.py` · `scripts/compare_quants.py` | **Phase 7 (D-0121):** checksums and header validation done (M); the comparison instrument refuses confounded runs. `tests/test_phase7.py` (63) / `tests/mutate_phase7.py` (31/31). |
@@ -116,7 +117,7 @@ paper/live trading controls.
 | Current phase | **8 — Ollama and LM Studio** (approved 2026-10-17 on condition, conditions met, D-0123) |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Phase 7 closed: Persian review applied (Q4 10 / Q5 7 / equal 7), **Q4_K_M chosen** (D-0123). Phase 8 tooling done; run `PHASE8_RUN_FA.md` on the i5-12400. |
+| Next | Phase 8 first run graded (D-0124): your three defects fixed, but `--style` suppressed tool calls and 5 instrument defects were found; all fixed. Rerun: `PHASE8_RERUN_FA.md`. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

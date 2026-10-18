@@ -119,6 +119,13 @@ def collect(run, name, spec):
     """
     scope = spec["scope"]
     if scope == "run":
+        if (spec["path"] == ("peak_rss_gib",)
+                and "HARNESS_ONLY" in str(run.get("peak_rss_label") or "")):
+            # D-0124, MEASURED 2026-10-18: a server run's peak_rss_gib is the
+            # HARNESS process (0.05 GiB), not the model's; it was graded PASS.
+            # The model's memory lives in the server process: UNMEASURED here.
+            return [], ("peak_rss_gib is the harness process only (%s); the "
+                        "model ran in the server process" % run.get("peak_rss_label"))
         v = _dig(run, spec["path"])
         # peak_rss_gib may be a dict keyed by arm, or a single number, or None.
         if isinstance(v, dict):

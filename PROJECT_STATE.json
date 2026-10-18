@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
   "current_phase": 8,
-  "phase_status": "PHASE_8_TOOLING_DONE_RUN_PENDING_ON_I5_12400",
+  "phase_status": "PHASE_8_FIRST_RUN_GRADED_FIXES_APPLIED_RERUN_PENDING",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -317,7 +317,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-10-17",
+  "last_updated": "2026-10-18",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -812,7 +812,7 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": "Run PHASE8_RUN_FA.md on the i5-12400; send phase8_style_merged.json, phase8_ollama_merged.json, p8lm_plain.json and server RSS",
+  "awaiting_user_action": "Run PHASE8_RERUN_FA.md; send phase8b_style_merged.json, phase8b_ollama_merged.json, p8b_lm_plain.json, ollama run --think=false output, RAM (column named)",
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND_REVERIFIED_2026_09_27_SEE_measurements_recorded_2026_09_27",
@@ -2788,5 +2788,69 @@
         "phase7": 1
       }
     }
+  },
+  "D-0124_phase8_first_run_graded_2026_10_18": {
+    "tallies": {
+      "phase7_q4": "4/6/2",
+      "phase8_inproc_style": "3/7/2",
+      "phase8_ollama_style": "3/6/3"
+    },
+    "user_defects_after_style": {
+      "latex_shown": "8->0",
+      "latin_runs_fa": "1->0",
+      "hit_budget": "6->0"
+    },
+    "style_side_effects": {
+      "tool_calls_when_expected_of_10": {
+        "phase7": 8,
+        "inproc": 2,
+        "ollama": 0
+      },
+      "leaked_example": "150/8.40=17.86 (EN/FA-CALC-001)",
+      "en_answered_in_fa": 3
+    },
+    "runtime": {
+      "byte_identical_inproc_vs_ollama": "0/74",
+      "inproc_vs_lmstudio": "0/21",
+      "inferred_cause": "repeat_penalty 1.0 vs 1.1"
+    },
+    "instrument_fixes": [
+      "server token counter",
+      "unique TTFT probe (KV cache)",
+      "merge keeps server block",
+      "harness-only RSS UNMEASURED",
+      "server sampling applied"
+    ],
+    "user_task_manager": {
+      "ollama_run": [
+        4.2,
+        81.5
+      ],
+      "inproc": [
+        2.1,
+        98
+      ],
+      "ollama_eval": [
+        6.2,
+        80
+      ],
+      "lmstudio": [
+        2.7,
+        53
+      ],
+      "unit": "GB as read; column unknown"
+    },
+    "tests": {
+      "test_phase8": 94,
+      "mutate_phase8": "56/56",
+      "run_all": 4383
+    },
+    "evidence": [
+      "evidence/phase8_style_merged_2026-10-18.json",
+      "evidence/phase8_ollama_merged_2026-10-18.json",
+      "evidence/phase8_lmstudio_plain_2026-10-18.json",
+      "evidence/phase8_style_effect_2026-10-18.json",
+      "evidence/phase8_runtime_compare_2026-10-18.json"
+    ]
   }
 }

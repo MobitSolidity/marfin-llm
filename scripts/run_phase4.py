@@ -771,9 +771,12 @@ def _with_refusal_language(system, refusal_language):
     return system_base(True) + system[len(SYSTEM_BASE):]
 
 
-def _with_style(system, style):
-    """D-0123: append the user's answer-style rules (opt-in, --style)."""
-    return system + ST.STYLE_RULES if style else system
+def _with_style(system, style, tools=False):
+    """D-0123: append the user's answer-style rules (opt-in, --style).
+    D-0124: the tools arm also gets STYLE_TOOLS_NOTE (call the tool first)."""
+    if not style:
+        return system
+    return system + ST.STYLE_RULES + (ST.STYLE_TOOLS_NOTE if tools else "")
 
 
 def build_plain_prompt(question, refusal_language=False, style=False):
@@ -789,7 +792,7 @@ def build_tools_prompt(question, schemas, refusal_language=False, style=False):
         lines.append("- %s(%s): %s" % (fn.get("name"), req,
                                        fn.get("description", "")))
     return _prompt(_with_style(_with_refusal_language(SYSTEM_TOOLS + "\n".join(lines),
-                                                      refusal_language), style),
+                                                      refusal_language), style, tools=True),
                    "Question: %s" % question)
 
 
@@ -1422,8 +1425,15 @@ def measure_latency(runner, ctx_target=2048):
     measuring it on a 4433-token prompt and reporting it as 2K is the same lie
     in the opposite direction, which is exactly what happened on 2026-08-18.
     """
-    prompt, how = build_ttft_prompt(
-        ctx_target, _token_counter_for(getattr(runner, "llm", None)))
+    counter = (_token_counter_for(getattr(runner, "llm", None))
+               or getattr(runner, "count_tokens", None))
+    prompt, how = build_ttft_prompt(ctx_target, counter)
+    if getattr(runner, "is_server", False):
+        # D-0124, MEASURED 2026-10-18: a server keeps its KV cache between
+        # requests, so the 2nd and 3rd invocations' identical TTFT prompt was
+        # a cache hit (1.04 s and 1.07 s vs 130.24 s for the first). A unique
+        # first line makes every probe a cold prefill.
+        prompt = "[ttft probe %d]\n" % time.time_ns() + prompt
 
     # A one-token generation on a thinking model necessarily leaves <think>
     # unterminated, which would inflate the truncated-thinking counter with two
@@ -1964,7 +1974,11 @@ def main(argv=None):
                     "url": getattr(runner, "base_url", None),
                     "prompt_path": ("/api/generate raw=true" if server == "ollama"
                                     else "/v1/completions"),
-                    "template_applied_by_server": False} if server else None),
+                    "template_applied_by_server": False,
+                    # D-0124: sent explicitly; the servers default to 1.1.
+                    "repeat_penalty": getattr(
+                        __import__("llm.local_server", fromlist=["x"]),
+                        "REPEAT_PENALTY", None)} if server else None),
         "measures_local_hardware": not remote,
         "phase": 4,
         "route": ("A (user's own machine, remote provider)" if remote

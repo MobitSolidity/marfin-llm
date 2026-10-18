@@ -191,6 +191,11 @@ def merge(paths):
             for path, d in docs],
         "timestamp": max((d.get("timestamp") or "") for _, d in docs) or None,
         "host": docs[0][1].get("host"),
+        # D-0124, MEASURED 2026-10-18: this block was not copied, so the merged
+        # Ollama file looked like an in-process run and compare_quants could
+        # no longer see the runtime. The signature check above guarantees all
+        # inputs share one backend, so the first input's block is the run's.
+        **({"server": docs[0][1]["server"]} if docs[0][1].get("server") else {}),
         "model": base_model,
         "tool_registry_size": docs[0][1].get("tool_registry_size"),
 

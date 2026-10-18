@@ -1,0 +1,52 @@
+{
+ "label": "COMPUTED_FROM_MEASURED",
+ "kind": "RUNTIME (same weights 00fe7986, same prompts, same flags)",
+ "note": "compare_quants REFUSED this pair because the merged Ollama file had lost its server block (merge defect, fixed in D-0124) and sampling.applied differed (null vs true). Computed here directly from the recorded rows.",
+ "inproc_vs_ollama": {
+  "plain": {
+   "n": 21,
+   "byte_identical": 0,
+   "prompt_tokens_equal": 21
+  },
+  "tools": {
+   "n": 21,
+   "byte_identical": 0,
+   "prompt_tokens_equal": 18
+  },
+  "rag": {
+   "n": 32,
+   "byte_identical": 0,
+   "prompt_tokens_equal": 32
+  }
+ },
+ "inproc_vs_lmstudio_plain": {
+  "n": 21,
+  "byte_identical": 0,
+  "prompt_tokens_equal": 21
+ },
+ "tool_calls_when_expected_of_10": {
+  "phase7_q4_no_style": 8,
+  "phase8_inproc_style": 2,
+  "phase8_ollama_style": 0
+ },
+ "likely_cause_of_divergence": "repeat_penalty: llama-cpp-python 1.0 (VERIFIED signature) vs Ollama/LM Studio default 1.1 (documented); not sent by the D-0123 runner. Same prompt token counts on every comparable row rule out a prompt difference. INFERRED, not proven: rerun with repeat_penalty pinned (D-0124) decides.",
+ "user_reported_resources_task_manager": {
+  "ollama_run_smoke": {
+   "ram_gib": 4.2,
+   "cpu_pct": 81.5
+  },
+  "second_command_inproc": {
+   "ram_gib": 2.1,
+   "cpu_pct": 98
+  },
+  "ollama_server_eval": {
+   "ram_gib": 6.2,
+   "cpu_pct": 80
+  },
+  "lmstudio_server_eval": {
+   "ram_gib": 2.7,
+   "cpu_pct": 53
+  },
+  "label": "MEASURED_BY_USER (Task Manager, read by eye)"
+ }
+}

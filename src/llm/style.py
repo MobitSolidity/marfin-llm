@@ -27,13 +27,29 @@ All of it is opt-in in run_phase4 (--style), so recorded runs reproduce.
 import re
 
 #: Appended to the system prompt by --style. One sentence per defect.
+#: D-0124: the example used to be "P/E = 150 / 8.40 = 17.86" -- the exact answer
+#: of eval rows EN/FA-CALC-001 (MEASURED: the Phase 8 run reproduced it
+#: verbatim). The example is now a number pair that appears in no eval file
+#: (pinned in tests/test_phase8.py), so the rule teaches a format, not an answer.
 STYLE_RULES = (
     " Write formulas in plain text with ordinary symbols, for example "
-    "P/E = 150 / 8.40 = 17.86, never LaTeX such as \\frac or \\text."
-    " Write the whole answer in the language of the question; a key technical "
+    "Ratio = 240 / 12 = 20, never LaTeX such as \\frac or \\text."
+    " Write the whole answer in the language of the question: an English question "
+    "gets an English answer and a Persian question a Persian answer; a key technical "
     "term may be repeated once in the other language in parentheses, nothing more."
     " Be concise: give the answer first, then at most a few short lines of "
     "explanation, so the reply is complete."
+)
+
+#: D-0124. Appended to the TOOLS arm only, after STYLE_RULES. MEASURED on the
+#: 2026-10-18 run: with "give the answer first" the model answered directly
+#: instead of calling the calculator -- tool calls where a tool was expected
+#: fell from 8/10 (Phase 7) to 2/10 in-process and 0/10 through Ollama. The
+#: style rules are about the FINAL answer; this says so explicitly.
+STYLE_TOOLS_NOTE = (
+    " These style rules apply to your final answer only. When arithmetic is "
+    "needed, first emit the tool call and wait for its result; do not compute "
+    "the number yourself."
 )
 
 # --------------------------------------------------------------------------
