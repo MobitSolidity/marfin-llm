@@ -67,6 +67,7 @@ sys.path.insert(0, _HERE)
 import phase4_lib as L  # noqa: E402
 from safety.untrusted import neutralize_control_tokens as _defang  # noqa: E402
 from safety.untrusted import guard_execution_claims  # noqa: E402
+from llm import style as ST  # noqa: E402
 
 # Make the console safe BEFORE anything Persian can reach it.
 CONSOLE_UTF8 = L.make_console_safe()
@@ -770,20 +771,25 @@ def _with_refusal_language(system, refusal_language):
     return system_base(True) + system[len(SYSTEM_BASE):]
 
 
-def build_plain_prompt(question, refusal_language=False):
-    return _prompt(_with_refusal_language(SYSTEM_BASE, refusal_language),
+def _with_style(system, style):
+    """D-0123: append the user's answer-style rules (opt-in, --style)."""
+    return system + ST.STYLE_RULES if style else system
+
+
+def build_plain_prompt(question, refusal_language=False, style=False):
+    return _prompt(_with_style(_with_refusal_language(SYSTEM_BASE, refusal_language), style),
                    "Question: %s" % question)
 
 
-def build_tools_prompt(question, schemas, refusal_language=False):
+def build_tools_prompt(question, schemas, refusal_language=False, style=False):
     lines = []
     for s in schemas:
         fn = s.get("function", s)
         req = ", ".join(fn.get("parameters", {}).get("required", []))
         lines.append("- %s(%s): %s" % (fn.get("name"), req,
                                        fn.get("description", "")))
-    return _prompt(_with_refusal_language(SYSTEM_TOOLS + "\n".join(lines),
-                                          refusal_language),
+    return _prompt(_with_style(_with_refusal_language(SYSTEM_TOOLS + "\n".join(lines),
+                                                      refusal_language), style),
                    "Question: %s" % question)
 
 
@@ -854,7 +860,7 @@ def build_tools_followup_prompt(first, first_reply, executed):
     return fp
 
 
-def build_rag_prompt(question, passages, refusal_language=False):
+def build_rag_prompt(question, passages, refusal_language=False, style=False):
     """
     Render retrieved passages as an Evidence block, INCLUDING their units.
 
@@ -929,7 +935,7 @@ def build_rag_prompt(question, passages, refusal_language=False):
         ev.append(_defang("[%d] (%s) %s%s"
                           % (i, ps.provenance.citation(), tag, ps.text)))
     return _prompt(
-        _with_refusal_language(SYSTEM_RAG, refusal_language),
+        _with_style(_with_refusal_language(SYSTEM_RAG, refusal_language), style),
         "Evidence:\n%s\n\nQuestion: %s"
         % ("\n".join(ev) if ev else "(no evidence retrieved)", question))
 
@@ -1009,15 +1015,34 @@ def _apply_execution_guard(text, lang, enabled):
                        "original": r["original"]}
 
 
+def _apply_style(text, lang, metrics, max_tokens, enabled):
+    """
+    D-0123. When enabled: rewrite LaTeX math to plain text (numbers untouched),
+    and record the two checks the user's review asked for. Returns
+    (text, record); record is None when off, so recorded runs are unchanged.
+    """
+    if not enabled:
+        return text, None
+    new, n = ST.plain_math(text)
+    m = metrics or {}
+    m = m.get("second_turn") or m
+    return new, {"latex_spans_rewritten": n,
+                 "latin_runs": ST.latin_runs(new) if lang in ("fa", "mixed") else None,
+                 "hit_budget": ST.hit_budget(m.get("completion_tokens"), max_tokens)}
+
+
 def run_arm_plain(runner, cases, schemas_by_name, refusal_language=False,
-                  execution_guard=False):
+                  execution_guard=False, style=False):
     out = []
     for c in cases:
         text, m = runner.generate(build_plain_prompt(
-            c["prompt"], refusal_language=refusal_language))
+            c["prompt"], refusal_language=refusal_language, style=style))
         text, guard = _apply_execution_guard(text, c.get("lang"), execution_guard)
+        text, sty = _apply_style(text, c.get("lang"), m, getattr(runner, "max_tokens", None), style)
         g = L.grade_case(c, text, schemas_by_name)
         g["execution_guard"] = guard
+        if style:
+            g["style"] = sty
         g["arm"] = "plain"
         # The QUESTION is written to the file, not just the answer. Every case
         # carries human_grade=None and persian_fluency_regression is PENDING
@@ -1070,7 +1095,7 @@ def total_fabrications(summaries):
 
 
 def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
-                  refusal_language=False, execution_guard=False):
+                  refusal_language=False, execution_guard=False, style=False):
     """
     The tools arm. With second_turn=True (Q14 / D-0113) every reply that made
     at least one call gets the tool results handed back and is asked again;
@@ -1092,7 +1117,8 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
     for c in cases:
         schemas = schemas_for(c["prompt"])
         first_prompt = build_tools_prompt(c["prompt"], schemas,
-                                          refusal_language=refusal_language)
+                                          refusal_language=refusal_language,
+                                          style=style)
         text, m = runner.generate(first_prompt)
         g = L.grade_case(c, text, schemas_by_name)
         g["arm"] = "tools"
@@ -1162,6 +1188,19 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
                         g[k] = gg[k]
                 g["output"] = guarded
 
+        # D-0123 style: rewrite the FINAL reply's LaTeX, re-grade prose fields.
+        if style:
+            styled, sty = _apply_style(g["output"], c.get("lang"), g["metrics"],
+                                       getattr(runner, "max_tokens", None), True)
+            g["style"] = sty
+            if styled != g["output"]:
+                gs = L.grade_case(c, styled, schemas_by_name)
+                for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",
+                          "value_ok", "persian_script", "latin_ratio", "empty_output"):
+                    if k in gs:
+                        g[k] = gs[k]
+                g["output"] = styled
+
         # If a tool produced the right value, the ANSWER is right even when the
         # model's prose has not yet restated it. Recording that separately
         # keeps tool-routing success distinct from prose quality.
@@ -1181,7 +1220,7 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
 
 
 def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
-                min_trust=0):
+                min_trust=0, style=False):
     """
     `min_trust` (F2 / D-0119) is passed to PassageIndex.search: passages below
     that authority never reach the prompt. 0 (the default) reproduces every
@@ -1195,7 +1234,10 @@ def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
         res = index.search(gold["query"], top_k=top_k, min_trust=min_trust)
         passages = list(res.hits)
         text, m = runner.generate(build_rag_prompt(
-            gold["query"], passages, refusal_language=refusal_language))
+            gold["query"], passages, refusal_language=refusal_language,
+            style=style))
+        text, sty = _apply_style(text, gold.get("lang"), m,
+                                 getattr(runner, "max_tokens", None), style)
 
         # Verify the answer's numbers against the evidence ACTUALLY shown to
         # the model -- not against the gold passage. Checking against evidence
@@ -1247,6 +1289,8 @@ def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
         g = L.grade_rag_case(gold, text, [h.doc_id for h in passages],
                              citations)
         g["arm"] = "rag"
+        if style:
+            g["style"] = sty
         g["question"] = gold["query"]
         g["output"] = text
         g["metrics"] = m
@@ -1478,6 +1522,17 @@ def main(argv=None):
     ap.add_argument("--execution-guard", action="store_true",
                     help="F1 (D-0119): replace any reply claiming an order or "
                          "trade happened with a fixed notice before grading")
+    ap.add_argument("--server", choices=("ollama", "lmstudio"), default=None,
+                    help="Phase 8 (D-0123): send the harness's OWN rendered "
+                         "prompt to a local Ollama (/api/generate raw) or LM "
+                         "Studio (/v1/completions) server; needs --model-id")
+    ap.add_argument("--server-url", default=None,
+                    help="loopback URL of the server (default: the backend's "
+                         "standard port)")
+    ap.add_argument("--style", action="store_true",
+                    help="D-0123: plain-text formulas (LaTeX rewritten), answer "
+                         "in the question's language, concise; records "
+                         "latin_runs and hit_budget per row")
     ap.add_argument("--min-trust", type=int, default=0,
                     help="F2 (D-0119): RAG retrieval authority floor; 80 = "
                          "EXCHANGE and above, the answer_gate quoting floor")
@@ -1493,8 +1548,25 @@ def main(argv=None):
         p("ERROR: %s" % exc)
         return 2
     remote = prov_spec["wire"] != "local"
+    server = getattr(a, "server", None)
 
-    if remote:
+    if server:
+        # Phase 8. A local SERVER is neither a remote API nor the in-process
+        # llama.cpp: the weights run on this machine, so the hardware
+        # thresholds DO apply, but the process doing the work is the server's,
+        # so this harness's own RSS is not the model's. Labelled accordingly.
+        if a.provider != "local" or a.base_url:
+            p("ERROR: --server replaces --provider/--base-url; use --server-url.")
+            return 2
+        try:
+            from llm.local_server import ServerRunner
+            runner = ServerRunner(server, a.model_id, base_url=a.server_url,
+                                  max_tokens=a.max_tokens, num_ctx=a.ctx,
+                                  num_thread=a.threads)
+        except Exception as exc:
+            p("ERROR: %s" % exc)
+            return 2
+    elif remote:
         if a.model:
             p("ERROR: --model is a local GGUF path and --provider %s is a "
               "remote API. Refusing to run: one of the two was a mistake, and "
@@ -1530,7 +1602,15 @@ def main(argv=None):
             p("       This is a bug in the harness, not a refusal and not a")
             p("       problem with your key or your provider. Nothing was sent.")
             return 3
-    else:
+    if server:
+        # --model is OPTIONAL for a server run, and when given it is the GGUF
+        # the server was created from: hashed so the run is still tied to
+        # VERIFIED weights. Without it the run has no weight provenance and
+        # says so (identity LOCAL_SERVER_UNHASHED).
+        if a.model and not os.path.isfile(a.model):
+            p("ERROR: model file not found: %s" % a.model)
+            return 2
+    elif not remote:
         if not a.model:
             p("ERROR: --model is required for --provider local.")
             return 2
@@ -1545,7 +1625,7 @@ def main(argv=None):
     try:
         from llama_cpp import Llama
     except ImportError:
-        if not remote:
+        if not remote and not server:
             p("ERROR: llama-cpp-python is not installed.")
             p("       pip install llama-cpp-python")
             return 2
@@ -1562,7 +1642,7 @@ def main(argv=None):
 
     proc = psutil.Process() if psutil else None
     model_size_gib = (round(os.path.getsize(a.model) / 1024.0 ** 3, 3)
-                      if not remote else None)
+                      if (not remote and a.model) else None)
 
     p("=" * 78)
     p("PHASE 4 -- RAG AND TOOL-ENABLED EVALUATION (MEASURED ON TARGET)")
@@ -1609,7 +1689,16 @@ def main(argv=None):
                           "thinking_by_default": None,
                           "note": "remote provider; no local file to hash"}
         load_s = 0.0
+    elif server and not a.model:
+        p("server      : %s  model id %s" % (server, a.model_id))
+        p("provenance  : NO sha256 (pass --model <the GGUF the server uses>)")
+        model_identity = {"sha256": None, "label": "LOCAL_SERVER_UNHASHED",
+                          "thinking_by_default": None,
+                          "note": "local server run without --model; weights not hashed"}
+        load_s = 0.0
     else:
+        if server:
+            p("server      : %s  model id %s" % (server, a.model_id))
         p("model       : %s" % os.path.basename(a.model))
         p("size        : %.3f GiB" % model_size_gib)
         # Hash BEFORE loading. It costs seconds on a GiB-sized file and it is
@@ -1651,7 +1740,9 @@ def main(argv=None):
     p("tools       : %d registered, 0 of them can execute a trade" % n_tools)
     p("")
 
-    if not remote:
+    if server:
+        load_s = 0.0
+    elif not remote:
         t0 = time.time()
         llm = Llama(model_path=a.model, n_ctx=a.ctx, n_threads=a.threads,
                     verbose=False)
@@ -1703,7 +1794,8 @@ def main(argv=None):
         p("-" * 78)
         report["arms"]["plain"] = run_arm_plain(
             runner, cases, schemas_by_name,
-            refusal_language=a.refusal_language, execution_guard=a.execution_guard)
+            refusal_language=a.refusal_language, execution_guard=a.execution_guard,
+            style=a.style)
         report["summaries"]["plain"] = L.summarize_eval(
             report["arms"]["plain"])
 
@@ -1715,7 +1807,7 @@ def main(argv=None):
         report["arms"]["tools"] = run_arm_tools(
             runner, cases, schemas_by_name, second_turn=a.second_turn,
             refusal_language=a.refusal_language,
-            execution_guard=a.execution_guard)
+            execution_guard=a.execution_guard, style=a.style)
         report["summaries"]["tools"] = L.summarize_eval(
             report["arms"]["tools"])
 
@@ -1727,7 +1819,8 @@ def main(argv=None):
         p("-" * 78)
         report["arms"]["rag"] = run_arm_rag(
             runner, gold_rows, index, a.top_k,
-            refusal_language=a.refusal_language, min_trust=a.min_trust)
+            refusal_language=a.refusal_language, min_trust=a.min_trust,
+            style=a.style)
         report["summaries"]["rag"] = L.summarize_rag(report["arms"]["rag"])
 
     peak, peak_label = peak_rss_gib(proc)
@@ -1737,6 +1830,9 @@ def main(argv=None):
         # would PASS effortlessly and that pass would be meaningless. Relabelled
         # so the verdict cannot be read as evidence about any model.
         peak_label = peak_label + "_HARNESS_ONLY_NO_MODEL_LOADED"
+    if server and peak_label != "UNKNOWN":
+        # The weights live in the SERVER process, not this one.
+        peak_label = peak_label + "_HARNESS_ONLY_MODEL_IN_SERVER_PROCESS"
 
     # ---- threshold verdicts ---------------------------------------------
     ev = report["summaries"].get("tools") or report["summaries"].get("plain") or {}
@@ -1762,7 +1858,7 @@ def main(argv=None):
         # a minimum of 8, 48.6-49.9 s TTFT against a maximum of 3.0), so letting
         # an API launder them into PASSes would erase the project's most
         # important finding.
-        "peak_rss_8k_gib_max": None if remote else peak,
+        "peak_rss_8k_gib_max": None if (remote or server) else peak,
         "generation_tokens_per_sec_min":
             None if remote else lat["decode_tokens_per_sec"],
         "time_to_first_token_2k_sec_max":
@@ -1862,7 +1958,13 @@ def main(argv=None):
         # future me -- treat an API run as satisfying the local hardware
         # thresholds. The label is the only thing standing between those two
         # very different files, so it says which one this is.
-        "label": "MEASURED_REMOTE_API" if remote else "MEASURED",
+        "label": ("MEASURED_REMOTE_API" if remote else
+                  "MEASURED_LOCAL_SERVER" if server else "MEASURED"),
+        "server": ({"backend": server, "model_id": a.model_id,
+                    "url": getattr(runner, "base_url", None),
+                    "prompt_path": ("/api/generate raw=true" if server == "ollama"
+                                    else "/v1/completions"),
+                    "template_applied_by_server": False} if server else None),
         "measures_local_hardware": not remote,
         "phase": 4,
         "route": ("A (user's own machine, remote provider)" if remote
@@ -1960,7 +2062,8 @@ def main(argv=None):
                       # them has the exact pre-D-0119 options and still merges
                       # with recorded files.
                       **({"execution_guard": True} if a.execution_guard else {}),
-                      **({"min_trust": int(a.min_trust)} if a.min_trust else {})),
+                      **({"min_trust": int(a.min_trust)} if a.min_trust else {}),
+                      **({"style": True} if a.style else {})),
                   # The tool-call cap is written into the payload so a capped
                   # run can never be mistaken for an uncapped one. It changes
                   # the tool_calls_attempted denominator, and a metric whose

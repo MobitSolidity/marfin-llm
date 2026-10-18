@@ -105,8 +105,20 @@ def compare(base, cand):
     if problems:
         return {"label": "REFUSED", "problems": problems}
     same = _ident(base)["sha256"] == _ident(cand)["sha256"]
+    rt_b = (base.get("server") or {}).get("backend") or "llama.cpp (in-process)"
+    rt_c = (cand.get("server") or {}).get("backend") or "llama.cpp (in-process)"
+    if same and rt_b != rt_c:
+        kind = "RUNTIME (same weights: %s vs %s)" % (rt_b, rt_c)
+    elif same:
+        kind = "REPEATABILITY (same weights)"
+    elif rt_b != rt_c:
+        return {"label": "REFUSED", "problems": [
+            "weights AND runtime both differ (%s vs %s): a quantisation and a "
+            "runtime effect cannot be told apart" % (rt_b, rt_c)]}
+    else:
+        kind = "QUANTISATION"
     out = {"label": "COMPUTED_FROM_MEASURED",
-           "kind": "REPEATABILITY (same weights)" if same else "QUANTISATION",
+           "kind": kind, "runtimes": [rt_b, rt_c],
            "baseline": _ident(base), "candidate": _ident(cand),
            "prompt_options": (base.get("model") or {}).get("prompt_options"),
            "summaries": {}, "regressions": [], "improvements": [],

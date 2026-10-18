@@ -181,16 +181,15 @@ MUTATIONS = [
     # wrapped each arm's system text, so the old literals vanished -- found
     # by checking every anchor of this file before running it, not after.
     (RUN, "the plain arm stops going through the prefilling builder",
-     '    return _prompt(_with_refusal_language(SYSTEM_BASE, refusal_language),\n'
-     '                   "Question: %s" % question)',
-     '    return chatml_prompt(_with_refusal_language(SYSTEM_BASE, refusal_language),\n'
-     '                   "Question: %s" % question)'),
+     # Re-anchored D-0123: --style wrapped the builders in _with_style(...).
+     '    return _prompt(_with_style(_with_refusal_language(SYSTEM_BASE, refusal_language), style),',
+     '    return chatml_prompt(_with_style(_with_refusal_language(SYSTEM_BASE, refusal_language), style),'),
     (RUN, "the tools arm stops going through the prefilling builder",
-     '    return _prompt(_with_refusal_language(SYSTEM_TOOLS + "\\n".join(lines),\n',
-     '    return chatml_prompt(_with_refusal_language(SYSTEM_TOOLS + "\\n".join(lines),\n'),
+     '    return _prompt(_with_style(_with_refusal_language(SYSTEM_TOOLS + "\\n".join(lines),\n',
+     '    return chatml_prompt(_with_style(_with_refusal_language(SYSTEM_TOOLS + "\\n".join(lines),\n'),
     (RUN, "the rag arm stops going through the prefilling builder",
-     "    return _prompt(\n        _with_refusal_language(SYSTEM_RAG, refusal_language),",
-     "    return chatml_prompt(\n        _with_refusal_language(SYSTEM_RAG, refusal_language),"),
+     "    return _prompt(\n        _with_style(_with_refusal_language(SYSTEM_RAG, refusal_language), style),",
+     "    return chatml_prompt(\n        _with_style(_with_refusal_language(SYSTEM_RAG, refusal_language), style),"),
     # And the budget, which is only defensible BECAUSE the prefill is wired.
     (RUN, "the completion budget returns to the runaway-think 2048",
      'DEFAULT_MAX_TOKENS = 512',
@@ -429,8 +428,8 @@ MUTATIONS = [
      '            for k in ("schema_valid_calls", "banned_hits", "abstained", "abstention_ok", "fabricated",\n'
      '                      "value_ok", "persian_script", "latin_ratio",\n'),
     (RUN, "D-0113 the refusal-language sentence is ON by default",
-     "def build_plain_prompt(question, refusal_language=False):",
-     "def build_plain_prompt(question, refusal_language=True):"),
+     "def build_plain_prompt(question, refusal_language=False, style=False):",
+     "def build_plain_prompt(question, refusal_language=True, style=False):"),
     (RUN, "D-0113 the refusal-language flag is silently ignored",
      "    if not refusal_language:\n        return system\n",
      "    if True:\n        return system\n"),
@@ -1219,7 +1218,14 @@ MUTATIONS = [
 
     # -- the registry's reasoning-mode facts --------------------------------
     (LIB, "the thinking model is recorded as NOT thinking",
+     # Re-anchored D-0123: D-0121's Q4_K_M/Q8_0 rows repeat the line; pin Q5_K_M's.
+     '        "file": "Qwen3.5-4B-Q5_K_M.gguf",\n'
+     '        "size_bytes": 3143656608,\n'
+     '        "is_pinned_revision": False,\n'
      '        "thinking_by_default": True,',
+     '        "file": "Qwen3.5-4B-Q5_K_M.gguf",\n'
+     '        "size_bytes": 3143656608,\n'
+     '        "is_pinned_revision": False,\n'
      '        "thinking_by_default": False,'),
     (LIB, "an unidentified file is GUESSED to be non-thinking",
      '                "thinking_by_default": None,',
@@ -1228,10 +1234,10 @@ MUTATIONS = [
      '        "size_bytes": 3143656608,',
      '        "size_bytes": 3143656609,'),
     (LIB, "the user's chosen artefact is claimed to be the pinned revision",
-     '        "is_pinned_revision": False,\n'
-     '        "thinking_by_default": True,',
-     '        "is_pinned_revision": True,\n'
-     '        "thinking_by_default": True,'),
+     '        "size_bytes": 3143656608,\n'
+     '        "is_pinned_revision": False,\n',
+     '        "size_bytes": 3143656608,\n'
+     '        "is_pinned_revision": True,\n'),
     (LIB, "the sha256 of the user's chosen artefact is altered by one character",
      '    "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39"',
      '    "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad40"'),

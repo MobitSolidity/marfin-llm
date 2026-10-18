@@ -1,6 +1,10 @@
 {
   "label": "COMPUTED_FROM_MEASURED",
   "kind": "QUANTISATION",
+  "runtimes": [
+    "llama.cpp (in-process)",
+    "llama.cpp (in-process)"
+  ],
   "baseline": {
     "file": "Qwen3.5-4B-Q5_K_M.gguf",
     "sha256": "8814232b85594dcd46c50e5b8b29324a7efe9e746edbe8a3d1df3d3fce7aad39",

@@ -120,7 +120,8 @@ tests/test_llm_providers.py \
 tests/test_console.py \
 tests/test_attribution.py \
 tests/test_redteam.py \
-tests/test_phase7.py"
+tests/test_phase7.py \
+tests/test_phase8.py"
 
 for t in $SUITES; do
   echo
@@ -576,6 +577,16 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: Phase 7 source not restored, or its oracle is red"
     fail=1; }
   [ $p7m_status -ne 0 ] && fail=1
+  echo
+  echo "--- Phase 8 style, thinking, local server (D-0123) --------------------"
+  p8m=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_phase8.py)
+  p8m_status=$?
+  echo "$p8m" | grep -E "seeded [0-9]+"
+  echo "$p8m" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$p8m" | grep -q "restored+green True" || {
+    echo "  ERROR: Phase 8 source not restored, or its oracle is red"
+    fail=1; }
+  [ $p8m_status -ne 0 ] && fail=1
 fi
 
 echo

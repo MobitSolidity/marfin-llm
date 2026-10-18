@@ -58,7 +58,8 @@ MUTATIONS = [
     (CQ, "UNKNOWN weights accepted", '        if ident.get("label") != "VERIFIED":', "        if False:"),
     (CQ, "incomplete run accepted", '        if not run.get("complete", False):', "        if False:"),
     (CQ, "same weights reported as a quantisation result",
-     '"REPEATABILITY (same weights)" if same else "QUANTISATION"', '"QUANTISATION"'),
+     # Re-anchored D-0123: the runtime-aware branch replaced the one-liner.
+     '        kind = "REPEATABILITY (same weights)"', '        kind = "QUANTISATION"'),
     (CQ, "fabricated treated as good-when-true", 'BAD_WHEN_TRUE = {"fabricated"}', "BAD_WHEN_TRUE = set()"),
     (CQ, "regressions and improvements swapped",
      '(out["regressions"] if good_b and not good_c else out["improvements"])',
