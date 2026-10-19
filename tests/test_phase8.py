@@ -471,5 +471,40 @@ _g2 = GM8.grade_one("peak_rss_8k_gib_max", 6.0, GM8.SPEC["peak_rss_8k_gib_max"],
                     {"peak_rss_gib": 4.71, "peak_rss_label": "MEASURED_PEAK"})
 check_true("an in-process RSS is still graded (4.71 <= 6.0 PASS)", _g2["verdict"] == "PASS", "(V)")
 
+# ===========================================================================
+section("D-0125: style as a display layer (no prompt change)")
+# ===========================================================================
+import apply_display_layer as DL                       # noqa: E402
+_Q4raw = json.load(open(os.path.join(ROOT, "evidence", "phase7_q4km_merged_2026-10-17.json"),
+                        encoding="utf-8"))
+_gold = {g["id"]: g for g in map(json.loads, open(os.path.join(
+    ROOT, "evals", "rag_gold_combined.jsonl"), encoding="utf-8")) if g}
+_dl, _rep = DL.apply(_Q4raw, _CASES, _gold)
+check_true("display layer on the recorded Q4 run: 0 LaTeX left, 9 rows rewritten",
+           not _rep["latex_left"] and len(_rep["rows_rewritten"]) == 9, "(M) %r" % len(_rep["rows_rewritten"]))
+check_true("no correctness field changes (only latin_ratio, which LaTeX inflated)",
+           all(c[1] == "latin_ratio" for c in _rep["grade_changes"]), "(M) %r" % _rep["grade_changes"])
+check_true("prose grades ARE recomputed: FA-CALC-001 latin_ratio 0.301 -> 0.163 once \\text is gone",
+           next(r for r in _dl["arms"]["plain"] if r["id"] == "FA-CALC-001")["latin_ratio"] == 0.163
+           and len(_rep["grade_changes"]) == 5, "(M)")
+check_true("deterministic calc stays 100 on both arms (prompt rules gave 87.5 then 62.5)",
+           _dl["summaries"]["plain"]["deterministic_calc_correctness_pct"] == 100.0
+           and _dl["summaries"]["tools"]["deterministic_calc_correctness_pct"] == 100.0, "(M)")
+_rw = next(r for r in _dl["arms"]["plain"] if r["id"] == "FA-CALC-001")
+check_true("the model's own text is kept in output_model; output is what the user sees",
+           "\\frac" in _rw["output_model"] and "\\frac" not in _rw["output"], "(V)")
+check_true("the display record carries latin_runs and hit_budget per row",
+           set(_rw["display"]) == {"latex_spans_rewritten", "latin_runs", "hit_budget"}, "(V)")
+check_true("labelled as recomputed, model not re-run, prompt unchanged",
+           _dl["label"].endswith("DISPLAY_LAYER") and _dl["display_layer"]["model_re_run"] is False
+           and _dl["display_layer"]["prompt_changed"] is False, "(V)")
+check_true("the recorded input is not mutated",
+           "output_model" not in next(r for r in _Q4raw["arms"]["plain"] if r["id"] == "FA-CALC-001"),
+           "(A)")
+_styled = json.loads(json.dumps(_Q4raw))
+_styled["model"]["prompt_options"] = dict(_styled["model"]["prompt_options"], style=True)
+check_true("a run whose prompts carried style rules is REFUSED (would double-count)",
+           bool(raises(lambda: DL.apply(_styled, _CASES, _gold), ValueError)), "(A)")
+
 print("")
 sys.exit(summary())

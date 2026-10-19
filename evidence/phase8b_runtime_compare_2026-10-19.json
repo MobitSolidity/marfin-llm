@@ -1,0 +1,69 @@
+{
+ "label": "COMPUTED_FROM_MEASURED",
+ "kind": "RUNTIME, same weights 00fe7986, same prompts, repeat_penalty 1.0 on all three",
+ "byte_identical": {
+  "inproc_vs_ollama": {
+   "plain": "1/21",
+   "tools": "1/21",
+   "rag": "0/32"
+  },
+  "inproc_vs_lmstudio_plain": "7/21",
+  "ollama_vs_lmstudio_plain": "1/21",
+  "first_run_D0124": {
+   "inproc_vs_ollama": "0/74",
+   "inproc_vs_lmstudio_plain": "0/21"
+  }
+ },
+ "prompt_tokens_equal": {
+  "plain": "21/21",
+  "rag": "32/32"
+ },
+ "conclusion": "repeat_penalty explained part of the gap for LM Studio (0/21 -> 7/21), little for Ollama (0/74 -> 2/74). Remaining divergence is a decoder/kernel difference (different llama.cpp builds compute slightly different logits; greedy argmax flips on near-ties, then the continuation diverges). INFERRED; not a configuration we can set. Consequence: results are per-runtime and every deployment runtime must be measured on its own.",
+ "compare_quants_runtime_verdict": "11 regressions / 4 improvements in-process -> Ollama (evidence/phase8b_compare_inproc_vs_ollama_2026-10-19.json)",
+ "latency": {
+  "inproc_ttft_2k_s": [
+   31.6,
+   35.61,
+   29.35
+  ],
+  "ollama_ttft_2k_s": [
+   52.91,
+   57.78,
+   54.4
+  ],
+  "lmstudio_ttft_2k_s": 35.65,
+  "all_tokenized_at_1963_1989_tokens": true,
+  "decode_tps": {
+   "inproc": [
+    4.94,
+    4.51,
+    5.0
+   ],
+   "ollama": [
+    4.59,
+    4.29,
+    4.3
+   ],
+   "lmstudio_wall_clock": 4.72
+  }
+ },
+ "user_task_manager_2026_10_19": {
+  "cmd1_ollama_run": {
+   "ram_mb": 4330,
+   "cpu_pct": 81.2
+  },
+  "cmd2_inproc": {
+   "ram_mb": 2039,
+   "cpu_pct": "90-98"
+  },
+  "cmd3_ollama_eval": {
+   "ram_mb": "4062-6762",
+   "cpu_pct": 80.6
+  },
+  "cmd4_lmstudio": {
+   "ram_mb": 2260,
+   "cpu_pct": 55
+  },
+  "note": "6762 MB = 6.30 GiB if MiB (Task Manager reports MB as MiB): over the 6.0 GiB cap at peak; column still not named"
+ }
+}

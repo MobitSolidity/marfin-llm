@@ -7394,3 +7394,57 @@ the Task Manager column are unknown, so this is re-measured in the rerun.
 **Open (user):** run `PHASE8_RERUN_FA.md` (~2 h ESTIMATED). Send `phase8b_style_merged.json`,
 `phase8b_ollama_merged.json`, `p8b_lm_plain.json`, the `ollama run --think=false` output, and RAM with the column
 named.
+
+## D-0125 — Phase 8 rerun graded: prompt-level style rules dropped for a display layer; runtime recommendation (2026-10-19)
+
+**Input (user):**
+- `phase8b_style_merged.json`, `phase8b_ollama_merged.json`, `p8b_lm_plain.json`.
+- Task Manager: #1 4330 MB / 81.2 %; #2 2039 MB / 90–98 %; #3 4062–6762 MB / 80.6 %; #4 2260 MB / 55 %.
+
+**D-0124 fixes verified (M):**
+- Ollama TTFT prompt tokenized at 1989 tokens (was 4433, estimated).
+- No cache hits: 52.9 / 57.8 / 54.4 s.
+- `server` block kept in the merge; `repeat_penalty` 1.0 recorded; sampling applied true.
+
+**Prompt rules fail a second time (M):**
+- In-process + rules + tool note: 3 PASS / 7 FAIL / 2 UNMEASURED.
+- deterministic_calc plain 62.5 (Phase 7: 100). Tool calls where expected 4/10 (Phase 7: 8/10).
+- 15 row regressions vs Phase 7.
+- Prose arithmetic errors: P/E 17.85, CAGR 10.5 %, 125 shares vs 250.
+- Ollama + rules: 2 / 7 / 3.
+
+**Decision:** prompt-level style rules are dropped from the recommended configuration. `--style` stays as a recorded,
+reproducible option.
+
+**Display layer instead** (`scripts/apply_display_layer.py`):
+- Applies `plain_math` to the reply and keeps the model's text in `output_model`. The prompt is unchanged.
+- On the recorded Phase 7 Q4 run: 0 LaTeX left (9 rows rewritten); 0 correctness fields changed (only latin_ratio);
+  tally 4 / 6 / 2; deterministic_calc 100; tool calls 8/10.
+- In-process greedy runs reproduce (D-0122), so this equals a live run.
+- Defect (b) is still detected (1 row, not rewritten). **Defect (c), 6 answers cut off at 512 tokens, is NOT solved
+  by this.**
+
+**Runtimes (M):**
+- Byte-identical vs in-process: LM Studio plain 7/21, Ollama 2/74.
+- `repeat_penalty` explained part of the LM Studio gap and little of the Ollama gap. The remainder is a decoder/build
+  difference (INFERRED).
+- TTFT: in-process 29.4–35.6 s, LM Studio 35.7 s, Ollama 52.9–57.8 s.
+- Ollama peak RAM 6762 MB = 6.30 GiB if MiB, over the cap.
+- Recommendation: in-process llama.cpp; LM Studio as the GUI alternative; Ollama not recommended on this machine.
+
+**Phase 8 acceptance:**
+- RAM: PASS (in-process, LM Studio); FAIL (Ollama).
+- Speed: FAIL, hardware-bound (accepted in D-0116).
+- Persian/English: valid with the display layer, except (c).
+- Tool integration through the orchestrator: PASS without prompt rules.
+
+**Tests:**
+- `test_phase8`: 94 → 103.
+- `mutate_phase8`: 56 → 61, 61/61 killed. One first-pass survivor (prose regrade not pinned) is now pinned.
+
+**Open (user):**
+1. Approve the display layer in place of the prompt rules.
+2. Choose the deployment runtime (recommended: in-process).
+3. Choose how to handle the 6 cut-off answers: A) raise max_tokens to 768 for all; B) automatic continuation only
+   when a reply hits the limit; C) accept as is.
+4. Approve closing Phase 8 → Phase 8A.
