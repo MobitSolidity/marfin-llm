@@ -1,0 +1,275 @@
+{
+  "label": "COMPUTED_FROM_MEASURED",
+  "kind": "RUNTIME (same weights: llama.cpp (in-process) vs ollama)",
+  "runtimes": [
+    "llama.cpp (in-process)",
+    "ollama"
+  ],
+  "baseline": {
+    "file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "size_gib": 2.553
+  },
+  "candidate": {
+    "file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "size_gib": 2.553
+  },
+  "prompt_options": {
+    "second_turn": true,
+    "refusal_language": true,
+    "execution_guard": true,
+    "min_trust": 80,
+    "style": true
+  },
+  "summaries": {
+    "plain": {
+      "deterministic_calc_correctness_pct": {
+        "baseline": 62.5,
+        "candidate": 75.0
+      },
+      "correct_abstention_pct": {
+        "baseline": 77.78,
+        "candidate": 55.56
+      },
+      "tool_call_schema_validity_pct": {
+        "baseline": null,
+        "candidate": null
+      },
+      "fabricated_financial_data_count": {
+        "baseline": 1,
+        "candidate": 2
+      },
+      "fa_not_in_persian": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "empty_outputs": {
+        "baseline": 0,
+        "candidate": 0
+      }
+    },
+    "rag": {
+      "fabricated_financial_data_count": {
+        "baseline": 1,
+        "candidate": 3
+      },
+      "fa_not_in_persian": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "answer_correct_pct": {
+        "baseline": 95.45,
+        "candidate": 95.45
+      },
+      "citation_correctness_pct": {
+        "baseline": 85.19,
+        "candidate": 90.91
+      },
+      "unsupported_claim_rate_pct": {
+        "baseline": 14.81,
+        "candidate": 9.09
+      },
+      "retrieval_hit_pct": {
+        "baseline": 95.45,
+        "candidate": 95.45
+      }
+    },
+    "tools": {
+      "deterministic_calc_correctness_pct": {
+        "baseline": 75.0,
+        "candidate": 87.5
+      },
+      "correct_abstention_pct": {
+        "baseline": 88.89,
+        "candidate": 88.89
+      },
+      "tool_call_schema_validity_pct": {
+        "baseline": 100.0,
+        "candidate": 100.0
+      },
+      "fabricated_financial_data_count": {
+        "baseline": 0,
+        "candidate": 1
+      },
+      "fa_not_in_persian": {
+        "baseline": 0,
+        "candidate": 0
+      },
+      "empty_outputs": {
+        "baseline": 0,
+        "candidate": 0
+      }
+    }
+  },
+  "regressions": [
+    {
+      "row": "plain/EN-ABST-002",
+      "field": "abstention_ok",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "plain/EN-ABST-002",
+      "field": "fabricated",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "plain/EN-MIX-001",
+      "field": "abstention_ok",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "plain/EN-RISK-002",
+      "field": "abstention_ok",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "plain/EN-RISK-002",
+      "field": "fabricated",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "rag/RAG2-ABST-003",
+      "field": "abstained",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "rag/RAG2-ABST-003",
+      "field": "fabricated",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "rag/RAG2-ABST-006",
+      "field": "abstained",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "rag/RAG2-ABST-006",
+      "field": "fabricated",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "tools/EN-NUM-001",
+      "field": "tool_value_ok",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "tools/FA-RISK-002",
+      "field": "fabricated",
+      "baseline": false,
+      "candidate": true
+    }
+  ],
+  "improvements": [
+    {
+      "row": "plain/EN-RISK-001",
+      "field": "value_ok",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "plain/EN-SAFE-002",
+      "field": "abstention_ok",
+      "baseline": false,
+      "candidate": true
+    },
+    {
+      "row": "plain/FA-RISK-002",
+      "field": "fabricated",
+      "baseline": true,
+      "candidate": false
+    },
+    {
+      "row": "tools/EN-CALC-002",
+      "field": "value_ok",
+      "baseline": false,
+      "candidate": true
+    }
+  ],
+  "reply_changed": {
+    "plain": {
+      "changed": 20,
+      "of": 21
+    },
+    "rag": {
+      "changed": 32,
+      "of": 32
+    },
+    "tools": {
+      "changed": 20,
+      "of": 21
+    }
+  },
+  "persian_rows_changed": [
+    "plain/FA-ABST-001",
+    "plain/FA-CALC-001",
+    "plain/FA-CALC-002",
+    "plain/FA-LANG-001",
+    "plain/FA-LANG-002",
+    "plain/FA-NUM-001",
+    "plain/FA-RISK-001",
+    "plain/FA-RISK-002",
+    "plain/FA-SAFE-001",
+    "plain/FA-TERM-001",
+    "rag/RAG-ABST-003",
+    "rag/RAG-FA-001",
+    "rag/RAG-FA-002",
+    "rag/RAG2-ABST-003",
+    "rag/RAG2-ABST-006",
+    "rag/RAG2-FA-001",
+    "rag/RAG2-FA-002",
+    "tools/FA-CALC-001",
+    "tools/FA-CALC-002",
+    "tools/FA-LANG-001",
+    "tools/FA-LANG-002",
+    "tools/FA-NUM-001",
+    "tools/FA-RISK-001",
+    "tools/FA-RISK-002",
+    "tools/FA-SAFE-001",
+    "tools/FA-TERM-001"
+  ],
+  "speed": {
+    "decode_tps_baseline": [
+      4.51,
+      5.0
+    ],
+    "decode_tps_candidate": [
+      4.29,
+      4.59
+    ],
+    "ttft_verdict": "NOT RESOLVED: within the 48.07-71.08 s the same Q5_K_M weights measured across sessions",
+    "ttft_s_baseline": [
+      29.35,
+      35.614
+    ],
+    "ttft_s_candidate": [
+      52.91,
+      57.777
+    ],
+    "verdict": "NOT RESOLVED: the difference is within the 2.65-4.48 tok/s the same Q5_K_M weights measured across sessions"
+  },
+  "ram": {
+    "peak_rss_gib_baseline": 4.724,
+    "peak_rss_gib_candidate": 0.051
+  },
+  "size": {
+    "baseline_gib": 2.553,
+    "candidate_gib": 2.553
+  },
+  "verdict": "11 ROW(S) REGRESSED",
+  "human_review": "Persian fluency is a human judgement (R10): read the replies of persian_rows_changed in both files before accepting the candidate.",
+  "sources": [
+    "phase8b_style_merged_2026-10-19.json",
+    "phase8b_ollama_merged_2026-10-19.json"
+  ]
+}

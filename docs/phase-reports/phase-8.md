@@ -228,3 +228,76 @@ raw `ollama run` text can still contain LaTeX.
 | Tool integration works through orchestrator | Schema validity 100 %, but tool use collapsed under `--style`; fix applied |
 
 **Next step:** `PHASE8_RERUN_FA.md`, about 2 h (ESTIMATED).
+
+---
+
+## Rerun, graded (2026-10-19, D-0125)
+
+Stored as `evidence/phase8b_*_2026-10-19.json` and graded with the same pipeline (model not re-run).
+
+### The D-0124 instrument fixes worked (M)
+| | first run | rerun |
+|---|---|---|
+| TTFT prompt size (Ollama) | 4433 tokens, estimated | **1989, tokenized** |
+| TTFT invocations 2 and 3 (Ollama) | 1.04 s and 1.07 s (KV-cache hits) | 57.8 s and 54.4 s (cold) |
+| `server` block in the merged file | lost | kept |
+| `repeat_penalty` sent | no | 1.0 on both servers |
+| sampling `applied` | null | true |
+
+### The prompt-rule approach fails twice (M)
+| | Phase 7 Q4 | 1st run (rules) | rerun (rules + tool note) |
+|---|---|---|---|
+| deterministic_calc, plain | **100** | 87.5 | 62.5 |
+| tool calls where expected | **8/10** | 2/10 | 4/10 |
+| row regressions vs Phase 7 | — | 12 | 15 |
+| English answers carrying Persian | 2 | 3 | 3 (now as parenthetical translations) |
+| LaTeX shown / budget hits | 8 / 6 | 0 / 0 | 0 / 0 |
+
+- The rerun's new arithmetic errors are in the model's own prose: P/E 17.85 instead of 17.86, CAGR 10.5 % instead
+  of 10 %, and 125 shares instead of 250. Asked to be brief, this 4B model computes inline and gets it wrong.
+- The tool note recovered only 2 of the 6 lost tool calls.
+
+**Decision (D-0125): drop the prompt rules and keep the deterministic part as a display layer.**
+`scripts/apply_display_layer.py` rewrites LaTeX in the reply before it is shown. The prompt is unchanged, and the
+model's own text is kept in `output_model`. In-process greedy runs reproduce byte-for-byte (D-0122), so applying it
+to the recorded Phase 7 Q4 run gives exactly what a live run would produce:
+
+| | Phase 7 Q4 + display layer |
+|---|---|
+| LaTeX shown to you | **0** (9 rows rewritten) |
+| correctness fields changed | **0** (only latin_ratio, which LaTeX had inflated) |
+| tally | **4 PASS / 6 FAIL / 2 UNMEASURED**, deterministic_calc 100, tool calls 8/10 |
+
+**Your three defects under this decision:**
+- **(a) LaTeX: solved.** It is solved deterministically, so it does not depend on the model obeying a rule.
+- **(b) Language mixing: still detected.** 1 row is flagged (plain/FA-CALC-002, as before) and recorded; it is not
+  rewritten.
+- **(c) Incomplete answers: not solved.** 6 rows still hit the 512-token limit. The two ways to finish them both
+  cost time and are listed for you below.
+
+### Runtimes (M; `evidence/phase8b_runtime_compare_2026-10-19.json`)
+| | in-process llama.cpp | LM Studio | Ollama |
+|---|---|---|---|
+| TTFT @ ~2K tokens (tokenized) | **29.4–35.6 s** | 35.7 s | 52.9–57.8 s |
+| decode tok/s | **4.51–5.00** | 4.72 (wall-clock) | 4.29–4.59 |
+| RAM | psutil peak 4.72 GiB; Task Manager 2039 MB | Task Manager 2260 MB | Task Manager **4062–6762 MB** (6.30 GiB if MiB, **over the 6.0 cap**) |
+| byte-identical replies vs in-process (plain) | — | 7/21 | 1/21 |
+
+- `repeat_penalty` explained part of the gap for LM Studio (0/21 → 7/21) but almost none for Ollama (0/74 → 2/74).
+- Prompt token counts are equal on every row, so the remaining difference comes from the decoder: different
+  llama.cpp builds produce slightly different logits, and greedy decoding diverges at near-ties. **INFERRED.** No
+  setting can remove it.
+- `compare_quants` RUNTIME verdict, in-process → Ollama: 11 regressions and 4 improvements.
+- **Results are therefore per runtime:** whichever runtime is deployed must itself be the one measured.
+
+### Phase 8 acceptance (SS.24)
+| Criterion | Result |
+|---|---|
+| Runs within RAM | in-process **PASS** (4.72 GiB); LM Studio PASS by Task Manager; **Ollama FAIL at peak** (6762 MB) |
+| Meets or approaches speed target | **FAIL**, hardware-bound: about 5 tok/s vs 8, TTFT about 30 s vs 3 (known since Phase 4, accepted in D-0116) |
+| Persian and English valid | with the display layer: LaTeX 0; 1 Persian row with English runs, flagged; 6 cut off (option below) |
+| Tool integration through orchestrator | **PASS** without prompt rules: schema validity 100 %, tool calls 8/10, executed and handed back by the orchestrator |
+
+**Recommendation:** deploy **in-process llama.cpp** (fastest, lowest RAM, the measured baseline), with **LM Studio**
+as the GUI alternative. **Ollama is not recommended on this machine:** its TTFT is about 1.7× slower and its peak
+RAM is over the cap.

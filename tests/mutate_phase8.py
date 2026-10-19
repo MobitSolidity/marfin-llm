@@ -150,6 +150,17 @@ MUTATIONS = [
      "                and False):"),
     ("deploy/ollama/Modelfile", "Modelfile repeat_penalty not pinned",
      "PARAMETER repeat_penalty 1.0\n", ""),
+    # ---- D-0125 display layer ----
+    ("scripts/apply_display_layer.py", "display layer does not rewrite",
+     "            shown, n = ST.plain_math(text)", "            shown, n = text, 0"),
+    ("scripts/apply_display_layer.py", "model text not preserved",
+     '            r["output_model"] = text\n', ""),
+    ("scripts/apply_display_layer.py", "styled run not refused",
+     "        raise ValueError(\"this run's prompts already carried", "        print(\"this run's prompts already carried"),
+    ("scripts/apply_display_layer.py", "prose grades not recomputed",
+     "                if k in g and r.get(k) != g[k]:", "                if False:"),
+    ("scripts/apply_display_layer.py", "input mutated in place",
+     "    new = copy.deepcopy(run)", "    new = run"),
 ]
 
 
