@@ -1,0 +1,28 @@
+{
+  "path": "evals/rag_corpus_combined.jsonl",
+  "sha256": "7e3e0ab2e0ccffd2572ace472099857c332c6c8004714d48c5284b1c105f27a0",
+  "n_passages": 21,
+  "doc_ids": [
+    "FIX-AAPL-10K-2022",
+    "FIX-AAPL-10K-2023",
+    "FIX-AAPL-10K-2023-FA",
+    "FIX-FRED-CPI",
+    "FIX-MSFT-10K-2023",
+    "FIX-NOISE-MDNA",
+    "FIX-NOISE-RISK",
+    "SEC-AAPL-10K-FY2023",
+    "SEC-AAPL-10K-FY2024",
+    "SEC-AAPL-10K-FY2024-FA",
+    "SEC-GOOGL-10K-FY2023",
+    "SEC-GOOGL-10K-FY2024",
+    "SEC-JNJ-10K-FY2023",
+    "SEC-JNJ-10K-FY2024",
+    "SEC-MSFT-10K-FY2024",
+    "SEC-MSFT-10K-FY2025",
+    "SEC-NOISE-GOVERNANCE",
+    "SEC-NOISE-PROPERTIES",
+    "SEC-WMT-10K-FY2024",
+    "SEC-WMT-10K-FY2025"
+  ],
+  "newest_filed": "2025-07-30"
+}

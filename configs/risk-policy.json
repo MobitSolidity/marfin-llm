@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "decision": "D-0128",
+  "environment": "PAPER",
+  "reviewed_on": "2026-10-20",
+  "reviewed_by": "assistant under user delegation (D-0126); human sign-off pending",
+  "human_approved": false,
+  "limits": {
+    "instrument_allowlist": ["AAPL", "MSFT", "GOOGL", "JNJ", "WMT"],
+    "max_order_notional": 10000.0,
+    "max_daily_notional": 50000.0,
+    "max_position_qty": 1000.0,
+    "max_concentration_pct": 50.0,
+    "max_daily_loss": 1000.0,
+    "max_orders_per_minute": 5,
+    "price_deviation_pct": 1.0,
+    "max_quote_age_s": 5.0,
+    "preview_ttl_s": 60.0,
+    "allow_short": false,
+    "max_leverage": 1.0
+  }
+}

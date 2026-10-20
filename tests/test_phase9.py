@@ -124,7 +124,7 @@ for dp, _, fs in os.walk(os.path.join(ROOT, "src")):
                 for m in mods:
                     top = m.split(".")[0]
                     if top not in sys.stdlib_module_names and top not in (
-                            "calc", "execution", "llm", "market", "rag", "safety", "tools", "phase4_lib"):
+                            "calc", "execution", "llm", "maintenance", "market", "rag", "safety", "tools", "phase4_lib"):
                         _third.add("SRC:" + top)
 check_true("src/ is stdlib-only, as the docs say", not any(x.startswith("SRC:") for x in _third),
            "(V) %r" % sorted(x for x in _third if x.startswith("SRC:")))

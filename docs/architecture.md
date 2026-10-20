@@ -19,6 +19,9 @@
  execution  ─► src/execution/mode.py      (4 modes from a config FILE, never from the model)
               src/execution/broker_tools.py (preview only; every live write refuses)
               src/execution/paper.py     (Phase 8A paper engine + simulated venue)
+
+ maintenance ─► src/maintenance/{monitor,release}.py, tools/maintain.py
+                 (Phase 10: offline checks, release manifests, rollback; reads the paper audit log only)
 ```
 
 **Separation (SS.5.6) is enforced by the import graph, and tests assert it:**

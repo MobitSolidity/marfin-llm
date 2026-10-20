@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": 9,
-  "phase_status": "PHASE_9_PASS_DOCS_PINNED_TO_CODE",
+  "current_phase": 10,
+  "phase_status": "PHASE_10_BUILT_AWAITING_USER_ACCEPTANCE",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -42,7 +42,7 @@
   "active_mode": "ANALYSIS_ONLY",
   "live_trading_enabled": false,
   "capability_manifest_version": "0.1.0",
-  "risk_policy_version": null,
+  "risk_policy_version": "configs/risk-policy.json (2026-10-20, human_approved=false)",
   "market_data_providers": [
     "alpha_vantage_free_tier"
   ],
@@ -511,7 +511,12 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": null,
+  "awaiting_approval_for": [
+    "Phase 10 final acceptance (SS.24)",
+    "configs/risk-policy.json human_approved",
+    "FRED API key",
+    "project-code licence"
+  ],
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2949,5 +2954,45 @@
       "mutate_phase9": "16/16"
     },
     "open": "project-code licence not chosen (owner decision)"
+  },
+  "D-0128_phase10_monitoring_maintenance_2026_10_20": {
+    "status": "BUILT_AWAITING_USER_ACCEPTANCE",
+    "version": "0.10.0",
+    "deliverables": [
+      "src/maintenance/monitor.py",
+      "src/maintenance/release.py",
+      "tools/maintain.py",
+      "configs/maintenance-policy.json",
+      "configs/risk-policy.json",
+      "VERSION",
+      "releases/0.10.0.json",
+      "releases/index-manifest.json",
+      "releases/benchmark-baseline.json",
+      "releases/dependencies.lock.json",
+      "docs/maintenance.md",
+      "docs/incident-response.md",
+      "docs/phase-reports/phase-10.md"
+    ],
+    "report_2026_10_20": {
+      "status": "DUE",
+      "critical": 0,
+      "warn": [
+        "fred unverified end to end (no key)",
+        "risk limits not human-approved"
+      ]
+    },
+    "tests": {
+      "test_phase10": 186,
+      "mutate_phase10": "52/52"
+    },
+    "open": [
+      "Phase 10 final acceptance (user)",
+      "human_approved risk limits",
+      "FRED key",
+      "project-code licence",
+      "llama-cpp-python version on target",
+      "benchmark refresh due 2026-12-16"
+    ],
+    "phase_11": "optional; never automatic; all SS.6.1 prerequisites False"
   }
 }
