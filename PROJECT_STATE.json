@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": "8A",
-  "phase_status": "PHASE_8A_PASS_PAPER_ENGINE_SIMULATED_VENUE",
+  "current_phase": 9,
+  "phase_status": "PHASE_9_PASS_DOCS_PINNED_TO_CODE",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -2930,5 +2930,24 @@
       "assertions": 4521,
       "skipped": 0
     }
+  },
+  "D-0127_phase9_docs_model_card_2026_10_20": {
+    "deliverables": [
+      "MODEL_CARD.md",
+      "LICENSES.md",
+      "docs/architecture.md",
+      "docs/deployment.md",
+      "docs/execution-safety.md",
+      "docs/tradingview-integration.md",
+      "docs/known-failures.md",
+      "docs/error-reporting.md",
+      "requirements.txt",
+      ".env.example"
+    ],
+    "tests": {
+      "test_phase9": 72,
+      "mutate_phase9": "16/16"
+    },
+    "open": "project-code licence not chosen (owner decision)"
   }
 }
