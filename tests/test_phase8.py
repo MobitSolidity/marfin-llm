@@ -506,5 +506,60 @@ _styled["model"]["prompt_options"] = dict(_styled["model"]["prompt_options"], st
 check_true("a run whose prompts carried style rules is REFUSED (would double-count)",
            bool(raises(lambda: DL.apply(_styled, _CASES, _gold), ValueError)), "(A)")
 
+# ===========================================================================
+section("D-0126: --display and --continue-budget in the harness")
+# ===========================================================================
+
+
+class _Seq(object):
+    """A fake runner returning scripted replies, recording every prompt."""
+
+    def __init__(self, replies, max_tokens=512):
+        self.replies, self.max_tokens, self.prompts = list(replies), max_tokens, []
+        self.calls = self.thinking_replies = self.truncated_thinking = 0
+
+    def generate(self, prompt, max_tokens=None):
+        self.prompts.append((str(prompt), max_tokens))
+        text, ct = self.replies.pop(0)
+        return text, {"seconds": 1.0, "prompt_tokens": 9, "completion_tokens": ct,
+                      "raw_output": text}
+
+
+_c1 = [c for c in _CASES.values() if c["id"] == "FA-CALC-001"]
+_r0 = _Seq([("P/E $$\\frac{150}{8.40}$$ = 17.86", 40)])
+_out0 = RP.run_arm_plain(_r0, _c1, {}, display=True)[0]
+check_true("--display: the PROMPT is the plain prompt (no style rules)",
+           _r0.prompts[0][0] == str(RP.build_plain_prompt(_c1[0]["prompt"])), "(V)")
+check_true("--display: the user sees no LaTeX; the model text is kept in output_model",
+           "\\frac" not in _out0["output"] and "\\frac" in _out0["output_model"]
+           and _out0["display"]["latex_spans_rewritten"] == 1, "(V)")
+_r1 = _Seq([("part one", 512), (" and the end.", 30)])
+_out1 = RP.run_arm_plain(_r1, _c1, {}, display=True, continue_budget=256)[0]
+check_true("a reply that hit the budget is continued ONCE with the extra budget",
+           len(_r1.prompts) == 2 and _r1.prompts[1][1] == 256
+           and _r1.prompts[1][0].endswith("part one")
+           and _out1["output"] == "part one and the end.", "(V) %r" % _r1.prompts[-1:])
+check_true("the continued reply is recorded as complete, with its own cost",
+           _out1["display"]["hit_budget"] is False
+           and _out1["metrics"]["continuation"]["completion_tokens"] == 30
+           and _out1["metrics"]["seconds"] == 2.0, "(V)")
+_r2 = _Seq([("short answer", 40)])
+RP.run_arm_plain(_r2, _c1, {}, display=True, continue_budget=256)
+check_true("a finished reply is NOT continued (no extra cost)", len(_r2.prompts) == 1, "(V)")
+_r3 = _Seq([("x" * 10, 512), ("y", 256)])
+_o3 = RP.run_arm_plain(_r3, _c1, {}, display=True, continue_budget=256)[0]
+check_true("a continuation that is itself cut is still flagged hit_budget",
+           _o3["display"]["hit_budget"] is True, "(A)")
+_r4 = _Seq([('<tool_call>{"name": "pe_ratio", "arguments": {"price": 150, "eps": 8.4}}</tool_call>', 512)])
+RP._continue_if_cut(_r4, "P", _r4.replies[0][0], {"completion_tokens": 512,
+                                                   "raw_output": "<tool_call>"}, 256)
+check_true("a reply with a tool call is never continued (the orchestrator executes it)",
+           len(_r4.prompts) == 0, "(A)")
+check_true("--continue-budget 0 (default) never continues: recorded runs reproduce",
+           RP._continue_if_cut(_Seq([]), "P", "t", {"completion_tokens": 512}, 0)
+           == ("t", {"completion_tokens": 512}), "(V)")
+check_true("--style and --display together are refused",
+           RP.main(["--style", "--display", "--model", "x.gguf"]) == 2, "(A)")
+
 print("")
 sys.exit(summary())

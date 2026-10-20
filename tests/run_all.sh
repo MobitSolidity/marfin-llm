@@ -121,7 +121,9 @@ tests/test_console.py \
 tests/test_attribution.py \
 tests/test_redteam.py \
 tests/test_phase7.py \
-tests/test_phase8.py"
+tests/test_phase8.py \
+tests/test_phase8a.py \
+tests/test_phase9.py"
 
 for t in $SUITES; do
   echo
@@ -587,6 +589,26 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: Phase 8 source not restored, or its oracle is red"
     fail=1; }
   [ $p8m_status -ne 0 ] && fail=1
+  echo
+  echo "--- Phase 8A paper-trading safety (D-0126) ----------------------------"
+  p8am=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_phase8a.py)
+  p8am_status=$?
+  echo "$p8am" | grep -E "seeded [0-9]+"
+  echo "$p8am" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$p8am" | grep -q "restored+green True" || {
+    echo "  ERROR: Phase 8A source not restored, or its oracle is red"
+    fail=1; }
+  [ $p8am_status -ne 0 ] && fail=1
+  echo
+  echo "--- Phase 9 documentation vs code (D-0127) ----------------------------"
+  p9m=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_phase9.py)
+  p9m_status=$?
+  echo "$p9m" | grep -E "seeded [0-9]+"
+  echo "$p9m" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$p9m" | grep -q "restored+green True" || {
+    echo "  ERROR: Phase 9 source not restored, or its oracle is red"
+    fail=1; }
+  [ $p9m_status -ne 0 ] && fail=1
 fi
 
 echo

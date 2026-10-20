@@ -1,0 +1,7 @@
+# marfin-llm runtime (target: Windows 11, Intel i5-12400, CPU only). Python 3.12.
+# Everything under src/ is stdlib-only; these are needed to RUN the model and measure it.
+llama-cpp-python>=0.3        # in-process inference (recommended runtime, D-0126)
+psutil>=5.9                  # peak RSS measurement
+# test-only (optional; the suites skip nothing without them but some checks need them):
+jinja2>=3.1                  # render the GGUF / HF chat templates in tests
+tokenizers>=0.15             # token counting in tests/analysis
