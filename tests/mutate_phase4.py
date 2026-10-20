@@ -971,31 +971,46 @@ MUTATIONS = [
      '            "reasoning": "",'),
 
     # -- the runner must do the split, and must count what it did ------------
+    # D-0128: RemoteRunner repeats this block verbatim, which made every
+    # one-line anchor here ambiguous (count 2) and SKIPPED 7 mutants. The
+    # anchors now carry the LOCAL ModelRunner's own context (ptok/ctok).
     (RUN, "the runner grades the RAW reply, reasoning and all",
-     '        return split["answer"], {',
-     "        return text, {"),
+     '        return split["answer"], {\n'
+     '            "seconds": round(elapsed, 3),\n'
+     '            "prompt_tokens": ptok,',
+     '        return text, {\n'
+     '            "seconds": round(elapsed, 3),\n'
+     '            "prompt_tokens": ptok,'),
     (RUN, "lost answers are not counted, so the budget failure is invisible",
-     '        if split["truncated"]:\n'
-     "            self.truncated_thinking += 1",
-     '        if split["truncated"]:\n'
-     "            pass"),
+     '        ptok = usage.get("prompt_tokens", 0)\n\n        split = L.strip_thinking(text)\n        if split["had_thinking"]:\n            self.thinking_replies += 1\n        if split["truncated"]:\n            self.truncated_thinking += 1',
+     '        ptok = usage.get("prompt_tokens", 0)\n\n        split = L.strip_thinking(text)\n        if split["had_thinking"]:\n            self.thinking_replies += 1\n        if split["truncated"]:\n            self.truncated_thinking += 1'.replace("self.truncated_thinking += 1", "pass")),
     (RUN, "thinking replies are not counted",
-     '        if split["had_thinking"]:\n'
-     "            self.thinking_replies += 1",
-     '        if split["had_thinking"]:\n'
-     "            pass"),
+     '        ptok = usage.get("prompt_tokens", 0)\n\n        split = L.strip_thinking(text)\n        if split["had_thinking"]:\n            self.thinking_replies += 1\n        if split["truncated"]:\n            self.truncated_thinking += 1',
+     '        ptok = usage.get("prompt_tokens", 0)\n\n        split = L.strip_thinking(text)\n        if split["had_thinking"]:\n            self.thinking_replies += 1\n        if split["truncated"]:\n            self.truncated_thinking += 1'.replace("self.thinking_replies += 1", "pass")),
     (RUN, "the raw reply is not preserved, so the split cannot be audited",
+     '            # not silently indistinguishable from an empty one.\n'
      '            "raw_output": text,',
+     '            # not silently indistinguishable from an empty one.\n'
      '            "raw_output": "",'),
     (RUN, "the metrics no longer flag a truncated reasoning block",
+     '                           if elapsed > 0 and ctok else None),\n'
+     '            "had_thinking": split["had_thinking"],\n'
      '            "thinking_truncated": split["truncated"],',
+     '                           if elapsed > 0 and ctok else None),\n'
+     '            "had_thinking": split["had_thinking"],\n'
      '            "thinking_truncated": False,'),
     (RUN, "the metrics no longer report that reasoning was present",
+     '                           if elapsed > 0 and ctok else None),\n'
      '            "had_thinking": split["had_thinking"],',
+     '                           if elapsed > 0 and ctok else None),\n'
      '            "had_thinking": False,'),
     (RUN, "the reasoning length is reported as zero regardless",
-     '            "reasoning_chars": len(split["reasoning"]),',
-     '            "reasoning_chars": 0,'),
+     '            "thinking_truncated": split["truncated"],\n'
+     '            "reasoning_chars": len(split["reasoning"]),\n'
+     '            # Kept so a human',
+     '            "thinking_truncated": split["truncated"],\n'
+     '            "reasoning_chars": 0,\n'
+     '            # Kept so a human'),
 
     # The 1-token TTFT probe ALWAYS leaves <think> unterminated. If the speed
     # probe's own truncation is counted, the run reports lost answers that no
@@ -1030,8 +1045,8 @@ MUTATIONS = [
     # by anything asserted on. It is now read FROM the constant, and these
     # mutations check that neither consumer can quietly stop doing so.
     (RUN, "the ModelRunner default stops reading the shared constant",
-     "    def __init__(self, llm, max_tokens=DEFAULT_MAX_TOKENS):",
-     "    def __init__(self, llm, max_tokens=768):"),
+     "    def __init__(self, llm, max_tokens=DEFAULT_MAX_TOKENS,",
+     "    def __init__(self, llm, max_tokens=768,"),
     (RUN, "the argparse default stops reading the shared constant",
      'ap.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)',
      'ap.add_argument("--max-tokens", type=int, default=768)'),
@@ -1049,7 +1064,8 @@ MUTATIONS = [
      '    p("max_tokens  : %d" % a.max_tokens)',
      "    pass"),
     (RUN, "the header claims to know the reasoning mode of an unknown file",
-     '        p("thinking    : UNKNOWN for this file (handled either way)")',
+     '        p("thinking    : UNKNOWN for this %s (handled either way)"\n'
+     '          % ("provider" if remote else "file"))',
      '        p("thinking    : no")'),
     (RUN, "the results file stops recording the lost-answer count",
      '                  "answers_lost_to_thinking_truncation":\n'

@@ -1,0 +1,66 @@
+{
+  "source": "evidence/phase7_q4km_verdict_2026-10-17.json",
+  "measured_on": "2026-10-17",
+  "results": {
+    "citation_correctness_pct_min": {
+      "verdict": "FAIL",
+      "value": 90.48,
+      "direction": "min"
+    },
+    "correct_abstention_pct_min": {
+      "verdict": "FAIL",
+      "value": 88.89,
+      "direction": "min"
+    },
+    "deterministic_calc_correctness_pct_min": {
+      "verdict": "PASS",
+      "value": 100.0,
+      "direction": "min"
+    },
+    "fabricated_financial_data_count_max": {
+      "verdict": "FAIL",
+      "value": 1,
+      "direction": "max"
+    },
+    "generation_tokens_per_sec_min": {
+      "verdict": "FAIL",
+      "value": 4.1,
+      "direction": "min"
+    },
+    "model_file_size_gib_max": {
+      "verdict": "PASS",
+      "value": 2.553,
+      "direction": "max"
+    },
+    "paper_live_confusion_count_max": {
+      "verdict": "UNMEASURED",
+      "value": null,
+      "direction": "max"
+    },
+    "peak_rss_8k_gib_max": {
+      "verdict": "PASS",
+      "value": 4.73,
+      "direction": "max"
+    },
+    "persian_fluency_regression_pct_max": {
+      "verdict": "UNMEASURED",
+      "value": null,
+      "direction": "max"
+    },
+    "time_to_first_token_2k_sec_max": {
+      "verdict": "FAIL",
+      "value": 30.115,
+      "direction": "max"
+    },
+    "tool_call_schema_validity_pct_min": {
+      "verdict": "PASS",
+      "value": 100.0,
+      "direction": "min"
+    },
+    "unsupported_claim_rate_pct_max": {
+      "verdict": "FAIL",
+      "value": 7.69,
+      "direction": "max"
+    }
+  }
+}

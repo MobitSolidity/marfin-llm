@@ -7526,3 +7526,63 @@ it is recorded as an open owner decision.
 
 **Next:** Phase 10 (monitoring and maintenance) under the same delegation. SS.24: "Final acceptance requires user
 approval."
+
+## D-0128 — Phase 10 (monitoring and maintenance) BUILT; final acceptance awaits user approval (2026-10-20)
+
+**Context:** the user said "start Phase 10". The D-0126 delegation still applies, but SS.24 states: "Final acceptance
+requires user approval." Phase 10 is therefore **built and tested, not accepted**.
+
+**Deliverables (all 12 SS.24 tasks):**
+- Checks: `src/maintenance/monitor.py` (8 checks plus `summarize`).
+- Versioning and rollback: `src/maintenance/release.py`.
+- CLI: `tools/maintain.py`. Exit codes: 0 OK, 1 DUE, 2 FAIL.
+- Config: `configs/maintenance-policy.json`, `configs/risk-policy.json`.
+- Version: `VERSION` 0.10.0.
+- Recorded state: `releases/{0.10.0, index-manifest, benchmark-baseline, dependencies.lock}.json`.
+- Docs: `docs/maintenance.md`, `docs/incident-response.md`, `docs/phase-reports/phase-10.md`.
+
+**Decisions made under delegation:**
+1. **Offline checks only.** Network probes are injected. A check that did not run is reported as DUE, never as OK.
+2. **Thresholds** (all inclusive):
+
+   | Item | Limit |
+   |---|---|
+   | Source re-verification | 90 d |
+   | Legal re-review | 120 d |
+   | Corpus newest filing | 550 d |
+   | Dependency review | 90 d |
+   | Risk-policy review | 90 d |
+   | Benchmark refresh | 60 d |
+   | Reconciliation | every 15 min; overdue after 30 min |
+
+3. **Paper risk limits** are recorded as the engine defaults (allowlist AAPL, MSFT, GOOGL, JNJ, WMT; 10,000 per order;
+   no shorting; leverage 1). They are recorded with `human_approved: false`. Only the owner may set it to true, and the
+   routine reports a WARN until then.
+4. **Release manifests** are immutable and hold no commit hash, because squashes rewrite hashes. Rollback looks up the
+   commit that added the manifest from git history, and refuses if there is none or if the model on disk differs.
+   A model, prompt or inference change needs at least a minor bump.
+5. **A tampered audit log** is reported as CRITICAL rather than crashing. A missing log is a WARN.
+6. `--release` over an existing version prints REFUSED and exits 2. Before this fix it ended in a traceback.
+
+**Report today (V):** DUE. 0 CRITICAL, 2 WARN: FRED not verified end to end (no key), and the risk limits not
+human-approved.
+
+**Tests:**
+- `tests/test_phase10.py`: 186 checks.
+- `tests/mutate_phase10.py`: 52/52 killed. The first pass had 7 survivors, all fixed with isolated tests: dependency
+  review date missing, release overwrite, version regression, semver string sort, versioning wiring, RiskLimits
+  wiring, SEV table rows.
+- `run_all`: 25 suites, 4779 assertions, 0 skipped. `--mutate`: every battery has 0 survivors and 0 skips.
+- **Found by this phase's full `--mutate` sweep:** `mutate_phase4` had 9 SKIPPED mutants. The D-0126 edits to
+  `scripts/run_phase4.py` made 7 anchors ambiguous, because RemoteRunner repeats ModelRunner's split block, and moved
+  2 others. The anchors now carry the local runner's own context, and the battery is back to 332/332 killed. The
+  D-0126 report had not re-run this battery, so those 9 checks were silently missing from that phase.
+
+**Open owner items:**
+- Phase 10 final acceptance.
+- `human_approved` for the risk limits.
+- FRED API key.
+- Project-code licence.
+- llama-cpp-python version on the i5-12400.
+- Benchmark refresh, due by 2026-12-16.
+- Phase 11 stays optional and never automatic.

@@ -11,7 +11,7 @@ paper/live trading controls.
 |---|---|
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
-| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 9 (PASS). |
+| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 10 (built; awaiting user acceptance). |
 | `DECISIONS.md` | Append-only decision log (D-0001 … D-0127). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
@@ -22,6 +22,7 @@ paper/live trading controls.
 | `docs/phase-reports/phase-6.md` · `scripts/grade_phase6.py` | **Phase 6: CLOSED (D-0121), all criteria PASS** after F1–F4. The first run (D-0118) failed 2 critical rows. Final grade: `evidence/phase6_graded2_post-D0121_2026-10-16.json`. |
 | `MODEL_CARD.md` · `LICENSES.md` | **Phase 9 (D-0127):** the SS.23 model card (31 fields, every number pinned to evidence) and the generated licence registry. |
 | `docs/architecture.md` · `docs/deployment.md` · `docs/execution-safety.md` · `docs/tradingview-integration.md` · `docs/known-failures.md` · `docs/error-reporting.md` | Phase 9 documentation; `tests/test_phase9.py` (72) checks each claim against the code, and `tests/mutate_phase9.py` (16/16) makes each claim false. |
+| `tools/maintain.py` · `src/maintenance/` · `releases/` · `docs/maintenance.md` · `docs/incident-response.md` | **Phase 10 (D-0128):** offline maintenance checks (exit 0 OK / 1 DUE / 2 FAIL), immutable release manifests, verified rollback, incident runbook; `tests/test_phase10.py` (186), `tests/mutate_phase10.py` (52/52). |
 | `requirements.txt` · `.env.example` | Runtime dependencies; every secret name the code reads (no values). |
 | `PHASE8_CONFIRM_RUN_FA.md` | **Optional run, in Persian (D-0126):** the final configuration (`--display --continue-budget 256`), ~50 min ESTIMATED. |
 | `docs/phase-reports/phase-8a.md` · `src/execution/paper.py` | **Phase 8A: PASS (D-0126).** Paper engine: two-phase protocol, 17 checks, audit log, idempotency, kill switch, reconciliation. `tests/test_phase8a.py` (120) / `tests/mutate_phase8a.py` (60/60). |
@@ -120,10 +121,10 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **9 — Documentation and Model Card: PASS** (D-0127). Phases 8 and 8A closed (D-0126). |
+| Current phase | **10 — Monitoring and Maintenance: BUILT, awaiting user approval** (D-0128). `python3 tools/maintain.py` → DUE (0 CRITICAL, 2 WARN: FRED key, human approval of risk limits). Phase 9 PASS (D-0127). |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Phase 10 (monitoring and maintenance). Optional model run: `PHASE8_CONFIRM_RUN_FA.md`. Open owner decision: a licence for the project code. |
+| Next | Owner: accept Phase 10; approve `configs/risk-policy.json`; supply a FRED key; choose a project licence. Phase 11 (live) is optional and never automatic. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

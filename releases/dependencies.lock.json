@@ -1,0 +1,9 @@
+{
+  "note": "Versions reviewed for D-0128. llama-cpp-python's version is the one on the target machine and is UNVERIFIED here (the sandbox cannot install it); record it from `pip show llama-cpp-python` on the i5-12400.",
+  "packages": {
+    "llama-cpp-python": {"version": null, "reviewed_on": "2026-10-20", "licence": "MIT"},
+    "psutil": {"version": "7.2.2", "reviewed_on": "2026-10-20", "licence": "BSD-3-Clause"},
+    "jinja2": {"version": "3.1.6", "reviewed_on": "2026-10-20", "licence": "BSD-3-Clause"},
+    "tokenizers": {"version": "0.23.2", "reviewed_on": "2026-10-20", "licence": "Apache-2.0"}
+  }
+}

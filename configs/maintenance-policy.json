@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "decision": "D-0128",
+  "note": "Every Phase 10 check reads its threshold from here. Changing a number changes the policy hash recorded in the release manifest.",
+  "source_reverify_days": 90,
+  "legal_review_days": 120,
+  "corpus_filing_max_age_days": 550,
+  "dependency_review_days": 90,
+  "risk_policy_review_days": 90,
+  "benchmark_max_age_days": 60,
+  "reconciliation_interval_minutes": 15,
+  "reconciliation_overdue_factor": 2.0
+}
