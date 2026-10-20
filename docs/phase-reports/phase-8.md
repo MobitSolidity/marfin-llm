@@ -301,3 +301,19 @@ to the recorded Phase 7 Q4 run gives exactly what a live run would produce:
 **Recommendation:** deploy **in-process llama.cpp** (fastest, lowest RAM, the measured baseline), with **LM Studio**
 as the GUI alternative. **Ollama is not recommended on this machine:** its TTFT is about 1.7× slower and its peak
 RAM is over the cap.
+
+---
+
+## Closed (2026-10-20, D-0126)
+
+The user delegated all four open decisions. The decisions and the reasons:
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **Display layer, not prompt rules.** `--display` is now a harness flag (the model text is kept in `output_model`); `--style` is kept only to reproduce D-0123/D-0124. | Two runs measured an accuracy cost from the rules (calc 100 → 87.5 → 62.5; tool calls 8 → 2 → 4 of 10). The rewrite fixes LaTeX at no cost. |
+| 2 | **Runtime: in-process llama.cpp**; LM Studio as the GUI alternative; Ollama not recommended on this machine | Fastest TTFT (29–36 s vs 53–58 s on Ollama), lowest RAM; Ollama peaked at 6762 MB, over the cap |
+| 3 | **Cut-off answers: option B**, `--continue-budget 256`: continue once, only when a reply hits 512 tokens; never when a tool call is present | Only the 6 cut replies pay extra (~+50 % on those rows, E); A would slow every long reply; C leaves your defect (c) open |
+| 4 | **Phase 8 closed → Phase 8A** | RAM PASS (in-process); speed FAIL is hardware-bound and accepted (D-0116); Persian/English valid with the display layer and continuation; tool integration PASS |
+
+Recommended run line: `--second-turn --refusal-language --execution-guard --min-trust 80 --display --continue-budget 256`.
+B's effect on the 6 rows is **not measured yet**; it is folded into the next model run.

@@ -1034,18 +1034,59 @@ def _apply_style(text, lang, metrics, max_tokens, enabled):
                  "hit_budget": ST.hit_budget(m.get("completion_tokens"), max_tokens)}
 
 
+def _continue_if_cut(runner, prompt, text, m, budget):
+    """
+    D-0126 option B: when a reply used its WHOLE budget it was cut off (D-0123:
+    every reply the user called incomplete had), so ask for `budget` more
+    tokens continuing the same text. Only then -- a finished reply costs
+    nothing extra. Never continues a reply that contains a tool call (the
+    orchestrator executes calls; it does not extend them), and never on a
+    remote provider (its Prompt is sent as chat turns, not a raw string).
+    Returns (text, metrics); metrics gain a `continuation` record.
+    """
+    if not budget or isinstance(runner, RemoteRunner):
+        return text, m
+    if not ST.hit_budget((m or {}).get("completion_tokens"), getattr(runner, "max_tokens", None)):
+        return text, m
+    if L.parse_tool_calls(text)[0]:
+        return text, m
+    raw = (m or {}).get("raw_output", text)
+    more, m2 = runner.generate(str(prompt) + raw, max_tokens=int(budget))
+    m = dict(m)
+    m["continuation"] = {"budget": int(budget),
+                         "completion_tokens": m2.get("completion_tokens"),
+                         "seconds": m2.get("seconds"),
+                         "still_cut": ST.hit_budget(m2.get("completion_tokens"), int(budget))}
+    m["seconds"] = round((m.get("seconds") or 0) + (m2.get("seconds") or 0), 3)
+    return text + more, m
+
+
+def _display_record(sty, m):
+    """A continued reply is complete unless the continuation was cut too."""
+    if sty is not None and (m or {}).get("continuation"):
+        sty = dict(sty, hit_budget=m["continuation"]["still_cut"])
+    return sty
+
+
 def run_arm_plain(runner, cases, schemas_by_name, refusal_language=False,
-                  execution_guard=False, style=False):
+                  execution_guard=False, style=False, display=False,
+                  continue_budget=0):
     out = []
     for c in cases:
-        text, m = runner.generate(build_plain_prompt(
-            c["prompt"], refusal_language=refusal_language, style=style))
+        prompt = build_plain_prompt(c["prompt"], refusal_language=refusal_language,
+                                    style=style)
+        text, m = runner.generate(prompt)
+        text, m = _continue_if_cut(runner, prompt, text, m, continue_budget)
         text, guard = _apply_execution_guard(text, c.get("lang"), execution_guard)
-        text, sty = _apply_style(text, c.get("lang"), m, getattr(runner, "max_tokens", None), style)
+        model_text = text
+        text, sty = _apply_style(text, c.get("lang"), m, getattr(runner, "max_tokens", None),
+                                 style or display)
         g = L.grade_case(c, text, schemas_by_name)
         g["execution_guard"] = guard
-        if style:
-            g["style"] = sty
+        if style or display:
+            g["style" if style else "display"] = _display_record(sty, m)
+        if display and text != model_text:
+            g["output_model"] = model_text
         g["arm"] = "plain"
         # The QUESTION is written to the file, not just the answer. Every case
         # carries human_grade=None and persian_fluency_regression is PENDING
@@ -1098,7 +1139,8 @@ def total_fabrications(summaries):
 
 
 def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
-                  refusal_language=False, execution_guard=False, style=False):
+                  refusal_language=False, execution_guard=False, style=False,
+                  display=False, continue_budget=0):
     """
     The tools arm. With second_turn=True (Q14 / D-0113) every reply that made
     at least one call gets the tool results handed back and is asked again;
@@ -1123,6 +1165,9 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
                                           refusal_language=refusal_language,
                                           style=style)
         text, m = runner.generate(first_prompt)
+        # D-0126: continuation is only for a reply with no tool call, so it
+        # never changes what the orchestrator executes.
+        text, m = _continue_if_cut(runner, first_prompt, text, m, continue_budget)
         g = L.grade_case(c, text, schemas_by_name)
         g["arm"] = "tools"
         g["question"] = c["prompt"]
@@ -1192,10 +1237,13 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
                 g["output"] = guarded
 
         # D-0123 style: rewrite the FINAL reply's LaTeX, re-grade prose fields.
-        if style:
+        # D-0126 display: the same rewrite with NO prompt rules.
+        if style or display:
             styled, sty = _apply_style(g["output"], c.get("lang"), g["metrics"],
                                        getattr(runner, "max_tokens", None), True)
-            g["style"] = sty
+            g["style" if style else "display"] = _display_record(sty, g["metrics"])
+            if display and styled != g["output"]:
+                g["output_model"] = g["output"]
             if styled != g["output"]:
                 gs = L.grade_case(c, styled, schemas_by_name)
                 for k in ("banned_hits", "abstained", "abstention_ok", "fabricated",
@@ -1223,7 +1271,7 @@ def run_arm_tools(runner, cases, schemas_by_name, second_turn=False,
 
 
 def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
-                min_trust=0, style=False):
+                min_trust=0, style=False, display=False, continue_budget=0):
     """
     `min_trust` (F2 / D-0119) is passed to PassageIndex.search: passages below
     that authority never reach the prompt. 0 (the default) reproduces every
@@ -1236,11 +1284,14 @@ def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
     for gold in gold_rows:
         res = index.search(gold["query"], top_k=top_k, min_trust=min_trust)
         passages = list(res.hits)
-        text, m = runner.generate(build_rag_prompt(
-            gold["query"], passages, refusal_language=refusal_language,
-            style=style))
+        prompt = build_rag_prompt(gold["query"], passages,
+                                  refusal_language=refusal_language, style=style)
+        text, m = runner.generate(prompt)
+        text, m = _continue_if_cut(runner, prompt, text, m, continue_budget)
+        model_text = text
         text, sty = _apply_style(text, gold.get("lang"), m,
-                                 getattr(runner, "max_tokens", None), style)
+                                 getattr(runner, "max_tokens", None), style or display)
+        sty = _display_record(sty, m)
 
         # Verify the answer's numbers against the evidence ACTUALLY shown to
         # the model -- not against the gold passage. Checking against evidence
@@ -1292,8 +1343,10 @@ def run_arm_rag(runner, gold_rows, index, top_k, refusal_language=False,
         g = L.grade_rag_case(gold, text, [h.doc_id for h in passages],
                              citations)
         g["arm"] = "rag"
-        if style:
-            g["style"] = sty
+        if style or display:
+            g["style" if style else "display"] = sty
+        if display and text != model_text:
+            g["output_model"] = model_text
         g["question"] = gold["query"]
         g["output"] = text
         g["metrics"] = m
@@ -1543,10 +1596,25 @@ def main(argv=None):
                     help="D-0123: plain-text formulas (LaTeX rewritten), answer "
                          "in the question's language, concise; records "
                          "latin_runs and hit_budget per row")
+    ap.add_argument("--display", action="store_true",
+                    help="D-0126 (recommended): rewrite LaTeX in the reply before "
+                         "it is shown, with NO prompt rules; the model text is "
+                         "kept in output_model")
+    ap.add_argument("--continue-budget", type=int, default=0,
+                    help="D-0126 (recommended 256): when a reply hits max_tokens, "
+                         "continue it once with this many more tokens")
     ap.add_argument("--min-trust", type=int, default=0,
                     help="F2 (D-0119): RAG retrieval authority floor; 80 = "
                          "EXCHANGE and above, the answer_gate quoting floor")
     a = ap.parse_args(argv)
+    if a.style and a.display:
+        p("ERROR: --style (prompt rules, D-0123) and --display (D-0126) are "
+          "alternatives; the display layer exists because the prompt rules cost "
+          "accuracy. Choose one.")
+        return 2
+    if a.continue_budget < 0:
+        p("ERROR: --continue-budget must be >= 0")
+        return 2
 
     # ---- provider selection -------------------------------------------
     # Everything here runs BEFORE the model is loaded and before any case is
@@ -1805,7 +1873,7 @@ def main(argv=None):
         report["arms"]["plain"] = run_arm_plain(
             runner, cases, schemas_by_name,
             refusal_language=a.refusal_language, execution_guard=a.execution_guard,
-            style=a.style)
+            style=a.style, display=a.display, continue_budget=a.continue_budget)
         report["summaries"]["plain"] = L.summarize_eval(
             report["arms"]["plain"])
 
@@ -1817,7 +1885,8 @@ def main(argv=None):
         report["arms"]["tools"] = run_arm_tools(
             runner, cases, schemas_by_name, second_turn=a.second_turn,
             refusal_language=a.refusal_language,
-            execution_guard=a.execution_guard, style=a.style)
+            execution_guard=a.execution_guard, style=a.style,
+            display=a.display, continue_budget=a.continue_budget)
         report["summaries"]["tools"] = L.summarize_eval(
             report["arms"]["tools"])
 
@@ -1830,7 +1899,7 @@ def main(argv=None):
         report["arms"]["rag"] = run_arm_rag(
             runner, gold_rows, index, a.top_k,
             refusal_language=a.refusal_language, min_trust=a.min_trust,
-            style=a.style)
+            style=a.style, display=a.display, continue_budget=a.continue_budget)
         report["summaries"]["rag"] = L.summarize_rag(report["arms"]["rag"])
 
     peak, peak_label = peak_rss_gib(proc)
@@ -2077,7 +2146,10 @@ def main(argv=None):
                       # with recorded files.
                       **({"execution_guard": True} if a.execution_guard else {}),
                       **({"min_trust": int(a.min_trust)} if a.min_trust else {}),
-                      **({"style": True} if a.style else {})),
+                      **({"style": True} if a.style else {}),
+                      **({"display": True} if a.display else {}),
+                      **({"continue_budget": int(a.continue_budget)}
+                         if a.continue_budget else {})),
                   # The tool-call cap is written into the payload so a capped
                   # run can never be mistaken for an uncapped one. It changes
                   # the tool_calls_attempted denominator, and a metric whose

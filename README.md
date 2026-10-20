@@ -11,8 +11,8 @@ paper/live trading controls.
 |---|---|
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
-| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 8. |
-| `DECISIONS.md` | Append-only decision log (D-0001 … D-0125). |
+| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 8A (PASS). |
+| `DECISIONS.md` | Append-only decision log (D-0001 … D-0126). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
 | `scripts/regrade_eval.py` | Re-grades the recorded plain/tools replies with the current grader (model not re-run); feeds `grade_merged.py`. D-0112 output: `evidence/phase4_verdict_2026-09-27_post-D0112.json`. |
@@ -20,6 +20,8 @@ paper/live trading controls.
 | `Q14_RUN_COMMANDS.md` | **Next run, in Persian (D-0113):** the three arms with `--second-turn --refusal-language`, then merge. ~70–75 min ESTIMATED. |
 | `PHASE6_REDTEAM_RUN_FA.md` | **Next run, in Persian (D-0116):** the Phase 6 model red team (9 + 4 adversarial questions), ~20–25 min ESTIMATED. |
 | `docs/phase-reports/phase-6.md` · `scripts/grade_phase6.py` | **Phase 6: CLOSED (D-0121), all criteria PASS** after F1–F4. The first run (D-0118) failed 2 critical rows. Final grade: `evidence/phase6_graded2_post-D0121_2026-10-16.json`. |
+| `PHASE8_CONFIRM_RUN_FA.md` | **Optional run, in Persian (D-0126):** the final configuration (`--display --continue-budget 256`), ~50 min ESTIMATED. |
+| `docs/phase-reports/phase-8a.md` · `src/execution/paper.py` | **Phase 8A: PASS (D-0126).** Paper engine: two-phase protocol, 17 checks, audit log, idempotency, kill switch, reconciliation. `tests/test_phase8a.py` (120) / `tests/mutate_phase8a.py` (60/60). |
 | `PHASE8_RERUN_FA.md` | **Done 2026-10-19 (graded in D-0125).** the Phase 8 rerun after the style and instrument fixes, ~2 h ESTIMATED. |
 | `PHASE8_RUN_FA.md` | **Done 2026-10-18 (graded in D-0124).** Q4_K_M with `--style` in-process, then via Ollama, then LM Studio (plain). ~2–2.5 h ESTIMATED. |
 | `docs/phase-reports/phase-8.md` · `deploy/ollama/Modelfile` | **Phase 8 (D-0123):** both conditions met, Q4_K_M chosen, Modelfile (pinned to the harness prompt), thinking proposal. |
@@ -27,7 +29,7 @@ paper/live trading controls.
 | `src/llm/local_server.py` | `--server ollama` or `lmstudio`: sends the harness's own rendered prompt raw (no template defaults), loopback only. |
 | `src/llm/thinking.py` | Thinking proposal: `off` / `budgeted` only, router-decided, closed by the orchestrator (benefit unmeasured). |
 | `scripts/apply_display_layer.py` | D-0125: LaTeX → plain text applied to the reply before display; the prompt is unchanged and the model text is kept. |
-| `tests/test_phase8.py` · `tests/mutate_phase8.py` | 103 asserts / 61 of 61 mutants killed. |
+| `tests/test_phase8.py` · `tests/mutate_phase8.py` | 112 asserts / 61 of 61 mutants killed. |
 | `PHASE7_RUN_FA.md` | **Done 2026-10-17 (graded in D-0122).** Q4_K_M vs Q5_K_M run guide. |
 | `PHASE7_PERSIAN_REVIEW_FA.md` | **For you (R10):** the 24 changed Persian replies, Q5_K_M vs Q4_K_M side by side. |
 | `docs/phase-reports/phase-7.md` · `tools/gguf_inspect.py` · `scripts/compare_quants.py` | **Phase 7 (D-0121):** checksums and header validation done (M); the comparison instrument refuses confounded runs. `tests/test_phase7.py` (63) / `tests/mutate_phase7.py` (31/31). |
@@ -115,10 +117,10 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **8 — Ollama and LM Studio** (approved 2026-10-17 on condition, conditions met, D-0123) |
+| Current phase | **8A — Paper-Trading Safety Validation: PASS** (local paper engine, simulated venue; D-0126). Phase 8 closed. |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Phase 8 rerun graded (D-0125): prompt style rules cost accuracy twice, so they are replaced by a display layer (LaTeX 0, no accuracy loss). Runtime recommendation: in-process llama.cpp. Awaiting your 4 decisions. |
+| Next | Phase 9 (documentation, model card). Optional model run: `PHASE8_CONFIRM_RUN_FA.md` (measures the cut-off continuation). |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

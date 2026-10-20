@@ -160,19 +160,34 @@ LIVE_PREREQUISITES: Mapping[str, Tuple[bool, str]] = MappingProxyType({
                "Twelve Data licensed the category but is closed by the "
                "no-payment decision; TradingView prohibits it outright. See "
                "docs/legal/market-data-providers.md SS.7 (2026-08-14)"),
+    # D-0126 (Phase 8A). execution/paper.py now implements these against a
+    # SIMULATED venue, tested by tests/test_phase8a.py. They stay False for
+    # LIVE on purpose: none has run against a real broker account, and a
+    # control proven only against a simulator is not a verified live control.
     "pre-trade risk engine": (
-        False, "not built; SS.6.3 lists 21 mandatory controls"),
-    "audit logging": (False, "not built"),
-    "idempotency support": (False, "not built"),
-    "emergency kill switch": (False, "not built"),
-    "user-defined limits": (False, "not configured"),
+        False, "17 deterministic checks exist for the PAPER engine only "
+               "(execution/paper.py); never run against a real broker"),
+    "audit logging": (
+        False, "hash-chained audit log exists for the PAPER engine only; no live "
+               "path writes to it"),
+    "idempotency support": (
+        False, "persistent idempotency store exists for the PAPER engine only; "
+               "broker-side idempotency is unverified (no adapter)"),
+    "emergency kill switch": (
+        False, "a persistent, human-only-disengage kill switch exists for the "
+               "PAPER engine only; it is not wired to any live adapter"),
+    "user-defined limits": (
+        False, "RiskLimits exist for the PAPER engine; no live limits are configured"),
     "paper-trading validation": (
-        False, "no paper trading has been run, because no broker adapter exists"),
+        False, "Phase 8A validated the local PAPER engine against a simulated venue "
+               "(D-0126); no broker paper account has been exercised, because no "
+               "broker adapter exists"),
     "explicit user approval of live-mode activation": (
         True, "satisfied by i_have_approved_live_trading = yes"),
     "per-order confirmation unless a separately approved narrow automation "
     "policy exists": (
-        False, "the SS.6.2 two-phase preview/commit protocol is not built"),
+        False, "the SS.6.2 two-phase protocol exists for the PAPER engine only "
+               "(execution/paper.py); there is no live commit path"),
 })
 
 

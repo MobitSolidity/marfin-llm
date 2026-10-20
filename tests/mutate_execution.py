@@ -68,8 +68,8 @@ MUTATIONS = [
      '    "verified broker adapter": (\n        False,',
      '    "verified broker adapter": (\n        True,'),
     ("execution/mode.py", "the kill switch is declared satisfied",
-     '    "emergency kill switch": (False, "not built"),',
-     '    "emergency kill switch": (True, "not built"),'),
+     '    "emergency kill switch": (\n        False, "a persistent',
+     '    "emergency kill switch": (\n        True, "a persistent'),
     ("execution/mode.py", "live_trading_enabled ignores the prerequisites",
      '    return (current_mode() == "LIVE_TRADING"\n'
      '            and not unmet_live_prerequisites())',

@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
-  "current_phase": 8,
-  "phase_status": "PHASE_8_RERUN_GRADED_AWAITING_USER_DECISIONS",
+  "current_phase": "8A",
+  "phase_status": "PHASE_8A_PASS_PAPER_ENGINE_SIMULATED_VENUE",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -317,7 +317,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-10-19",
+  "last_updated": "2026-10-20",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -511,7 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": "Phase 8 close: display layer instead of prompt style rules; deployment runtime (recommended in-process); handling of 512-token cut-offs (A/B/C); Phase 8A",
+  "awaiting_approval_for": null,
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -2906,6 +2906,29 @@
     "tests": {
       "test_phase8": 103,
       "mutate_phase8": "61/61"
+    }
+  },
+  "D-0126_delegated_decisions_phase8_closed_phase8a_pass_2026_10_20": {
+    "phase8_decisions": {
+      "style": "display layer (--display); prompt rules dropped",
+      "runtime": "in-process llama.cpp; LM Studio alt; Ollama not recommended",
+      "cut_off": "option B --continue-budget 256 (effect unmeasured; PHASE8_CONFIRM_RUN_FA.md)",
+      "phase8": "CLOSED"
+    },
+    "phase8a": {
+      "module": "src/execution/paper.py",
+      "tasks_pass": "14/14",
+      "release_blockers_present": 0,
+      "risk_checks": 17,
+      "tests": 120,
+      "mutants": "60/60",
+      "venue": "SIMULATED",
+      "live_trading": "unreachable (SS.6.1 unmet)"
+    },
+    "run_all": {
+      "suites": 23,
+      "assertions": 4521,
+      "skipped": 0
     }
   }
 }
