@@ -257,7 +257,9 @@ check("baseline records all 12 Phase 7 thresholds", len(b["results"]), 12, metho
 check_true("every baseline threshold has a direction",
            all(r["direction"] in ("min", "max") for r in b["results"].values()), "(V)")
 check_true("baseline equals a fresh derivation from the verdict file",
-           b == MON.baseline_from_verdict(MT.CURRENT_VERDICT, "2026-10-17", MT.DIRECTION), "(V)")
+           b == MON.baseline_from_verdict(MT.CURRENT_VERDICT, "2026-10-21", MT.DIRECTION), "(V)")
+check_true("the baseline is the owner's Phase 8C run of the recommended configuration",
+           b["source"] == "evidence/phase8c_verdict_2026-10-21.json" and b["measured_on"] == "2026-10-21", "(V)")
 
 
 # ===========================================================================
@@ -333,11 +335,17 @@ section("8. risk-policy review")
 # ===========================================================================
 RP = json.load(open(os.path.join(ROOT, "configs", "risk-policy.json")))
 check_true("risk policy is PAPER", RP["environment"] == "PAPER", "(V)")
-check_true("human approval is recorded honestly as false", RP["human_approved"] is False, "(V)")
+check_true("the owner approved the limits (D-0129) and the file says who", RP["human_approved"] is True
+           and RP["reviewed_by"].startswith("owner") and RP["reviewed_on"] == "2026-10-21", "(V)")
 _lim = dict(RP["limits"])
 rl = PP.RiskLimits(_lim.pop("instrument_allowlist"), **_lim)
 check("configured max order notional is 10000", rl.max_order_notional, 10000.0, method="(V)")
-check_true("configured: no shorting, leverage 1", rl.allow_short is False and rl.max_leverage == 1.0, "(V)")
+check_true("configured as the owner set it: shorting allowed, leverage 1", rl.allow_short is True
+           and rl.max_leverage == 1.0, "(V)")
+_owner = json.load(open("/home/user/uploaded_files/risk-policy.json.txt")) if os.path.exists(
+    "/home/user/uploaded_files/risk-policy.json.txt") else None
+check_true("the limits are the owner's file verbatim (when that file is present)",
+           _owner is None or _owner["limits"] == RP["limits"], "(V)")
 
 
 def rp(**kw):
@@ -348,7 +356,9 @@ def rp(**kw):
 
 fs = MON.check_risk_policy(rp(human_approved=True), POL, NOW, PP.RiskLimits)
 check_true("approved, reviewed today, valid: INFO only", [f["severity"] for f in fs] == ["INFO"], "(V)")
-fs = MON.check_risk_policy(rp(), POL, NOW, PP.RiskLimits)
+fs = MON.check_risk_policy(rp(), POL, NOW + datetime.timedelta(days=1), PP.RiskLimits)
+check_true("the repo's approved policy: INFO only", [f["severity"] for f in fs] == ["INFO"], "(V)")
+fs = MON.check_risk_policy(rp(human_approved=False), POL, NOW, PP.RiskLimits)
 check_true("not human-approved: WARN", [f["subject"] for f in sev(fs, "WARN")] == ["approval"], "(V)")
 fs = MON.check_risk_policy(rp(environment="LIVE", human_approved=True), POL, NOW, PP.RiskLimits)
 check_true("a LIVE risk policy is CRITICAL", bool(sev(fs, "CRITICAL")), "(A)")
@@ -373,7 +383,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.10.0", REL.read_version() == "0.10.0", "(V)")
+check_true("VERSION file is 0.10.1", REL.read_version() == "0.10.1", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -467,21 +477,29 @@ check_true("unreleased_changes names an edited pinned file",
 os.remove(os.path.join(R, "src/rag/sources.py"))
 check_true("a deleted pinned file is reported missing",
            REL.unreleased_changes(R)["missing"] == ["src/rag/sources.py"], "(A)")
-plan = REL.rollback_plan("1.0.0", root=R, commit_resolver=lambda v, r: "abc123")
+plan = REL.rollback_plan("1.0.0", root=R, commit_resolver=lambda v, r: "abc123",
+                         commit_checker=lambda c, f, r: [])
 check_true("rollback plan restores exactly the differing+missing files",
            set(plan["restore_files"]) == {"VERSION", "src/llm/style.py", "src/rag/sources.py"}, "(V)")
 check_true("rollback command uses the release's commit",
            plan["command"].startswith("git checkout abc123 -- "), "(V)")
 check_true("rollback says to re-run the suite and re-verify",
            "run_all.sh" in plan["then"] and "--verify 1.0.0" in plan["then"], "(V)")
-check_raises("rollback with no findable commit is refused, not a blank command",
-             lambda: REL.rollback_plan("1.0.0", root=R, commit_resolver=lambda v, r: None), REL.ReleaseError)
+check_raises("rollback to a commit that does NOT hold the release's files is refused (squashed releases)",
+             lambda: REL.rollback_plan("1.0.0", root=R, commit_resolver=lambda v, r: "abc123",
+                                       commit_checker=lambda c, f, r: sorted(f)), REL.ReleaseError)
+check_true("... the default checker reads the files AT the commit: a bogus commit holds none of them",
+           REL.commit_has_files("0" * 40, {"VERSION": "x"}) == ["VERSION"], "(A)")
+_OK = lambda c, f, r: []                                                  # noqa: E731
+check_true("rollback with no findable commit is refused, not a blank command (and says why)",
+           "cannot be found" in refusal(lambda: REL.rollback_plan(
+               "1.0.0", root=R, commit_resolver=lambda v, r: None, commit_checker=_OK)), "(A)")
 check_raises("rollback to an unknown release is refused",
              lambda: REL.rollback_plan("0.9.0", root=R), REL.ReleaseError)
 mf = w("model.gguf", "not the model")
-check_raises("rollback with the wrong model on disk is refused",
-             lambda: REL.rollback_plan("1.0.0", root=R, model_path=mf, commit_resolver=lambda v, r: "x"),
-             REL.ReleaseError)
+check_true("rollback with the wrong model on disk is refused (and says why)",
+           "is not release" in refusal(lambda: REL.rollback_plan(
+               "1.0.0", root=R, model_path=mf, commit_resolver=lambda v, r: "x", commit_checker=_OK)), "(A)")
 check_true("verify with the wrong model is not ok",
            REL.verify_against(REL.list_releases(R)[-1], root=R, model_path=mf)["ok"] is False, "(A)")
 open(os.path.join(R, "src/rag/sources.py"), "w").write("content of src/rag/sources.py\n")
@@ -500,9 +518,24 @@ check_true("0.10.0 records the D-0126 prompt options",
 check_true("0.10.0 records the inference settings",
            m10.get("inference") == dict(sorted(MT.INFERENCE.items())), "(V)")
 check_true("0.10.0 has no git_commit (found from history; squash-safe)", m10.get("git_commit") is None, "(V)")
-vr = REL.verify_against(m10) if m10 else {"ok": False, "differs": [], "missing": []}
-check_true("the working tree matches release 0.10.0", vr["ok"],
+m101 = rels.get("0.10.1", {})
+check_true("release 0.10.1 is recorded (D-0129: guard narrowed, owner-approved limits)", bool(m101), "(V)")
+check_true("0.10.1 is a PATCH: same model, prompt options and inference as 0.10.0",
+           bool(m101) and REL.required_bump(m10, m101) == "patch", "(V)")
+check_true("0.10.1 pins the execution-guard module", "src/safety/untrusted.py" in m101.get("files", {}), "(V)")
+vr = REL.verify_against(m101) if m101 else {"ok": False, "differs": [], "missing": []}
+check_true("the working tree matches release 0.10.1", vr["ok"],
            "(V) differs %r missing %r" % (vr["differs"], vr["missing"]))
+v0 = REL.verify_against(m10)
+check_true("the tree differs from 0.10.0 exactly in what D-0129 changed (VERSION, risk policy)",
+           set(v0["differs"]) == {"VERSION", "configs/risk-policy.json"}, "(V) %r" % v0["differs"])
+# 0.10.0 was squashed into its own commit (24e807d), so a real rollback is possible
+# and must name a commit that really holds 0.10.0's files.
+_rb = REL.rollback_plan("0.10.0")
+check_true("rollback to 0.10.0 restores VERSION and the risk policy from a commit that holds them",
+           set(_rb["restore_files"]) == {"VERSION", "configs/risk-policy.json"} and bool(_rb["commit"])
+           and REL.commit_has_files(_rb["commit"], {k: m10["files"][k] for k in _rb["restore_files"]}) == [],
+           "(V) %r" % _rb)
 hdr = json.load(open(os.path.join(ROOT, "evidence", "phase7_gguf_headers_2026-10-16.json")))
 check_true("MODEL_SHA equals the measured Q4_K_M hash",
            hdr["full_file_hashes"]["Qwen3.5-4B-Q4_K_M.gguf"]["sha256"] == MT.MODEL_SHA, "(V)")
@@ -534,9 +567,8 @@ check("CLI exit code matches its status", rc, {"OK": 0, "DUE": 1, "FAIL": 2}[rep
 check("CLI report on the repo: no CRITICAL", rep["counts"]["CRITICAL"], 0, method="(V)")
 warns = {(f["check"], f["subject"]) for f in rep["findings"] if f["severity"] == "WARN"}
 check_true("CLI names the open owner item: fred key", ("source_refresh", "fred") in warns, "(V)")
-check_true("CLI names the open owner item: human approval of risk limits",
-           ("risk_policy", "approval") in warns, "(V)")
-check("CLI: exactly those two WARNs on the repo today", len(warns), 2, method="(V) %r" % sorted(warns))
+check_true("CLI: the risk limits are approved, so no approval WARN", ("risk_policy", "approval") not in warns, "(V)")
+check("CLI: exactly one WARN on the repo today (FRED key)", len(warns), 1, method="(V) %r" % sorted(warns))
 check_true("CLI covers every check family",
            {"source_refresh", "index_update", "dependencies", "licenses", "benchmark", "risk_policy",
             "versioning"} <= {f["check"] for f in rep["findings"]}, "(V)")
@@ -545,14 +577,16 @@ check_true("CLI: tree matches its release",
 rc, out = cli("--release")
 check("CLI --release over an existing release exits 2", rc, 2, method="(A)")
 check_true("... and says REFUSED, no traceback", "REFUSED" in out and "Traceback" not in out, "(A)")
-rc, out = cli("--verify", "0.10.0")
-check("CLI --verify 0.10.0 exits 0", rc, 0, method="(V)")
+rc, out = cli("--verify", "0.10.1")
+check("CLI --verify 0.10.1 exits 0", rc, 0, method="(V)")
 rc, out = cli("--verify", "0.9.0")
 check("CLI --verify unknown exits 2", rc, 2, method="(A)")
 rc, out = cli("--rollback", "0.9.0")
 check_true("CLI --rollback unknown exits 2 with REFUSED", rc == 2 and "REFUSED" in out, "(A)")
-rc, out = cli("--rollback", "0.10.0")
-check_true("CLI --rollback 0.10.0: already at target", rc == 0 and '"already_at_target": true' in out, "(V)")
+rc, out = cli("--rollback", "0.10.1")
+check_true("CLI --rollback 0.10.1: already at target", rc == 0 and '"already_at_target": true' in out, "(V)")
+rc, out = cli("--verify", "0.10.0")
+check("CLI --verify 0.10.0 now exits 2 (the tree moved on)", rc, 2, method="(V)")
 
 
 # run_checks wiring: the versioning finding and the risk-limit factory.

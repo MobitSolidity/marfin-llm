@@ -11,7 +11,7 @@ paper/live trading controls.
 |---|---|
 | `SYSTEM_PROMPT.md` | The canonical master system prompt (v2.0). Sections 0–28. |
 | `prompts/master-system-prompt-v2.0.md` | Versioned, immutable copy of the same prompt. |
-| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 10 (built; awaiting user acceptance). |
+| `PROJECT_STATE.json` | Phase-gate state tracker. Current phase: 10 (ACCEPTED by the owner, D-0129). |
 | `DECISIONS.md` | Append-only decision log (D-0001 … D-0127). |
 | `docs/phase-reports/phase-4.md` | **Phase 4 review** (all 7 §24 tasks; FAIL, hardware-bound; fine-tuning recommendation; approval gate). |
 | `scripts/attribute_failures.py` | Phase 4 task 6: assigns every failed row, in every arm, one cause (HARDWARE / RETRIEVAL / FIXTURE / HARNESS / GRADER / MODEL), with the rule that fired. Output: `evidence/phase4_attribution_2026-09-27.json` (D-0110). |
@@ -121,10 +121,10 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **10 — Monitoring and Maintenance: BUILT, awaiting user approval** (D-0128). `python3 tools/maintain.py` → DUE (0 CRITICAL, 2 WARN: FRED key, human approval of risk limits). Phase 9 PASS (D-0127). |
+| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.10.1. `python3 tools/maintain.py` → DUE (0 CRITICAL, 1 WARN: FRED key). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Owner: accept Phase 10; approve `configs/risk-policy.json`; supply a FRED key; choose a project licence. Phase 11 (live) is optional and never automatic. |
+| Next | Owner: send the FRED key; choose a project licence. Phase 11 (live trading) is optional and never automatic. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

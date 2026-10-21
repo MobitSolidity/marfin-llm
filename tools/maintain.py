@@ -40,7 +40,10 @@ DIRECTION = {"citation_correctness_pct_min": "min", "correct_abstention_pct_min"
              "model_file_size_gib_max": "max", "peak_rss_8k_gib_max": "max",
              "time_to_first_token_2k_sec_max": "max", "unsupported_claim_rate_pct_max": "max",
              "paper_live_confusion_count_max": "max", "persian_fluency_regression_pct_max": "max"}
-CURRENT_VERDICT = os.path.join(ROOT, "evidence", "phase7_q4km_verdict_2026-10-17.json")
+# D-0129: the benchmark of the RECOMMENDED configuration (display + continuation),
+# measured on the i5-12400 by the owner (PHASE8_CONFIRM_RUN_FA.md).
+CURRENT_VERDICT = os.path.join(ROOT, "evidence", "phase8c_verdict_2026-10-21.json")
+BASELINE_MEASURED_ON = "2026-10-21"
 MODEL_SHA = "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
 PROMPT_OPTIONS = {"second_turn": True, "refusal_language": True, "execution_guard": True,
                   "min_trust": 80, "display": True, "continue_budget": 256}
@@ -110,7 +113,7 @@ def main(argv=None):
         print("recorded %s (%d passages)" % (INDEX_MANIFEST, m["n_passages"]))
         return 0
     if a.record_baseline:
-        b = MON.baseline_from_verdict(CURRENT_VERDICT, "2026-10-17", DIRECTION)
+        b = MON.baseline_from_verdict(CURRENT_VERDICT, BASELINE_MEASURED_ON, DIRECTION)
         json.dump(b, open(BASELINE, "w"), indent=2)
         print("recorded %s" % BASELINE)
         return 0
