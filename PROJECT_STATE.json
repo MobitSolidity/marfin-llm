@@ -3059,5 +3059,21 @@
     ],
     "release": "0.10.3",
     "enabled_sources": 10
+  },
+  "D-0132_licences_2026_10_21": {
+    "registered": [
+      "nyfed_markets_data (terms + parsed SOFR/EFFR)"
+    ],
+    "refused": [
+      "ssrn (automated queries prohibited; TDM reserved)"
+    ],
+    "unknown": [
+      "nber (terms 404)",
+      "world_bank_okr (no response)",
+      "nyfed_staff_reports (no feed)"
+    ],
+    "release": "0.10.4",
+    "sources": 16,
+    "enabled": 11
   }
 }

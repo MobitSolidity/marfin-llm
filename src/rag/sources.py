@@ -419,6 +419,41 @@ _register(Source(
     doc_url="https://datacatalog.worldbank.org/public-licenses",
 ))
 
+# NY Fed markets data (D-0132). The August review read this licence (§3.4 of
+# docs/legal/research-and-news-sources.md) but never probed an endpoint, so it
+# was deliberately NOT registered. Both halves were proven on 2026-10-21: the
+# terms re-read verbatim, and the official Markets Data API returned a parsed
+# SOFR/EFFR record. Its API documentation states that all data accessible
+# through it "is subject to the Terms of Use" of newyorkfed.org -- so this is
+# the same licence, not an assumption that a subdomain inherits it.
+_register(Source(
+    key="nyfed_markets_data",
+    name="New York Fed Markets Data API (reference rates: SOFR, EFFR, OBFR, ...)",
+    base_url="https://markets.newyorkfed.org/api",
+    trust_level="OFFICIAL_DATA",
+    rate_limit_qps=1,
+    licence="PERMITTED, attribution REQUIRED. newyorkfed.org/privacy/termsofuse "
+            "(sha256 65ae244e70550731, read 2026-10-21): 'grants you a "
+            "non-exclusive license ... to use, copy, and distribute Content for "
+            "your personal or business purposes. You may: Access the Content, "
+            "manually or through an automated process or device ... Download, "
+            "store, and use Content in any format or media'. Conditions: the "
+            "prescribed attribution (REQUIRED_NOTICES); modified content must be "
+            "labelled and not attributed to the New York Fed; no distorting "
+            "excerpts; the user indemnifies the New York Fed for third-party "
+            "claims; the New York Fed does not endorse any instrument that "
+            "references its rates. The Markets API docs (markets-api.yml, "
+            "sha256 5dbb331d86b91bfc) put all API data under these Terms. "
+            "SCOPE: markets DATA only -- Liberty Street Economics blog archives "
+            "made public need a separate written licence and are NOT covered.",
+    verified_on="2026-10-21",
+    verified_status="MEASURED 2026-10-21 (D-0132): HTTP 200, payload parsed -- "
+                    "/api/rates/secured/sofr/last/1.json returned SOFR 3.88 for "
+                    "2026-10-20 (volume 2925 bn); /api/rates/unsecured/effr/"
+                    "last/1.json returned EFFR 3.88, target range 3.75-4.00.",
+    doc_url="https://markets.newyorkfed.org/static/docs/markets-api.html",
+))
+
 # -------- DISABLED: permitted by licence, but NOT REACHABLE from here --------
 #
 # GDELT has the MOST PERMISSIVE licence in the entire review and is still
@@ -606,6 +641,11 @@ REQUIRED_NOTICES: Mapping[str, str] = MappingProxyType({
     # 2026-10-21, so this line is OUR wording (naming the source), NOT a
     # quotation of a prescribed notice. Re-read the IMF terms on the target.
     "imf_sdmx_data": "Source: International Monetary Fund (IMF data).",
+    # NY Fed: the Terms' prescribed default format, verbatim ("[year]" filled in
+    # with the year the data is used -- 2026 for this build).
+    "nyfed_markets_data": "\u00a9 2026 Federal Reserve Bank of New York. Content "
+                          "from the New York Fed subject to the Terms of Use at "
+                          "newyorkfed.org.",
 })
 
 
