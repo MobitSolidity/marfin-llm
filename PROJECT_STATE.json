@@ -3045,5 +3045,19 @@
       "configs/model-cards/*.json (model authors)",
       "evidence/ data keeps its source's terms"
     ]
+  },
+  "D-0131_permissions_2026_10_21": {
+    "obtained": [
+      "gdelt_doc enabled (HTTP 200 + terms re-read; 0.2 qps)",
+      "attribution notices for gdelt, ecb, world_bank, imf"
+    ],
+    "owner_only": [
+      "FRED API key",
+      "Twelve Data paid non-display tier",
+      "ECB/BIS/IMF written permission for papers",
+      "commercial data agreements (none planned)"
+    ],
+    "release": "0.10.3",
+    "enabled_sources": 10
   }
 }

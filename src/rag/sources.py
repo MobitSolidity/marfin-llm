@@ -431,8 +431,11 @@ _register(Source(
     name="GDELT 2.0 DOC API (news metadata)",
     base_url="https://api.gdeltproject.org/api/v2/doc/doc",
     trust_level="PERMITTED_NEWS",
-    enabled=False,
-    rate_limit_qps=1,
+    enabled=True,
+    # 0.2 qps, NOT 1: MEASURED 2026-10-21, the API answered HTTP 429 "Please
+    # limit requests to one every 5 seconds". The provider's stated limit is
+    # the ceiling, as for arXiv.
+    rate_limit_qps=0.2,
     licence="ToS-VERIFIED AND EXCEPTIONALLY PERMISSIVE: "
             "gdeltproject.org/about.html#termsofuse -- 'available for "
             "unlimited and unrestricted use for any academic, commercial, or "
@@ -444,18 +447,15 @@ _register(Source(
             "publisher's terms, which for Bloomberg/FT/Reuters is a "
             "prohibition. Metadata only.",
     verified_on="2026-08-30",
-    verified_status="ToS-VERIFIED / ENDPOINT-UNVERIFIED. MEASURED: HTTP 000 "
-                    "x3, 'Connection timed out after 15002 milliseconds'. DNS "
-                    "resolves (104.197.47.124). A SEC control request in the "
-                    "SAME command returned 200 in 0.087 s, so the failure is "
-                    "not general egress. Independent egress also timed out. "
-                    "GDELT's own health is UNKNOWN FROM HERE -- not 'down'.",
-    descope_reason="NOT a licence refusal -- the licence is the best in this "
-                   "registry. Disabled because the endpoint is UNREACHABLE "
-                   "from the build environment (HTTP 000 x3 with a passing "
-                   "control). Re-enable ONLY after a probe returns 200 AND a "
-                   "parsed payload. Recording it enabled on the strength of "
-                   "its terms would claim a capability we measured absent.",
+    verified_status="MEASURED 2026-10-21 (D-0131): HTTP 200, payload parsed -- "
+                    "artlist JSON with 2 articles (keys domain, language, "
+                    "seendate, title, url). Terms page re-read the same day "
+                    "(sha256 384754b514042255): 'unlimited and unrestricted use' "
+                    "and 'must include a citation to the GDELT Project and a "
+                    "link' both present verbatim. HISTORY: 2026-08-30 HTTP 000 "
+                    "x3 from this sandbox while a SEC control returned 200 -- "
+                    "it was disabled then for reachability, never for licence.",
+    descope_reason="",
     doc_url="https://www.gdeltproject.org/about.html#termsofuse",
 ))
 
@@ -591,6 +591,21 @@ _register(Source(
 REQUIRED_NOTICES: Mapping[str, str] = MappingProxyType({
     "fred": "This product uses the FRED\u00ae API but is not endorsed or "
             "certified by the Federal Reserve Bank of St. Louis.",
+    # D-0131: the attribution each remaining source's terms make a CONDITION of
+    # use. Re-read 2026-10-21; wording quoted from each terms page.
+    # GDELT: "any use or redistribution of the data must include a citation to
+    # the GDELT Project and a link to this website".
+    "gdelt_doc": "News metadata from the GDELT Project (https://www.gdeltproject.org/).",
+    # ECB: "the ECB must be cited as the source".
+    "ecb_data_portal": "Source: European Central Bank (ECB Data Portal).",
+    # World Bank: attribution "consistent with the following format".
+    "world_bank_indicators": "The World Bank Group authorizes the use of this "
+                             "material subject to the terms and conditions on "
+                             "its website, Legal.",
+    # IMF data carve-out: the terms page answered HTTP 403 to the sandbox on
+    # 2026-10-21, so this line is OUR wording (naming the source), NOT a
+    # quotation of a prescribed notice. Re-read the IMF terms on the target.
+    "imf_sdmx_data": "Source: International Monetary Fund (IMF data).",
 })
 
 

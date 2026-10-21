@@ -7704,3 +7704,54 @@ and in `LICENSES.md`:
 - Choose a different licence (one file change plus a patch release).
 - Delete the Alpha Vantage fixtures from the public repository and replace them with synthetic ones (the IBM prices
   are real data).
+
+## D-0131 — Every permission obtainable without the owner: obtained; the rest listed (2026-10-21)
+
+**Input (owner):** "Please obtain all the necessary permits that can be acquired for this project."
+
+**What "obtainable by the assistant" means here:**
+- Permission granted by **published terms** to anyone who complies with them.
+- These were re-read and re-probed today; the conditions they attach are now enforced in code.
+- Permission that needs an **account, a signature, payment or a written request** binds a person. The assistant cannot
+  obtain it and must not pretend to. Those permissions are listed for the owner.
+
+**Obtained (MEASURED 2026-10-21):**
+1. **GDELT news metadata: ENABLED.** It was disabled on 2026-08-30 only because the endpoint timed out from this
+   sandbox; the licence was never the problem.
+   - Today the API returned **HTTP 200 with a parsed payload**.
+   - The terms page was re-read (sha256 `384754b514042255`) and both clauses are verbatim: "unlimited and unrestricted
+     use … without fee" and the citation-plus-link condition.
+   - Rate limit set to **0.2 qps**, the provider's stated 1 request per 5 s (MEASURED as an HTTP 429 when faster).
+   - It stays **PERMITTED_NEWS (authority 30)**, below the min-trust 80 floor, so its rows are never cited as fact.
+   - It stays **metadata only**; publishers' article bodies remain under their own terms.
+2. **Attribution conditions discharged in code.** `REQUIRED_NOTICES` previously covered only FRED. It now also covers:
+   - GDELT: citation plus link;
+   - ECB: "must be cited as the source";
+   - World Bank: the prescribed sentence, verbatim;
+   - IMF: a source line in our own wording, because the terms page answered 403 here.
+
+   SEC, Fed Board, OFR and arXiv impose none. A test pins that every enabled source either needs no attribution or has
+   a notice.
+3. **Re-verification of all other sources** is recorded in `docs/legal/research-and-news-sources.md` §10:
+   - ECB, IMF data, World Bank, arXiv, Fed Board and OFR: 200, still permitted.
+   - SEC: 403 to this sandbox's IP; a host block, not a project block; measure on the target.
+   - FRED: "Site Maintenance" today.
+   - BIS: still disabled because of its 400-word extract cap.
+
+**Not obtainable by the assistant (owner action required):**
+- **FRED API key:** a free account in the owner's name.
+- **Twelve Data paid non-display tier:** a contract and payment; the only market data that affirmatively licenses
+  machine use.
+- **Written permission from ECB, BIS or IMF to ingest papers:** a request from the owner. Their data is already
+  permitted.
+- **TradingView, Bloomberg, Reuters, FT:** commercial agreements; none planned.
+- **Codal and TSETMC:** descoped by the owner in Phase 0.
+
+**Release 0.10.3** (patch): pins the changed `src/rag/sources.py`. The Phase 10 versioning check flagged the unreleased
+edit, as designed. The `test_phase10` release assertions now target "the newest release", so a future patch release
+does not require rewriting them. Every older release is checked as a real rollback target.
+
+**Tests:**
+- `test_rag`: 289; GDELT re-pinned with both halves, its rate limit, metadata-only scope and trust; notices pinned.
+- `mutate_rag`: 121 killed + 3 documented equivalent, 0 survivors (GDELT mutants rewritten for the enabled state).
+- `test_phase10`: 203.

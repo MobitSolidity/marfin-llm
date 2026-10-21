@@ -383,7 +383,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.10.2", REL.read_version() == "0.10.2", "(V)")
+check_true("VERSION file is 0.10.3 (D-0131)", REL.read_version() == "0.10.3", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -527,22 +527,29 @@ m102 = rels.get("0.10.2", {})
 check_true("release 0.10.2 is recorded (D-0130: Apache-2.0 LICENSE and NOTICE pinned)",
            bool(m102) and {"LICENSE", "NOTICE"} <= set(m102.get("files", {})), "(V)")
 check_true("0.10.2 is a PATCH over 0.10.1", bool(m102) and REL.required_bump(m101, m102) == "patch", "(V)")
-vr = REL.verify_against(m102) if m102 else {"ok": False, "differs": [], "missing": []}
-check_true("the working tree matches release 0.10.2", vr["ok"],
-           "(V) differs %r missing %r" % (vr["differs"], vr["missing"]))
-v1 = REL.verify_against(m101)
-check_true("the tree differs from 0.10.1 only in VERSION (LICENSE/NOTICE are new, not pinned by 0.10.1)",
-           v1["differs"] == ["VERSION"] and v1["missing"] == [], "(V) %r" % v1)
-v0 = REL.verify_against(m10)
-check_true("the tree differs from 0.10.0 exactly in VERSION and the risk policy",
-           set(v0["differs"]) == {"VERSION", "configs/risk-policy.json"}, "(V) %r" % v0["differs"])
-# 0.10.0 was squashed into its own commit (24e807d), so a real rollback is possible
-# and must name a commit that really holds 0.10.0's files.
-_rb = REL.rollback_plan("0.10.0")
-check_true("rollback to 0.10.0 restores VERSION and the risk policy from a commit that holds them",
-           set(_rb["restore_files"]) == {"VERSION", "configs/risk-policy.json"} and bool(_rb["commit"])
-           and REL.commit_has_files(_rb["commit"], {k: m10["files"][k] for k in _rb["restore_files"]}) == [],
-           "(V) %r" % _rb)
+# The CURRENT release is the newest manifest, and it must equal VERSION. Written
+# against "newest" rather than a literal version so the next patch release does
+# not need these assertions rewritten (each release previously broke them).
+newest = REL.list_releases()[-1]
+check_true("the newest release manifest is the VERSION file's version",
+           newest["version"] == REL.read_version(), "(V) %s vs %s" % (newest["version"], REL.read_version()))
+vr = REL.verify_against(newest)
+check_true("the working tree matches the newest release", vr["ok"],
+           "(V) %s differs %r missing %r" % (newest["version"], vr["differs"], vr["missing"]))
+_chain = REL.list_releases()
+check_true("every release after 0.10.0 is a PATCH over its predecessor (no behaviour change since 0.10.0)",
+           all(REL.required_bump(a, b) == "patch" for a, b in zip(_chain, _chain[1:])), "(V)")
+check_true("release history is 0.10.0, 0.10.1, 0.10.2, ... with no gaps or reuse",
+           [r["version"] for r in _chain][:3] == ["0.10.0", "0.10.1", "0.10.2"]
+           and len({r["version"] for r in _chain}) == len(_chain), "(V)")
+# Every older release is a real rollback target: its commit (found from history)
+# must hold exactly its files -- 0.10.0 lives in its own squashed commit 24e807d.
+for _old in _chain[:-1]:
+    _rb = REL.rollback_plan(_old["version"])
+    check_true("rollback to %s names a commit that really holds its files" % _old["version"],
+               _rb["already_at_target"] or (bool(_rb["commit"]) and REL.commit_has_files(
+                   _rb["commit"], {k: _old["files"][k] for k in _rb["restore_files"]}) == []),
+               "(V) %r" % {k: _rb[k] for k in ("commit", "restore_files")})
 hdr = json.load(open(os.path.join(ROOT, "evidence", "phase7_gguf_headers_2026-10-16.json")))
 check_true("MODEL_SHA equals the measured Q4_K_M hash",
            hdr["full_file_hashes"]["Qwen3.5-4B-Q4_K_M.gguf"]["sha256"] == MT.MODEL_SHA, "(V)")
@@ -584,14 +591,14 @@ check_true("CLI: tree matches its release",
 rc, out = cli("--release")
 check("CLI --release over an existing release exits 2", rc, 2, method="(A)")
 check_true("... and says REFUSED, no traceback", "REFUSED" in out and "Traceback" not in out, "(A)")
-rc, out = cli("--verify", "0.10.2")
-check("CLI --verify 0.10.2 exits 0", rc, 0, method="(V)")
+rc, out = cli("--verify", newest["version"])
+check("CLI --verify <newest> exits 0", rc, 0, method="(V)")
 rc, out = cli("--verify", "0.9.0")
 check("CLI --verify unknown exits 2", rc, 2, method="(A)")
 rc, out = cli("--rollback", "0.9.0")
 check_true("CLI --rollback unknown exits 2 with REFUSED", rc == 2 and "REFUSED" in out, "(A)")
-rc, out = cli("--rollback", "0.10.2")
-check_true("CLI --rollback 0.10.2: already at target", rc == 0 and '"already_at_target": true' in out, "(V)")
+rc, out = cli("--rollback", newest["version"])
+check_true("CLI --rollback <newest>: already at target", rc == 0 and '"already_at_target": true' in out, "(V)")
 rc, out = cli("--verify", "0.10.0")
 check("CLI --verify 0.10.0 now exits 2 (the tree moved on)", rc, 2, method="(V)")
 

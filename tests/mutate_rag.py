@@ -475,15 +475,19 @@ MUTATIONS = [
     # The dangerous mutation is not "GDELT is disabled" but "GDELT is enabled
     # because its licence is excellent" -- conflating permission with
     # reachability. That is the mistake the entry exists to prevent.
-    ("sources.py", "GDELT enabled on the strength of its licence alone",
-     '    trust_level="PERMITTED_NEWS",\n    enabled=False,',
-     '    trust_level="PERMITTED_NEWS",\n    enabled=True,'),
-    ("sources.py", "GDELT's refusal is reworded as a licence prohibition",
-     '    descope_reason="NOT a licence refusal -- the licence is the best in this "',
-     '    descope_reason="Prohibited by licence. "'),
-    ("sources.py", "the measured HTTP 000 is softened to 'service down'",
-     '    verified_status="ToS-VERIFIED / ENDPOINT-UNVERIFIED. MEASURED: HTTP 000 "',
-     '    verified_status="GDELT is down. "'),
+    # D-0131: GDELT is now enabled with BOTH halves proven; the dangerous
+    # mutations are the ones that drop a half or loosen its conditions.
+    ("sources.py", "GDELT enabled with its payload evidence removed",
+     '    verified_status="MEASURED 2026-10-21 (D-0131): HTTP 200, payload parsed -- "',
+     '    verified_status="assumed reachable -- "'),
+    ("sources.py", "GDELT rate limit loosened past the provider's 1 per 5 s",
+     '    rate_limit_qps=0.2,', '    rate_limit_qps=1,'),
+    ("sources.py", "GDELT attribution notice dropped",
+     '    "gdelt_doc": "News metadata from the GDELT Project (https://www.gdeltproject.org/).",\n', ''),
+    ("sources.py", "World Bank attribution notice dropped",
+     '    "world_bank_indicators": "The World Bank Group authorizes the use of this "', '    "wb_x": "The World Bank Group authorizes the use of this "'),
+    ("sources.py", "ECB citation notice dropped",
+     '    "ecb_data_portal": "Source: European Central Bank (ECB Data Portal).",\n', ''),
     ("sources.py", "BIS re-enabled despite the 400-word extract cap",
      '    trust_level="PERMITTED_RESEARCH",\n    enabled=False,\n    rate_limit_qps=1,\n    licence="PARTIALLY permitted',
      '    trust_level="PERMITTED_RESEARCH",\n    enabled=True,\n    rate_limit_qps=1,\n    licence="PARTIALLY permitted'),
