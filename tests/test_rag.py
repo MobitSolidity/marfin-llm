@@ -805,9 +805,9 @@ section("source registry: terms are enforced, not merely declared")
 # silently is exactly the change that must break a test, because it means
 # something entered or left the ingestible set without review.
 check("15 sources registered", len(SOURCES), 15, 0, "(C)")
-check("9 enabled", len(enabled_sources()), 9, 0, "(C)")
-check("6 descoped (2x Q3 scope, 4x licence/reachability)",
-      len(descoped_sources()), 6, 0, "(C)")
+check("10 enabled (GDELT added, D-0131)", len(enabled_sources()), 10, 0, "(C)")
+check("5 descoped (2x Q3 scope, 3x licence/reachability)",
+      len(descoped_sources()), 5, 0, "(C)")
 check_true("registry key always matches source.key",
            all(k == v.key for k, v in SOURCES.items()), "(C)")
 check_true("every source records a doc_url or a descope_reason",
@@ -958,15 +958,27 @@ check("arXiv rate limit is the ToS ceiling, not a round number",
 # That combination is the finding: a favourable licence does not make an
 # endpoint reachable, and conflating the two would put a dead source in the
 # corpus.
-check_raises("GDELT is refused: ToS-verified but endpoint unreachable",
-             lambda: check_access("gdelt_doc"), AccessError)
-check_true("GDELT's refusal is NOT a licence refusal",
-           "NOT a licence refusal" in SOURCES["gdelt_doc"].descope_reason,
-           "(C) the reason must not be misread as prohibition")
-check_true("GDELT records the measured HTTP 000, not a guess",
+# D-0131: GDELT was enabled only after BOTH halves were re-proven on the same
+# day: a 200 with a parsed payload, and the terms re-read verbatim. Its stated
+# rate limit (one request per 5 s, MEASURED as an HTTP 429) is the ceiling.
+check_true("GDELT is enabled only with a MEASURED payload AND a re-read licence",
+           SOURCES["gdelt_doc"].enabled
+           and "HTTP 200, payload parsed" in SOURCES["gdelt_doc"].verified_status
+           and "unlimited and unrestricted use" in SOURCES["gdelt_doc"].verified_status,
+           "(C) permission and reachability are both recorded")
+check_true("GDELT keeps its history: it was disabled for reachability, not licence",
            "HTTP 000" in SOURCES["gdelt_doc"].verified_status
-           and "UNKNOWN FROM HERE" in SOURCES["gdelt_doc"].verified_status,
-           "(C) unreachable-from-here is not 'down'")
+           and "never for licence" in SOURCES["gdelt_doc"].verified_status, "(C)")
+check("GDELT rate limit is the provider's 1 request / 5 s, not a round 1 qps",
+      SOURCES["gdelt_doc"].rate_limit_qps, 0.2, 1e-9, "(B) MEASURED HTTP 429 text")
+check_true("GDELT is still metadata only: publishers' article bodies are not licensed",
+           "Metadata only" in SOURCES["gdelt_doc"].licence
+           and "NOT the publishers' article" in SOURCES["gdelt_doc"].licence, "(C)")
+check_true("GDELT's trust stays PERMITTED_NEWS (30): below the min-trust 80 floor, never cited as fact",
+           SOURCES["gdelt_doc"].authority == 30, "(C) enabling is not promoting")
+check_true("GDELT's attribution condition is discharged by required_notices()",
+           any("GDELT Project" in n and "gdeltproject.org" in n for n in required_notices()),
+           "(D) its terms make the citation and link a condition of use")
 check_raises("BIS is refused (404 x3 and a 400-word extract cap)",
              lambda: check_access("bis_working_papers"), AccessError)
 check_true("BIS records that a 404 body size proves nothing",
@@ -1019,6 +1031,19 @@ check_true("the notice is not emitted twice for two FRED-backed series",
 check_true("a session that never touched FRED makes no FRED claim",
            required_notices(["sec_edgar_xbrl"]) == [],
            "(C) attribution must not over-claim")
+# D-0131: every enabled source whose terms make attribution a CONDITION carries
+# its notice. SEC (public domain), the federal papers (public domain / no
+# copyright) and arXiv (personal research use) impose none.
+for _k, _must in (("ecb_data_portal", "European Central Bank"),
+                  ("world_bank_indicators", "The World Bank Group authorizes the use of this material"),
+                  ("imf_sdmx_data", "International Monetary Fund"),
+                  ("gdelt_doc", "https://www.gdeltproject.org/")):
+    check_true("required_notices() discharges the %s attribution condition" % _k,
+               any(_must in n for n in required_notices([_k])), "(D)")
+check_true("every enabled source either needs no attribution or has a notice",
+           {k for k, s in SOURCES.items() if s.enabled} - set(REQUIRED_NOTICES)
+           == {"arxiv_qfin", "fed_board_working_papers", "ofr_working_papers",
+               "sec_edgar_submissions", "sec_edgar_xbrl"}, "(C)")
 check_true("required_notices ignores an unknown key instead of crashing",
            required_notices(["no_such_source"]) == [],
            "(C) display path; refusal belongs in check_access")

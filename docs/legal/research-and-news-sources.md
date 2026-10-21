@@ -537,3 +537,56 @@ that the licence problem happens to force.
   bites even on the data carve-out's neighbourhood, and the whole of §5 hardens.
 - **A terms document changes** → re-read before further use; do not rely on this
   document's quotations, which are dated 2026-08-30.
+
+## 10. Re-verification, 2026-10-21 (D-0131)
+
+Every enabled or candidate source was re-probed from the build sandbox. Terms pages were re-read on 2026-10-21.
+
+### Endpoints
+
+| Source | Endpoint result | Status |
+|---|---|---|
+| GDELT DOC API | **HTTP 200, payload parsed** (artlist JSON, 2 articles); 429 "one every 5 seconds" if faster | **ENABLED** (was disabled for reachability only) |
+| ECB Data Portal | 200, SDMX-JSON parsed | unchanged, enabled |
+| IMF SDMX | 200, 449,618 B SDMX | unchanged, enabled; terms page 403 to the sandbox (see below) |
+| World Bank Indicators | 200, JSON parsed | unchanged, enabled |
+| arXiv API | 200, Atom feed | unchanged, enabled |
+| Fed Board papers / OFR | 200 / 200 | unchanged, enabled |
+| SEC EDGAR (both) | **403 "Undeclared Automated Tool"** to this sandbox's IP, even with a contact User-Agent | still enabled; the block is on the build host's IP, not on the project (it worked from here on 2026-08-10). Measure on the target. |
+| FRED | **"Site Maintenance"** page (St. Louis Fed planned maintenance) | still needs the owner's free API key |
+| BIS | 403 on the terms page | still disabled (400-word extract cap; unchanged) |
+
+### Terms re-read
+
+| Terms page | Result |
+|---|---|
+| GDELT `about.html` (sha256 `384754b514042255`) | both verbatim clauses present: "unlimited and unrestricted use … without fee" and "must include a citation to the GDELT Project and a link to this website" |
+| arXiv API ToU | "Retrieve, store, and use … for your own personal use, or for research purposes"; "no more than one request every three seconds"; "must not … Store and serve arXiv e-prints … from your servers" |
+| ECB disclaimer | "may make free use of the information … the ECB must be cited as the source" |
+| World Bank dataset terms | the licence is "conditioned upon your providing proper attribution … consistent with the following format: 'The World Bank Group authorizes the use of this material subject to the terms and conditions on its website, Legal.'" The page also says content is "for informational and non-commercial purposes only, unless otherwise stated" |
+| Fed Board disclaimer | "public domain" present |
+| OFR legal notices | "No copyright may be claimed" present |
+| IMF copyright page | **403 to the sandbox** — not re-read. The 2026-08-30 quotation stands until it is re-read on the target |
+
+### Attribution conditions, now discharged in code
+
+`REQUIRED_NOTICES` in `src/rag/sources.py`, emitted by `required_notices()`:
+
+- FRED (already present).
+- GDELT: citation plus link.
+- ECB: cited as the source.
+- World Bank: the prescribed sentence, verbatim.
+- IMF: a source line in our own wording, **not** a quotation, because the page could not be read.
+
+SEC, Fed Board, OFR and arXiv impose no attribution condition.
+
+### Permissions only the owner can obtain (not obtainable by the assistant)
+
+| Permission | Why the assistant cannot | What it unlocks |
+|---|---|---|
+| **FRED API key** | Requires an account in the owner's name and acceptance of the API terms by that person | FRED macro series; clears the last maintenance WARN |
+| **Alpha Vantage key** (already used by the owner) | Same; the terms bind the individual | unchanged |
+| **Twelve Data paid tier with non-display rights** | A contract and payment | the only market-data licence that affirmatively permits machine use |
+| **ECB / BIS / IMF written permission for papers** (not data) | A written request from the owner to each institution | research-paper ingestion (data is already permitted) |
+| **TradingView, Bloomberg, Reuters, FT** | Commercial data agreements | none planned; machine use stays prohibited |
+| **Codal / TSETMC** | Descoped by the owner in Phase 0; sanctions status unverified | none (stays descoped) |
