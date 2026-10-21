@@ -121,10 +121,10 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.10.1. `python3 tools/maintain.py` → DUE (0 CRITICAL, 1 WARN: FRED key). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
+| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.10.2. `python3 tools/maintain.py` → DUE (0 CRITICAL, 1 WARN: FRED key). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Owner: send the FRED key; choose a project licence. Phase 11 (live trading) is optional and never automatic. |
+| Next | Owner: send the FRED key. Project code is Apache-2.0 (D-0130). Phase 11 (live trading) is optional and never automatic. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |
@@ -2624,6 +2624,13 @@ It begins at Phase 0 and will not advance phases without explicit approval
 
 ## License
 
-The base model is Apache-2.0. **No licence has been chosen for this repository's own code**, so all rights are
-reserved by the owner. Every data source, provider and dependency, with its terms, is listed in `LICENSES.md`
-(generated from the live registries by `tools/build_licenses.py`). Redistribution must respect all of them.
+This repository's own code and documentation are licensed under the **Apache License 2.0** (`LICENSE`, `NOTICE`;
+chosen 2026-10-21, D-0130). The base model is also Apache-2.0.
+
+The licence does **not** cover third-party material in the repository:
+- `tests/fixtures/alpha_vantage/*.json`: verbatim Alpha Vantage captures, for personal, non-commercial use only.
+- `configs/model-cards/*.json`: published by the model authors.
+- Data in `evidence/` keeps its source's terms.
+
+Every data source, provider and dependency, with its terms, is listed in `LICENSES.md` (generated from the live
+registries by `tools/build_licenses.py`). Using the data sources is governed by their terms, not by this licence.

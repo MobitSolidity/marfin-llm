@@ -8,6 +8,7 @@ evidence, so a doc cannot silently drift from what the system does.
 import json
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -96,8 +97,37 @@ check_true("LICENSES.md equals tools/build_licenses.py output (no drift)",
 from rag import sources as S                                    # noqa: E402
 check_true("every data source appears in LICENSES.md",
            all("| %s |" % k in read("LICENSES.md") for k in S.SOURCES), "(V)")
-check_true("the project-code licence is stated as NOT chosen (no false claim)",
-           "No licence has been chosen" in read("LICENSES.md"), "(V)")
+# D-0130: the project code is Apache-2.0. The licence file must be the canonical
+# text, byte for byte, and every place that states the licence must agree.
+import hashlib as _hl                                            # noqa: E402
+_lic = open(os.path.join(ROOT, "LICENSE"), "rb").read()
+check_true("LICENSE is the canonical Apache-2.0 text (sha256 of apache.org/licenses/LICENSE-2.0.txt)",
+           _hl.sha256(_lic).hexdigest() == "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+           "(V)")
+check_true("LICENSES.md, README and the model card all state Apache-2.0 for the project code",
+           "**Apache License 2.0** (`LICENSE`, `NOTICE`)" in read("LICENSES.md")
+           and "licensed under the **Apache License 2.0**" in read("README.md")
+           and "Project code: Apache-2.0 (`LICENSE`, `NOTICE`" in MC, "(V)")
+check_true("no document still says the project code is unlicensed",
+           not any(x in read(d) for d in ("LICENSES.md", "README.md", "MODEL_CARD.md")
+                   for x in ("No licence has been chosen", "not yet licensed")), "(V)")
+_NOTICE = read("NOTICE")
+check_true("NOTICE names the copyright holder and the licence", "Copyright 2026 MobitSolidity" in _NOTICE
+           and "Apache License, Version 2.0" in _NOTICE, "(V)")
+# Third-party material shipped in the repo must be carved out of the grant, by
+# path, in NOTICE AND LICENSES.md -- and the carve-out must match what is
+# actually tracked (a new third-party directory with no carve-out fails here).
+_tracked = subprocess.check_output(["git", "-C", ROOT, "ls-files"]).decode().split()
+for _dir in ("tests/fixtures/alpha_vantage/", "configs/model-cards/"):
+    check_true("third-party %s is tracked AND carved out of the licence in NOTICE and LICENSES.md" % _dir,
+               any(t.startswith(_dir) for t in _tracked) and _dir in _NOTICE and _dir in read("LICENSES.md"),
+               "(V)")
+check_true("the Alpha Vantage carve-out says the fixtures are NOT licensed by this project",
+           "NOT licensed to you by this project" in _NOTICE
+           and "Not licensed to you by this project" in read("LICENSES.md"), "(V)")
+_FIXDIRS = sorted({t.split("/")[2] for t in _tracked if t.startswith("tests/fixtures/") and t.count("/") >= 3})
+check_true("every tests/fixtures/ subdirectory is a known carve-out (now: alpha_vantage only)",
+           _FIXDIRS == ["alpha_vantage"], "(V) %r" % _FIXDIRS)
 import ast                                                      # noqa: E402
 _third = set()
 for dp, _, fs in os.walk(os.path.join(ROOT, "scripts")):

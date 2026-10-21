@@ -7649,3 +7649,58 @@ human-approved.
 - FRED API key (the owner is sending it).
 - Project-code licence.
 - Phase 11 (live trading) stays optional and never automatic. Every SS.6.1 prerequisite is still False.
+
+## D-0130 — Project code licensed Apache-2.0, chosen under the owner's explicit delegation (2026-10-21)
+
+**Input (owner):** "Provide an explanation regarding the licenses, or fix them yourself." I treat this as an explicit
+delegation of the one decision D-0127 had reserved for the owner.
+
+**Why something had to be done (V):**
+- `gh repo view` shows the repository is **PUBLIC**, and GitHub reports `licenseInfo: null`.
+- Public with no licence means anyone may read the code but no one may legally use, copy or modify it. That grants
+  nothing and protects nothing in particular.
+
+**Choice: Apache License 2.0.**
+- **Same licence as the base model** (Qwen3.5-4B, Apache-2.0, VERIFIED): one licence for the whole stack.
+- **Compatible with every dependency:** llama-cpp-python MIT, psutil and jinja2 BSD-3, tokenizers Apache-2.0. None of
+  them is copyleft.
+- **Explicit patent grant and liability disclaimer** ("AS IS", §7–8). This matters for financial software, which must
+  not be read as a warranty of results.
+- **Rejected alternatives:**
+  - MIT has no patent grant, and its disclaimer is weaker.
+  - GPL/AGPL would force downstream code open. That is not required here, and it is incompatible with the
+    proprietary LM Studio path.
+  - Keeping all rights reserved does not fit a repository the owner has chosen to make public.
+
+**What the licence does NOT cover:** third-party material shipped in the repository is carved out by path, in `NOTICE`
+and in `LICENSES.md`:
+- `tests/fixtures/alpha_vantage/*.json`: verbatim API captures. Alpha Vantage grants personal, non-commercial use only,
+  so these files are **not** licensed by this project. They were already public before this decision. Keeping or
+  removing them is not changed here, and is recorded as an owner option below.
+- `configs/model-cards/*.json`: configuration files from the model authors.
+- Data in `evidence/`: keeps its source's terms.
+- The licence on the code changes **nothing** about the terms of the data sources. TradingView stays display-only,
+  and FRED attribution is still required.
+
+**Files:**
+- `LICENSE`: the canonical text from apache.org; sha256 `cfc7749b…3d30`, pinned by a test.
+- `NOTICE`: copyright 2026 MobitSolidity, plus the carve-outs.
+- `LICENSES.md`: regenerated.
+- README and the model card: the licence row is updated.
+- Release **0.10.2**: pins LICENSE and NOTICE.
+
+**Tests:**
+- `test_phase9`: 72 → 79. These check:
+  - the canonical hash;
+  - that every document agrees on the licence;
+  - that no document still says "unlicensed";
+  - the NOTICE holder;
+  - the carve-outs, matched against `git ls-files`, so a new third-party fixture directory with no carve-out fails;
+  - the Alpha Vantage "not licensed" wording.
+- `mutate_phase9`: 16 → 22 mutants.
+- `test_phase10`: 197 → 200.
+
+**Owner options (none required):**
+- Choose a different licence (one file change plus a patch release).
+- Delete the Alpha Vantage fixtures from the public repository and replace them with synthetic ones (the IBM prices
+  are real data).

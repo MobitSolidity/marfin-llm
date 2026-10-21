@@ -33,6 +33,8 @@ from maintenance.monitor import ROOT, file_sha256
 #: Files whose content defines a release. Paths relative to the repo root.
 PINNED_FILES = (
     "VERSION",
+    "LICENSE",
+    "NOTICE",
     "configs/maintenance-policy.json",
     "configs/risk-policy.json",
     "configs/capability-manifest.yaml",
