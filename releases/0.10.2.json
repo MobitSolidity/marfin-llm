@@ -1,0 +1,47 @@
+{
+  "benchmark_baseline": "releases/benchmark-baseline.json",
+  "created_at": "2026-10-21T20:07:19Z",
+  "files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE": "22b19c416577b9ce8d8a2aaf4f0ebee41fb75997afccd2d2c02fd8a88d81780a",
+    "VERSION": "22b338099aa2f173dda116a3985f56aa3e61f8e35c3b2e7e1771bd2d33e7fad9",
+    "configs/capability-manifest.yaml": "0b9ced7fc607b19c1631b5542e9a1829c9eb7559a880ec9bbc33e6fe86b3bbf1",
+    "configs/maintenance-policy.json": "9f6d6964d88a0c2e8ebb890dc789f8832253c4b555ba2d1a2de6992cfa221b93",
+    "configs/risk-policy.json": "fec651615727bc77c6c3d087e69d4aaab1b3f969da47fdd8ef5afaddaa4fc813",
+    "deploy/ollama/Modelfile": "6a9cffc812249d8dd784edf33f915eb72d9691f55b619823386acdc4318d06be",
+    "evals/bilingual_eval_v1.jsonl": "ed24e4f2f2c74852877b14ba2d81fb407868a6a3a150fde24656c127233d35e9",
+    "evals/rag_corpus_combined.jsonl": "7e3e0ab2e0ccffd2572ace472099857c332c6c8004714d48c5284b1c105f27a0",
+    "evals/rag_gold_combined.jsonl": "6cf763e4665e772edd902ede9901d8b47aa33d7785bd0a6dadfd06e89841b515",
+    "requirements.txt": "321041d1e9312c382865d25b0e57dc7679a91343126e24fe08bc83df2d3a82f0",
+    "scripts/phase4_lib.py": "6eac44540a4ef3f58592c862abf6ce83fb19cc32f7f248aefaad6721d9d37ba3",
+    "scripts/run_phase4.py": "92815fe6204a9978652cfa94b5004dc37c01fc4ff999e918c032a4219bc475e3",
+    "src/execution/mode.py": "c50f337e31944afb0ad7581f19bc880c9bd8bfc1e33b5b019c8562c666eea872",
+    "src/execution/paper.py": "be405e1732a9eabca8259dad8153026d20d27ca79c382af42538a818387959b7",
+    "src/llm/style.py": "e4dc84b6af0c912b1fdfaad98a2ac7359144671eb487ed968e94a5aafaf40114",
+    "src/rag/citations.py": "c38c8de7fc9e820e5d27194e60f094b065a90e1769ca4cb1d41d8b9dea1dc546",
+    "src/rag/sources.py": "55934ad6eb48fc2cd209e4c09f837786134446aef19d36c6535d952029884a62",
+    "src/safety/untrusted.py": "63010e52725cb16dc78f968fa212bd0218c6f5afd1543bf1f2fbfcf88c9a022f",
+    "src/tools/registry.py": "f5fcaeaad73ede09ab286949e82de2fa26ca68bc50eeeaf6e858d8162effe5b3"
+  },
+  "git_commit": null,
+  "inference": {
+    "ctx": 16384,
+    "max_tokens": 512,
+    "quant": "Q4_K_M",
+    "repeat_penalty": 1.0,
+    "runtime": "llama.cpp in-process",
+    "seed": 20260831,
+    "temperature": 0.0,
+    "threads": 6
+  },
+  "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+  "prompt_options": {
+    "continue_budget": 256,
+    "display": true,
+    "execution_guard": true,
+    "min_trust": 80,
+    "refusal_language": true,
+    "second_turn": true
+  },
+  "version": "0.10.2"
+}

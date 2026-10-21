@@ -10,7 +10,7 @@ Every number below cites its evidence file. A number without a label is not a cl
 | **Revision** | `e87f176479d0855a907a41277aca2f8ee7a09523` (V) |
 | **Architecture** | `qwen35` decoder-only transformer, 4,205,751,296 parameters, vocab 248,320, GGUF v3 (V, `evidence/phase7_gguf_headers_2026-10-16.json`) |
 | **Version** | System v0.8A (Phase 8A, D-0126). No adapter or LoRA: Phase 4 recommended against fine-tuning on this hardware (D-0116). |
-| **License** | Base model: Apache-2.0 (V, upstream card). Project code: **not yet licensed**; see `LICENSES.md`. |
+| **License** | Base model: Apache-2.0 (V, upstream card). Project code: Apache-2.0 (`LICENSE`, `NOTICE`; D-0130), excluding the third-party material listed in `NOTICE`; see `LICENSES.md`. |
 | **Datasets** | No training data (no fine-tuning). Evaluation data: `evals/bilingual_eval_v1.jsonl` (21 cases, authored), `evals/rag_*_combined.jsonl` (32 gold rows over SEC EDGAR and FRB passages), `evals/redteam_*` (Phase 6). |
 | **Dataset licenses** | SEC EDGAR: US-government public records, access rules recorded. FRB: public domain (V). Eval questions: authored for this project. Registry: `LICENSES.md`, `docs/legal/research-and-news-sources.md`. |
 | **Date ranges** | RAG corpus: filings for fiscal 2023–2025 (V, gold rows). The model knows nothing after its training cutoff; anything time-sensitive must come from RAG or a quote. |

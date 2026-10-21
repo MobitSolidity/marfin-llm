@@ -813,8 +813,7 @@
     ]
   },
   "awaiting_user_action": [
-    "FRED API key (owner sending)",
-    "project-code licence (owner decision)"
+    "FRED API key (owner sending)"
   ],
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
@@ -3029,9 +3028,22 @@
       ]
     },
     "open": [
-      "FRED API key",
-      "project-code licence"
+      "FRED API key"
     ],
     "phase_11": "optional; never automatic"
+  },
+  "project_licence": {
+    "code": "Apache-2.0",
+    "files": [
+      "LICENSE",
+      "NOTICE"
+    ],
+    "decision": "D-0130",
+    "chosen_by": "assistant under the owner's explicit delegation ('fix them yourself'), 2026-10-21",
+    "carve_outs": [
+      "tests/fixtures/alpha_vantage/*.json (Alpha Vantage terms: personal, non-commercial)",
+      "configs/model-cards/*.json (model authors)",
+      "evidence/ data keeps its source's terms"
+    ]
   }
 }

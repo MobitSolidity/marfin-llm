@@ -40,8 +40,15 @@ def render():
            "Generated from `src/rag/sources.py` and `src/market/quotes.py`. A test fails if this file "
            "and the live registries disagree.", "",
            "## Project code", "",
-           "**No licence has been chosen for this repository's own code.** Until the owner chooses one, "
-           "all rights are reserved by the owner. Redistribution must also respect every row below.", "",
+           "**Apache License 2.0** (`LICENSE`, `NOTICE`), chosen 2026-10-21 under the owner's delegation "
+           "(D-0130). It covers only the original work in this repository. It does **not** cover the "
+           "third-party material listed below and in `NOTICE`, which keeps its own terms:", "",
+           "- `tests/fixtures/alpha_vantage/*.json`: verbatim Alpha Vantage API captures; Alpha Vantage "
+           "terms (personal, non-commercial use). Not licensed to you by this project.",
+           "- `configs/model-cards/*.json`: configuration files published by the model authors, under "
+           "their licences.",
+           "- Data and model outputs in `evidence/` keep the terms of the source they came from (tables below).",
+           "",
            "## Model", "", "| Component | Licence | Status | Identity |", "|---|---|---|---|"]
     out += ["| %s | %s | %s | %s |" % tuple(map(_cell, r)) for r in MODEL]
     out += ["", "## Software dependencies (third-party, not vendored)", "",

@@ -1,0 +1,21 @@
+marfin-llm
+Copyright 2026 MobitSolidity (repository owner)
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The licence covers ONLY the original work in this repository. The following
+are NOT covered by it and remain under their own terms (full list, generated
+from the live registries: LICENSES.md):
+
+- tests/fixtures/alpha_vantage/*.json -- verbatim API responses captured from
+  Alpha Vantage, kept as test fixtures. Alpha Vantage's terms grant personal,
+  non-commercial use only; these files are NOT licensed to you by this project.
+- configs/model-cards/*.json -- model configuration files published by their
+  model authors (Qwen, Microsoft, IBM, Hugging Face), under those authors'
+  licences.
+- The Qwen3.5-4B model weights (Apache-2.0, Qwen team) are not distributed in
+  this repository.
+- evidence/ records model outputs and data from the sources listed in
+  LICENSES.md; data drawn from a source keeps that source's terms.
+- Third-party software dependencies (requirements.txt) are installed, not
+  vendored, and keep their own licences.
