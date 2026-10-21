@@ -2,7 +2,14 @@
 
 Date: 2026-10-20 · D-0128 (under the D-0126 delegation) · Labels: (V) VERIFIED · (M) MEASURED · (C) COMPUTED · (E) ESTIMATED
 
-## Status: **BUILT, AWAITING USER APPROVAL**: all 12 SS.24 tasks are delivered and tested. SS.24 requires user approval for final acceptance; the assistant cannot give it.
+## Status: **ACCEPTED** by the owner on 2026-10-21 (D-0129). All 12 SS.24 tasks are delivered and tested.
+
+**Update D-0129:**
+- The owner approved the risk limits, with `allow_short` changed to true.
+- llama-cpp-python 0.3.35 is recorded from the target machine.
+- The Phase 8C run is graded and is the new benchmark baseline.
+- Release 0.10.1 is recorded.
+- The routine report shows 1 WARN (the FRED key).
 
 | SS.24 task | Deliverable | Check |
 |---|---|---|

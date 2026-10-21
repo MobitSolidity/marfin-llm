@@ -73,7 +73,8 @@ MUTATIONS = [
     (CLI, "risk policy unchecked", "                               limits_factory=PP.RiskLimits)", "                               limits_factory=None)"),
     # policy file
     ("configs/maintenance-policy.json", "reconcile interval widened", '"reconciliation_interval_minutes": 15', '"reconciliation_interval_minutes": 30'),
-    ("configs/risk-policy.json", "human approval falsely claimed", '"human_approved": false', '"human_approved": true'),
+    ("configs/risk-policy.json", "owner approval silently revoked", '"human_approved": true', '"human_approved": false'),
+    ("configs/risk-policy.json", "owner's short-sale setting reverted", '"allow_short": true', '"allow_short": false'),
     # docs
     ("docs/maintenance.md", "documented threshold drifts", "| `legal_review_days` | 120 |", "| `legal_review_days` | 180 |"),
     ("docs/incident-response.md", "SEV level dropped", "| **SEV-3** |", "| **SEV-x** |"),

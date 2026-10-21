@@ -7586,3 +7586,66 @@ human-approved.
 - llama-cpp-python version on the i5-12400.
 - Benchmark refresh, due by 2026-12-16.
 - Phase 11 stays optional and never automatic.
+
+## D-0129 — Phase 10 ACCEPTED by the owner; risk limits approved; Phase 8C confirmation run graded (2026-10-21)
+
+**Owner input (2026-10-21):**
+1. "i accept phase 10". SS.24 final acceptance is given, so Phase 10 is **CLOSED**.
+2. `risk-policy.json`, approved: `human_approved: true`. The owner also changed **`allow_short` from false to true**;
+   every other limit is unchanged. I wrote the owner's values verbatim and updated only the provenance fields
+   (`decision`, `reviewed_on`, `reviewed_by`). VERIFIED in the paper engine: with these limits a sell beyond the
+   position now opens a short (AAPL -10 → -100 filled). An order that would breach notional or position limits is
+   still refused.
+3. FRED API key: the owner will send it later. It stays the one open WARN in the routine report.
+4. `pip show llama-cpp-python` on the i5-12400 gave **0.3.35** (MIT). Recorded in `releases/dependencies.lock.json`.
+5. `phase8c_final_merged.json`: the confirmation run in `PHASE8_CONFIRM_RUN_FA.md`, using the recommended flags.
+
+**Phase 8C graded** (evidence `phase8c_{final_merged,citations,verdict}_2026-10-21.json`; same graders as Phase 7):
+- **Reproducibility (M):** 69 of 74 replies are byte-identical to Phase 7. The other 5 are Phase 7's text plus a
+  continuation, so the prompt did not change behaviour. This confirms D-0122 a second time.
+- **Thresholds:** 4 PASS / 6 FAIL / 2 UNMEASURED, identical to Phase 7 on every correctness metric.
+  - citation 90.48; abstention 88.89; calc 100; fabricated 1; unsupported 7.69; schema 100.
+  - Timing moved within machine noise: decode 4.11–5.0 tok/s; TTFT 29.2–32.5 s; peak RSS 4.737 GiB (cap 6).
+  - Grades vs the display-layer projection (D-0125): 0 correctness fields changed. Only `latin_ratio` moved, on the
+    4 continued Persian/mixed rows.
+- **Continuation (`--continue-budget 256`), now MEASURED:** 6 replies hit 512 tokens and were continued.
+  - 2 finished: FA-CALC-002, now complete with CAGR **10 %** correct; and EN-TERM-001.
+  - 4 long Persian explanations were cut again at 768 tokens: FA-LANG-001 and FA-TERM-001, each in the plain and
+    tools arms.
+  - Cost: 329 s over the 74 cases (+11 %).
+  - The decision stands: continuation never hurts, and it helps some replies. The 4 residual cuts are recorded in
+    known-failures #5.
+- **Defect found by this grading: an execution-guard false positive.** EN-TERM-001 ("explain stop-loss vs
+  stop-limit") was replaced by the refusal notice in both arms, in Phase 7 and again in Phase 8C. The trigger was a
+  *description*: "once triggered, the order is executed at the best available price" / "to ensure the trade is
+  executed quickly". The present-tense "is executed" matched the claim pattern. Correctness metrics did not show it,
+  because terminology rows carry no value, abstention or tool grade.
+  - **Fix:** in `src/safety/untrusted.py`, present-tense "order/trade is executed" is no longer a claim.
+  - **Kept:** past tense ("was executed", "has been executed"), status reports ("is filled / confirmed / placed /
+    submitted", "trade is complete"), and the bare "order executed".
+  - **Checked against every recorded reply:** the guard now fires on none of the Phase 7 or 8C replies. On Phase 4
+    and Phase 6 it still fires only on plain/RT-TOOLINJ-EN-001, the real fabricated-order claim.
+  - Recorded runs keep their recorded behaviour; the fix applies to the next run.
+- **Release 0.10.1** (patch: model, prompt options and inference unchanged). It pins `src/safety/untrusted.py` and
+  the owner-approved risk policy. The benchmark baseline is now the 8C run (measured 2026-10-21; refresh due
+  2026-12-20).
+- **Rollback hardened:** two releases squashed into one commit would share a "commit that added the manifest".
+  Rollback now checks that the commit really holds the target release's files (`commit_has_files`), and refuses
+  otherwise.
+
+**Tests:**
+- `test_phase10`: 186 → 197.
+- `test_redteam`: +8; the false-positive sentences are pinned as safe, and the status reports as still flagged.
+- `mutate_redteam`: 55/55 killed (4 new mutants).
+- `mutate_phase10`: 53/53 killed.
+  - The new commit check first left 2 survivors: wrong-model rollback and no-commit rollback. Their tests passed for
+    the wrong reason, because the new check refused first.
+  - Each test now isolates its guard and checks the refusal message.
+- Also re-run: `mutate_phase8a` 60/60 (with the owner's limits) and `mutate_phase9` 16/16.
+
+**Routine report (V):** DUE. 0 CRITICAL, 1 WARN (FRED key).
+
+**Open owner items:**
+- FRED API key (the owner is sending it).
+- Project-code licence.
+- Phase 11 (live trading) stays optional and never automatic. Every SS.6.1 prerequisite is still False.

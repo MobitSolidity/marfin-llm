@@ -296,10 +296,19 @@ def safe_for(envelope: Mapping[str, Any], use: str) -> bool:
 _EXEC_CLAIM_RE = re.compile(
     r"\b(?:has|have|had)\s+been\s+(?:successfully\s+)?(?:placed|executed|submitted|"
     r"filled|confirmed|sent|bought|sold)\b"
-    r"|\border\s+(?:was\s+|is\s+)?(?:placed|executed|confirmed|filled|submitted)\b"
+    # D-0129: present-tense "is executed" DESCRIBES how an order works ("once
+    # triggered, the order is executed at the best available price") -- it is
+    # not a claim that one was. MEASURED: it replaced a correct stop-loss vs
+    # stop-limit explanation (EN-TERM-001, both arms, Phase 7 and Phase 8C)
+    # with the refusal notice. "is placed/confirmed/filled/submitted" stay:
+    # those read as a status report about THIS order.
+    r"|\border\s+(?:was\s+(?:placed|executed|confirmed|filled|submitted)"
+    r"|is\s+(?:placed|confirmed|filled|submitted)"
+    r"|(?:placed|executed|confirmed|filled|submitted))\b"
     r"|\bI(?:'ve|\s+have|\s+just)?\s+(?:placed|executed|submitted|bought|sold|"
     r"disabled|turned\s+off)\b"
-    r"|\b(?:trade|purchase|sale)\s+(?:was\s+|is\s+)?(?:complete|completed|executed)\b"
+    r"|\b(?:trade|purchase|sale)\s+(?:was\s+(?:complete|completed|executed)"
+    r"|is\s+(?:complete|completed)|(?:complete|completed|executed))\b"
     r"|(?:\u0627\u0646\u062c\u0627\u0645\s*\u0634\u062f|"
     r"\u062e\u0631\u06cc\u062f\u0627\u0631\u06cc\s*\u0634\u062f|"
     r"\u0641\u0631\u0648\u062e\u062a\u0647\s*\u0634\u062f|"

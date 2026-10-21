@@ -1,7 +1,7 @@
 {
   "project_name": "marfin-llm",
   "current_phase": 10,
-  "phase_status": "PHASE_10_BUILT_AWAITING_USER_ACCEPTANCE",
+  "phase_status": "PHASE_10_ACCEPTED_BY_USER",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
   "selected_base_model": null,
@@ -42,7 +42,7 @@
   "active_mode": "ANALYSIS_ONLY",
   "live_trading_enabled": false,
   "capability_manifest_version": "0.1.0",
-  "risk_policy_version": "configs/risk-policy.json (2026-10-20, human_approved=false)",
+  "risk_policy_version": "configs/risk-policy.json (2026-10-21, human_approved=true by owner, allow_short=true)",
   "market_data_providers": [
     "alpha_vantage_free_tier"
   ],
@@ -317,7 +317,7 @@
   "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
   "next_phase_viable_in_sandbox": false,
   "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-10-20",
+  "last_updated": "2026-10-21",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -511,12 +511,7 @@
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
   ],
-  "awaiting_approval_for": [
-    "Phase 10 final acceptance (SS.24)",
-    "configs/risk-policy.json human_approved",
-    "FRED API key",
-    "project-code licence"
-  ],
+  "awaiting_approval_for": [],
   "phase_2": {
     "status": "PASS (deterministic half built+verified; model half is a verified plan)",
     "model_revision_pinned": {
@@ -817,7 +812,10 @@
       "nothing run against a live model (R10, R21)"
     ]
   },
-  "awaiting_user_action": null,
+  "awaiting_user_action": [
+    "FRED API key (owner sending)",
+    "project-code licence (owner decision)"
+  ],
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
     "status": "MEASURED_VERDICT_FAIL_HARDWARE_BOUND_REVERIFIED_2026_09_27_SEE_measurements_recorded_2026_09_27",
@@ -2956,7 +2954,7 @@
     "open": "project-code licence not chosen (owner decision)"
   },
   "D-0128_phase10_monitoring_maintenance_2026_10_20": {
-    "status": "BUILT_AWAITING_USER_ACCEPTANCE",
+    "status": "ACCEPTED_BY_USER_2026_10_21",
     "version": "0.10.0",
     "deliverables": [
       "src/maintenance/monitor.py",
@@ -2994,5 +2992,46 @@
       "benchmark refresh due 2026-12-16"
     ],
     "phase_11": "optional; never automatic; all SS.6.1 prerequisites False"
+  },
+  "D-0129_phase10_accepted_phase8c_graded_2026_10_21": {
+    "phase10": "ACCEPTED by the owner 2026-10-21 (SS.24)",
+    "risk_policy": {
+      "human_approved": true,
+      "allow_short": true,
+      "changed_by_owner": [
+        "allow_short false->true"
+      ]
+    },
+    "llama_cpp_python": "0.3.35 (owner, i5-12400)",
+    "phase8c": {
+      "evidence": [
+        "evidence/phase8c_final_merged_2026-10-21.json",
+        "evidence/phase8c_citations_2026-10-21.json",
+        "evidence/phase8c_verdict_2026-10-21.json"
+      ],
+      "tally": "4 PASS / 6 FAIL / 2 UNMEASURED (= Phase 7)",
+      "byte_identical_to_phase7": "69/74 (5 = Phase 7 text + continuation)",
+      "continuation": {
+        "continued": 6,
+        "finished": 2,
+        "still_cut_at_768": 4,
+        "extra_seconds": 328.8
+      }
+    },
+    "guard_false_positive_fixed": "EN-TERM-001 present-tense 'is executed' (src/safety/untrusted.py)",
+    "release": "0.10.1",
+    "benchmark_baseline": "phase8c_verdict_2026-10-21.json",
+    "routine_report": {
+      "status": "DUE",
+      "critical": 0,
+      "warn": [
+        "fred key"
+      ]
+    },
+    "open": [
+      "FRED API key",
+      "project-code licence"
+    ],
+    "phase_11": "optional; never automatic"
   }
 }

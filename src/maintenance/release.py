@@ -45,6 +45,7 @@ PINNED_FILES = (
     "src/llm/style.py",
     "src/rag/citations.py",
     "src/rag/sources.py",
+    "src/safety/untrusted.py",
     "src/tools/registry.py",
     "scripts/run_phase4.py",
     "scripts/phase4_lib.py",
@@ -196,8 +197,31 @@ def release_commit(version: str, root=ROOT) -> Optional[str]:
     return out or None
 
 
+def commit_has_files(commit: str, files: Mapping[str, str], root=ROOT) -> List[str]:
+    """
+    The pinned paths whose content AT `commit` does not hash to the manifest's
+    sha256. Empty means the commit really is that release. D-0129: needed
+    because two releases squashed into ONE commit share a "commit that added
+    the manifest", and checking out that commit would restore the NEWER files
+    while claiming to roll back to the older release.
+    """
+    import hashlib
+    import subprocess
+    bad = []
+    for rel, sha in sorted(files.items()):
+        try:
+            blob = subprocess.check_output(["git", "-C", root, "show", "%s:%s" % (commit, rel)],
+                                           stderr=subprocess.DEVNULL)
+        except Exception:                                   # noqa: BLE001
+            bad.append(rel)
+            continue
+        if hashlib.sha256(blob).hexdigest() != sha:
+            bad.append(rel)
+    return bad
+
+
 def rollback_plan(target_version: str, root=ROOT, model_path: Optional[str] = None,
-                  commit_resolver=None) -> Dict[str, Any]:
+                  commit_resolver=None, commit_checker=None) -> Dict[str, Any]:
     """
     What a rollback to `target_version` requires: the git commit and the exact
     files to restore. Refused if the target is unknown or (with model_path) the
@@ -217,6 +241,12 @@ def rollback_plan(target_version: str, root=ROOT, model_path: Optional[str] = No
     if restore and not commit:
         raise ReleaseError("release %s differs from the tree but its commit cannot be found "
                            "(releases/%s.json is not committed?)" % (target_version, target_version))
+    if restore:
+        wrong = (commit_checker or commit_has_files)(commit, {r: m["files"][r] for r in restore}, root)
+        if wrong:
+            raise ReleaseError("commit %s does not hold release %s's version of %s (were two releases "
+                               "squashed into one commit?); restore by hand from a commit that does"
+                               % (str(commit)[:12], target_version, ", ".join(wrong)))
     cmd = "git checkout %s -- %s" % (commit, " ".join(restore)) if restore else None
     return {"target": target_version, "already_at_target": not restore, "commit": commit,
             "restore_files": restore, "command": cmd,

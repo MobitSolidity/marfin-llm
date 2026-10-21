@@ -79,8 +79,8 @@ shown to the model, scale included (the 10⁶ error class).
    stop (EN-RISK-002); one fabricated RAG answer on an unanswerable row.
 3. **Citations.** A correct figure restated without its scale word next to it is not confirmable (D-0103); explanatory
    sentences add unconfirmable claims.
-4. **Cut-off answers.** 6 of 74 replies hit 512 tokens (Phase 7). Mitigation: `--continue-budget 256` (effect not
-   yet measured).
+4. **Cut-off answers.** 6 of 74 replies hit 512 tokens (Phase 7). Mitigation: `--continue-budget 256`. MEASURED in Phase 8C
+   (D-0129): 2 of 6 now finish; 4 long Persian explanations are still cut at 768 tokens.
 5. **Language.** 1 Persian reply switched to English sentences (detected by `latin_runs`, not rewritten). A few
    English replies answered or translated into Persian under the prompt rules (D-0124/D-0125).
 6. **Runtime sensitivity.** The same weights and prompt give different greedy replies on Ollama and LM Studio (2/74
