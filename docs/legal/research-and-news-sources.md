@@ -590,3 +590,16 @@ SEC, Fed Board, OFR and arXiv impose no attribution condition.
 | **ECB / BIS / IMF written permission for papers** (not data) | A written request from the owner to each institution | research-paper ingestion (data is already permitted) |
 | **TradingView, Bloomberg, Reuters, FT** | Commercial data agreements | none planned; machine use stays prohibited |
 | **Codal / TSETMC** | Descoped by the owner in Phase 0; sanctions status unverified | none (stays descoped) |
+
+## 11. Remaining candidates resolved, 2026-10-21 (D-0132)
+
+| Candidate | Terms (read 2026-10-21) | Endpoint | Decision |
+|---|---|---|---|
+| **NY Fed Markets Data API** | newyorkfed.org/privacy/termsofuse (sha256 `65ae244e70550731`): licence "to use, copy, and distribute Content for your personal or business purposes", including access "through an automated process or device" and to "Download, store, and use Content in any format or media". The API docs (`markets-api.yml`, sha256 `5dbb331d86b91bfc`) say all API data "is subject to the Terms of Use" | **200, parsed:** SOFR 3.88 (2026-10-20), EFFR 3.88, target range 3.75–4.00 | **REGISTERED, enabled** (`OFFICIAL_DATA`). Prescribed attribution added verbatim. Blog archives excluded (they need a separate written licence) |
+| NY Fed staff reports | same licence | no working feed found (all four URLs tried redirect to /errors/404) | not registered: licence alone is not enough |
+| **SSRN** | "You represent and warrant that you will not … send automated queries of any sort to SSRN"; "all rights are reserved, including those for text and data mining, AI training" | — | **PROHIBITED** for machine use; not registered. A human may read it |
+| NBER | terms page 404 (`www2.nber.org/terms-use`) | — | UNKNOWN; not registered |
+| World Bank OKR | openknowledge.worldbank.org did not respond (HTTP 000) | — | UNKNOWN; not registered |
+
+With this section, every candidate named in this review has a recorded decision. The licences that remain need the
+owner personally (§10, last table).

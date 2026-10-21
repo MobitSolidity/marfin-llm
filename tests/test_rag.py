@@ -804,8 +804,8 @@ section("source registry: terms are enforced, not merely declared")
 # asserted with tolerance 0 ON PURPOSE: a source appearing or disappearing
 # silently is exactly the change that must break a test, because it means
 # something entered or left the ingestible set without review.
-check("15 sources registered", len(SOURCES), 15, 0, "(C)")
-check("10 enabled (GDELT added, D-0131)", len(enabled_sources()), 10, 0, "(C)")
+check("16 sources registered (NY Fed markets data added, D-0132)", len(SOURCES), 16, 0, "(C)")
+check("11 enabled (GDELT D-0131, NY Fed D-0132)", len(enabled_sources()), 11, 0, "(C)")
 check("5 descoped (2x Q3 scope, 3x licence/reachability)",
       len(descoped_sources()), 5, 0, "(C)")
 check_true("registry key always matches source.key",
@@ -989,8 +989,22 @@ check_true("BIS records that a 404 body size proves nothing",
 # NY Fed has the most generous research licence reviewed and is deliberately
 # NOT registered, because its endpoint was never probed. Registering it on the
 # licence alone is precisely the mistake the GDELT entry documents.
-check_raises("NY Fed is absent, not silently enabled on licence alone",
+check_raises("NY Fed staff reports stay absent (no endpoint proven for them)",
              lambda: get_source("nyfed_staff_reports"))
+# D-0132: the NY Fed MARKETS DATA API is registered because BOTH halves were
+# proven -- a parsed SOFR/EFFR payload AND the terms re-read verbatim, with the
+# API's own docs putting its data under those terms.
+_ny = SOURCES["nyfed_markets_data"]
+check_true("NY Fed markets data: enabled with a MEASURED payload and a re-read licence",
+           _ny.enabled and "HTTP 200, payload parsed" in _ny.verified_status
+           and "through an automated process or device" in _ny.licence, "(C)")
+check_true("NY Fed markets data: scope excludes the blog archive (separate written licence)",
+           "Liberty Street Economics" in _ny.licence and "NOT covered" in _ny.licence, "(C)")
+check_true("NY Fed attribution is the Terms' prescribed format, verbatim",
+           REQUIRED_NOTICES["nyfed_markets_data"] == "\u00a9 2026 Federal Reserve Bank of New "
+           "York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org.", "(C)")
+check_true("SSRN is NOT registered: its terms forbid automated queries and reserve TDM rights",
+           "ssrn" not in SOURCES, "(C) D-0132, terms read 2026-10-21")
 
 # --- R45: "AI web search" is refused, and the refusal is named --------------
 # The proposal was to replace news/social APIs with AI web search. It fails on
@@ -1040,7 +1054,7 @@ for _k, _must in (("ecb_data_portal", "European Central Bank"),
                   ("gdelt_doc", "https://www.gdeltproject.org/")):
     check_true("required_notices() discharges the %s attribution condition" % _k,
                any(_must in n for n in required_notices([_k])), "(D)")
-check_true("every enabled source either needs no attribution or has a notice",
+check_true("every enabled source either needs no attribution or has a notice (NY Fed included)",
            {k for k, s in SOURCES.items() if s.enabled} - set(REQUIRED_NOTICES)
            == {"arxiv_qfin", "fed_board_working_papers", "ofr_working_papers",
                "sec_edgar_submissions", "sec_edgar_xbrl"}, "(C)")

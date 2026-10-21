@@ -7755,3 +7755,38 @@ does not require rewriting them. Every older release is checked as a real rollba
 - `test_rag`: 289; GDELT re-pinned with both halves, its rate limit, metadata-only scope and trust; notices pinned.
 - `mutate_rag`: 121 killed + 3 documented equivalent, 0 survivors (GDELT mutants rewritten for the enabled state).
 - `test_phase10`: 203.
+
+## D-0132 — Remaining licence candidates resolved; NY Fed markets data licensed and registered (2026-10-21)
+
+**Input (owner):** "Please obtain all the necessary licence that can be acquired for this project." This follows
+D-0131, which covered every source already in the registry. This decision covers the candidates the August review
+named but left open.
+
+**Obtained:**
+- **NY Fed Markets Data API, registered and enabled.**
+  - Licence re-read verbatim: automated access, plus "download, store, and use Content in any format", for personal or
+    business purposes.
+  - The API's own documentation puts all its data under those Terms.
+  - The endpoint returned parsed SOFR and EFFR values.
+  - The prescribed attribution is added verbatim to `REQUIRED_NOTICES`.
+  - Blog archives are excluded, because they need a separate written licence.
+  - This is the project's first source of US money-market reference rates.
+
+**Refused on the terms:**
+- **SSRN:** it forbids "automated queries of any sort" and reserves text-and-data-mining and AI-training rights.
+
+**Still unknown (not registered):**
+- NBER: terms page 404.
+- World Bank OKR: no response.
+- NY Fed staff reports: no feed found.
+
+**Result:** every candidate in `docs/legal/research-and-news-sources.md` now has a recorded decision (§11). The
+remaining licences need the owner: the FRED key, a Twelve Data paid non-display tier, and written permission for
+ECB/BIS/IMF papers.
+
+**Release 0.10.4.**
+
+**Tests:**
+- `test_rag`: 293.
+- `mutate_rag`: +2 mutants (notice; blog carve-out).
+- Registry: 16 sources, 11 enabled.
