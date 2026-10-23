@@ -34,7 +34,9 @@ python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf      # interactiv
 ```
 Live US macro data and central-bank policy rates need `setx FRED_API_KEY <key>` (FRED) and network access
 (BIS needs no key). `--no-macro` keeps every question offline. `--server lmstudio --model-id <id>` uses a loopback
-server instead of loading the model in-process. Guide in Persian: `docs/guides/ask-fa.md`.
+server instead of loading the model in-process. On Windows the answer is ALSO opened as a right-to-left HTML page
+(`%USERPROFILE%\.marfin\ask_answer.html`), because the Windows console cannot shape Persian (D-0136);
+`--no-open` / `--no-html` turn that off. Guide in Persian: `docs/guides/ask-fa.md`.
 
 **4. Execution mode.** No config file means ANALYSIS_ONLY. To enable paper trading, create
 `%USERPROFILE%\.marfin\execution.conf`:

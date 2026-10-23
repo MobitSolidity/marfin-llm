@@ -384,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.11.0 (D-0135: ask.py + macro_data, a MINOR feature release)", REL.read_version() == "0.11.0", "(V)")
+check_true("VERSION file is 0.11.1 (D-0136: fixes to the owner-reported ask.py defects)", REL.read_version() == "0.11.1", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:

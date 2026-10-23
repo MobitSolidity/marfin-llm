@@ -7923,3 +7923,51 @@ fixed questions; none answered the owner's own question.
 
 **Not done, and why.** `ask.py` has never run against the real model. This sandbox cannot load it: 0.96 GiB RAM.
 The first real run is the owner's. Nothing here changes a recorded measurement.
+
+## D-0136 — First real `ask.py` run on the i5-12400: one routing defect, two follow-ons, and Persian display (2026-10-23)
+
+**What the owner ran (MEASURED, on the target).**
+1. «سود خالص اپل در سال مالی ۲۰۲۳ چقدر بود» → route `rag`.
+   - Reply: **۹۶,۹۹۵ میلیون دلار**, citing [2], the FY2023 filing. Figure check: SUPPORTED. **Correct.**
+   - "data as of 2024-11-01" is the newest evidence *shown* (the FY2024 row ranked first). It is not the cited row,
+     and that is consistent with the definition.
+2. A Persian request for "the live macro data (inflation, unemployment, 10-year yield, US GDP, the policy rates of the
+   6 central banks)" → route **`tools`**, **wrong**.
+   - The model answered "I have no live data". That reply was honest, but the data was there to show.
+3. In PowerShell, Persian was shown left-to-right with letters disconnected.
+
+**Root cause of 2 (MEASURED, reproduced exactly).**
+- The router counted «۱۰» (from «اوراق ۱۰ ساله») and «۶» (from «۶ بانک») as two calculation operands, and «بازده»
+  matched a tool family. So the question went to the tools route.
+- Also, «اوراق ۱۰ ساله» was not a catalogue term, and "the 6 central banks" named no bank. So even the macro route
+  would have missed DGS10 and all six policy rates.
+
+**Fixes.**
+- **Router.** Numbers inside a matched series name are removed before operands are counted
+  (`macro.strip_series_terms`). A real calculation that mentions a series still routes to tools (tested).
+- **Catalogue terms.** Added «اوراق ۱۰ ساله» and «اوراق قرضه ۱۰ ساله».
+- **Generic central-bank question.** A general central-bank phrase plus a policy-rate word selects all 6 policy rates,
+  but only when no specific bank was named. "بانک مرکزی ایران چه کار می‌کند" selects nothing.
+- **Evidence size.** With more than 2 series and no named year, each series shows its newest row only (CPI keeps its
+  year-earlier row and the COMPUTED change). MEASURED: the owner's question went from 22 rows to 12 rows, prompt
+  ≈4.5 K characters.
+- **BIS spacing.** Calls are spaced by the registry's `rate_limit_qps` (1/s). Ten series in one question had fired
+  back-to-back.
+- **Named year (found while replaying).** A question naming a year now gets that year's window, with a request
+  `limit` large enough to reach it.
+  - Before: only the newest rows, so "January 2024" (RAG-EN-004's question) was never in the evidence.
+  - MEASURED live: 12 rows of 2024 returned; 2024-01 = 309.698.
+  - A window beyond the 1000-observation cap is refused, never answered with newer data.
+- **Display (3).** The Windows console has no complete bidi/Arabic-shaping support, so no printed text can fix it.
+  The answer is now ALSO written to a right-to-left HTML page and opened in the browser.
+  - It is on by default on Windows; `--html` forces it, `--no-open` / `--no-html` turn it off.
+  - Every model or corpus string is `html.escape`d, and only `**bold**` becomes markup (SS.10; tested with
+    `<script>`, `<img onerror>`, `<iframe>`).
+  - Interactive sessions show the whole session on one page that reloads itself.
+
+**Tests.**
+- `test_ask.py`: 99 → 122 assertions, including the owner's question as a fixed regression case.
+- `mutate_ask.py`: 30 → 44 mutants, 44/44 killed.
+  - The first pass left 1 survivor (evidence escaping) and 1 skip (an anchor moved by the router fix). Both are fixed.
+
+**Release.** 0.11.1, a patch: the model, prompt options and inference are unchanged. This is a fix of pinned files.
