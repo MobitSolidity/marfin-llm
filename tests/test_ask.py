@@ -288,6 +288,108 @@ check_raises("empty question refused", lambda: bot.answer("   "), ValueError)
 check_true("the registry still has no execution tool", RP.assert_no_execution_capability() == 85, "(V)")
 
 # ===========================================================================
+section("D-0136: the owner's real questions (2026-10-23), replayed")
+# ===========================================================================
+OWNER_Q2 = ("\u062f\u0627\u062f\u0647\u200c\u0647\u0627\u06cc \u0632\u0646\u062f\u0647\u0654 "
+            "\u0627\u0642\u062a\u0635\u0627\u062f \u06a9\u0644\u0627\u0646** (\u062a\u0648\u0631\u0645\u060c "
+            "\u0628\u06cc\u06a9\u0627\u0631\u06cc\u060c \u0628\u0627\u0632\u062f\u0647 \u0627\u0648\u0631\u0627\u0642 "
+            "\u06f1\u06f0 \u0633\u0627\u0644\u0647\u060c \u062a\u0648\u0644\u06cc\u062f \u0646\u0627\u062e\u0627\u0644\u0635 "
+            "\u062f\u0627\u062e\u0644\u06cc \u0622\u0645\u0631\u06cc\u06a9\u0627 \u0648 \u0646\u0631\u062e "
+            "\u0628\u0647\u0631\u0647\u0654 \u06f6 \u0628\u0627\u0646\u06a9 \u0645\u0631\u06a9\u0632\u06cc): "
+            "\u0627\u06cc\u0646 \u0645\u0648\u0627\u0631\u062f \u0631\u0627 \u0628\u0631\u06cc\u0627\u0645 \u0628\u06af\u0648")
+check_true("the owner's macro question selects all 5 named series + 6 policy rates (10)",
+           M.select(OWNER_Q2) == ["CPIAUCSL", "UNRATE", "DGS10", "GDP", "WS_CBPOL:D.US", "WS_CBPOL:D.XM",
+                                  "WS_CBPOL:D.GB", "WS_CBPOL:D.JP", "WS_CBPOL:D.CA", "WS_CBPOL:D.CH"],
+           "(M) %r" % M.select(OWNER_Q2))
+check_true("... '۱۰ ساله' and '۶ بانک' are NOT counted as calculation operands",
+           A._numbers_in(M.strip_series_terms(OWNER_Q2)) == [6.0] and len(A._numbers_in(OWNER_Q2)) == 2,
+           "(M) the defect: 2 'operands' sent it to the tools route")
+
+
+def _bis_or_fred(key, **kw):
+    if key.startswith("WS_CBPOL"):
+        return M.fetch(key, bis_get=lambda u, t: CSV, sleep=lambda x: None, **kw)
+    return M.fetch(key, api_key=K, fred_get=fred(CPI_OBS), **kw)
+
+
+bot2 = A.Assistant(runner, index=INDEX, macro_fetch=_bis_or_fred, clock=lambda: NOW)
+check_true("... and it is routed to macro, not tools", bot2.route(OWNER_Q2)[0] == "macro",
+           "(M) got %s" % bot2.route(OWNER_Q2)[0])
+o2 = bot2.answer(OWNER_Q2)
+check_true("10 series in one question -> 1 newest row each, CPI keeps YoY rows (12 rows, not 22)",
+           len(o2["evidence"]) == 12, "(M) %d" % len(o2["evidence"]))
+check_true("a calculation that mentions a series is still a calculation",
+           bot2.route("If CPI rose from 100 to 103.5, what is the simple return?")[0] == "tools", "(B) negative")
+check_true("a generic central-bank question with a rate word selects all 6 policy rates",
+           len(M.select("What are the policy rates of the major central banks?")) == 6, "(B)")
+check_true("... but a central-bank question with no rate word selects nothing",
+           M.select("\u0628\u0627\u0646\u06a9 \u0645\u0631\u06a9\u0632\u06cc \u0627\u06cc\u0631\u0627\u0646 "
+                    "\u0686\u0647 \u06a9\u0627\u0631 \u0645\u06cc\u200c\u06a9\u0646\u062f\u061f") == [], "(B) negative")
+check_true("... and naming one bank selects only that bank",
+           M.select("What is the ECB policy rate?") == ["WS_CBPOL:D.XM"], "(B)")
+_t, _slept = [0.0], []
+
+
+def _clk():
+    return _t[0]
+
+
+def _slp(x):
+    _slept.append(x)
+    _t[0] += x
+
+
+M._LAST_CALL.clear()
+for _k in ("WS_CBPOL:D.US", "WS_CBPOL:D.XM", "WS_CBPOL:D.GB"):
+    M.fetch(_k, bis_get=lambda u, t: CSV, sleep=_slp, clock=_clk)
+check_true("BIS calls are spaced 1 s apart (registry rate_limit_qps=1)", _slept == [1.0, 1.0], "(B) %r" % _slept)
+check("years_in reads Gregorian years, Persian digits folded",
+      len(M.years_in("\u062a\u0648\u0631\u0645 \u06f2\u06f0\u06f2\u06f3")), 1, method="(B)")
+check_true("a CIK or '10 ساله' is not a year", M.years_in("CIK 0000320193") == []
+           and M.years_in("\u0627\u0648\u0631\u0627\u0642 \u06f1\u06f0 \u0633\u0627\u0644\u0647") == [], "(A)")
+_w = M.window_for("CPIAUCSL", [2024], datetime.date(2026, 10, 23))
+check_true("a named year gets that year's window and a limit that reaches it",
+           _w == {"start_date": "2024-01-01", "end_date": "2024-12-31", "limit": 48}, "(B) %r" % _w)
+_obs24 = [{"date": "2024-%02d-01" % m, "value": str(308 + m)} for m in range(12, 0, -1)]
+_f24 = M.fetch("CPIAUCSL", api_key=K, fred_get=fred(_obs24), **_w)
+check_true("RAG-EN-004 class: 'January 2024' IS in the evidence when the year is named",
+           any("2024-01-01" in p.text for p in M.evidence_for("CPIAUCSL", _f24, years=[2024])), "(M)")
+check_true("... and is not when no year is named (newest rows only)",
+           not any("2024-01-01" in p.text for p in M.evidence_for("CPIAUCSL", _f24)), "(B) negative")
+
+# ===========================================================================
+section("D-0136: right-to-left HTML (the Windows console cannot shape Persian)")
+# ===========================================================================
+_o = dict(o2, reply="\u062a\u0648\u0631\u0645 **\u06f3\u066b\u06f7\u06f2 \u062f\u0631\u0635\u062f** <script>alert(1)</script>",
+          warnings=["<img src=x onerror=alert(1)>"])
+_h = A.render_html([_o])
+check_true("a Persian turn is rendered dir=rtl, UTF-8", 'dir="rtl"' in _h and 'charset="utf-8"' in _h, "(V)")
+check_true("model text is escaped: <script> and <img onerror> are shown as text",
+           "<script>" not in _h and "&lt;script&gt;" in _h and "<img" not in _h, "(A) SS.10 untrusted")
+check_true("only **bold** becomes markup", "<b>\u06f3\u066b\u06f7\u06f2 \u062f\u0631\u0635\u062f</b>" in _h, "(V)")
+_hev = A.render_html([dict(_o, evidence=[{"text": "<iframe src=//evil>", "citation": "c", "trust": "OFFICIAL_DATA"}])])
+check_true("evidence text is escaped too (corpus text is untrusted)",
+           "<iframe" not in _hev and "&lt;iframe" in _hev, "(A) SS.10")
+check_true("evidence lines are dir=auto (English rows stay left-to-right)",
+           '<div dir="auto">[1]' in _h, "(V)")
+check_true("an English turn is dir=ltr", 'dir="ltr"' in A.render_html([dict(_o, lang="en")]), "(V)")
+check_true("interactive page reloads itself; one-shot page does not",
+           'http-equiv="refresh" content="5"' in A.render_html([_o], 5)
+           and "refresh" not in A.render_html([_o]), "(V)")
+_hp = os.path.join(TMP, "a", "ans.html")
+_buf2 = io.StringIO()
+sys.stdout, _old2 = _buf2, sys.stdout
+try:
+    _rc = A.main(["--no-audit", "--no-macro", "--html", _hp, "--no-open",
+                  "What was Apple's net income in fiscal 2023?"], runner=runner)
+finally:
+    sys.stdout = _old2
+check_true("--html writes the page (directory created), --no-open does not open it",
+           _rc == 0 and os.path.isfile(_hp) and "HTML (right-to-left)" in _buf2.getvalue(), "(V)")
+check_true("the page is valid UTF-8 and holds the reply",
+           "96,995" in open(_hp, encoding="utf-8").read(), "(V)")
+
+# ===========================================================================
 section("audit log: every turn chained; tampering detected")
 # ===========================================================================
 ok, n, problem = audit.verify()

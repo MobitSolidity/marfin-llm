@@ -157,7 +157,12 @@ class Assistant(object):
         """(route, detail). Decided without the model."""
         from tools.selector import select_tools
         sel = select_tools(question)
-        if len(_numbers_in(question)) >= 2 and not sel["fallback_used"]:
+        # D-0136: numbers that are part of a catalogue series NAME ("10-year",
+        # "اوراق ۱۰ ساله") are not operands. MEASURED: the owner's macro question
+        # went to the tools route because "۱۰ ساله" and "۶ بانک" counted as 2.
+        operands = (_numbers_in(MACRO.strip_series_terms(question)) if self.use_macro
+                    and MACRO.select(question) else _numbers_in(question))
+        if len(operands) >= 2 and not sel["fallback_used"]:
             return "tools", {"families": sel["families"]}
         if self.use_macro:
             series = MACRO.select(question)
@@ -233,13 +238,21 @@ class Assistant(object):
 
     def _macro(self, question, series, out):
         passages, used, notes = [], [], []
+        years = MACRO.years_in(question)
         for key in series:
             try:
-                facts = self.macro_fetch(key)
+                # D-0136: a question naming a year gets that year's window, never
+                # just the newest rows (RAG-EN-004: "January 2024").
+                facts = self.macro_fetch(key, **MACRO.window_for(key, years, self.clock().date()))
             except (MACRO.MacroError, AccessError, RuntimeError, ValueError) as exc:
                 notes.append("%s: %s" % (key, exc))
                 continue
-            passages.extend(MACRO.evidence_for(key, facts, lang=out["lang"]))
+            # D-0136: several series in one question -> newest row each (CPI keeps
+            # its year-earlier row + COMPUTED change). MEASURED: the owner's
+            # 10-series question rendered 22 evidence rows at 2 per series.
+            rows = 1 if (len(series) > 2 and not years) else 2
+            passages.extend(MACRO.evidence_for(key, facts, lang=out["lang"], years=years,
+                                               max_rows=rows))
             used.append(key)
         out["macro_series"] = used
         out["macro_unavailable"] = notes
@@ -353,6 +366,103 @@ def render(out):
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# D-0136: right-to-left display.
+#
+# MEASURED by the owner 2026-10-23: in PowerShell the Persian reply is shown
+# left-to-right with letters disconnected and words out of order. That is the
+# Windows console itself (conhost, and Windows Terminal) -- it has no complete
+# bidirectional-text support, so no text a program prints can make it right.
+# A browser does bidi and Persian shaping correctly, so the answer is ALSO
+# written to a small HTML file (dir="rtl" for Persian, dir="auto" per line so
+# English lines stay left-to-right) and opened. Default ON for Windows,
+# --html forces it elsewhere, --no-html turns it off.
+#
+# Every piece of text is html.escape()d: the reply and the evidence are
+# UNTRUSTED (SS.10), and a reply containing "<script>" must display as text.
+# ---------------------------------------------------------------------------
+DEFAULT_HTML = os.path.join(os.path.expanduser("~"), ".marfin", "ask_answer.html")
+
+_HTML_HEAD = """<!DOCTYPE html>
+<html lang="fa"><head><meta charset="utf-8">%s
+<title>marfin-llm</title>
+<style>
+body{font-family:Vazirmatn,"Segoe UI",Tahoma,Arial,sans-serif;font-size:17px;line-height:1.9;
+     max-width:60em;margin:1.5em auto;padding:0 1em;background:#fafafa;color:#222}
+.turn{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1em 1.4em;margin:1em 0}
+.q{font-weight:bold;font-size:1.1em}
+.meta{color:#666;font-size:.85em;direction:ltr;text-align:left}
+.warn{background:#fff3cd;border:1px solid #e0b400;padding:.5em .8em;border-radius:6px;margin:.6em 0}
+.reply p{margin:.4em 0}
+.ev,.calc{font-size:.9em;color:#333;border-top:1px dashed #ccc;margin-top:.8em;padding-top:.5em}
+.ev div,.calc div{margin:.25em 0}
+.cite{color:#777;font-size:.85em;direction:ltr;text-align:left}
+.note{color:#555;font-size:.85em;margin-top:.8em}
+</style></head><body>
+"""
+
+
+def _inline(text):
+    """Escape, then render **bold** only. Nothing else from the model becomes markup."""
+    import html as _h
+    import re as _re
+    esc = _h.escape(text or "", quote=True)
+    return _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", esc)
+
+
+def render_html(outs, refresh_seconds=None):
+    """A complete HTML page for one or more answered turns (newest last)."""
+    import html as _h
+    head = _HTML_HEAD % ('<meta http-equiv="refresh" content="%d">' % refresh_seconds
+                         if refresh_seconds else "")
+    parts = [head]
+    for out in outs:
+        rtl = out["lang"] == "fa"
+        parts.append('<div class="turn" dir="%s">' % ("rtl" if rtl else "ltr"))
+        parts.append('<div class="q" dir="auto">%s</div>' % _inline(out["question"]))
+        parts.append('<div class="meta">route: %s%s</div>' % (
+            _h.escape(out["route"]), (" &middot; data as of: %s" % _h.escape(out["data_as_of"]))
+            if out.get("data_as_of") else ""))
+        for w in out["warnings"]:
+            parts.append('<div class="warn" dir="auto">%s</div>' % _inline(w))
+        parts.append('<div class="reply">')
+        for line in (out["reply"] or "(empty reply)").splitlines():
+            if line.strip():
+                parts.append('<p dir="auto">%s</p>' % _inline(line))
+        parts.append("</div>")
+        if out["tool_results"]:
+            parts.append('<div class="calc" dir="ltr"><b>Calculations (deterministic tool, COMPUTED)</b>')
+            for e in out["tool_results"]:
+                txt = ("%s(%s) = %s%s" % (e["name"], json.dumps(e["arguments"], ensure_ascii=False),
+                                          e["value"], " %s" % e["unit"] if e.get("unit") else "")
+                       if e["ok"] else "%s: ERROR %s" % (e["name"], e["error"]))
+                parts.append("<div>%s</div>" % _h.escape(txt))
+            parts.append("</div>")
+        if out["evidence"]:
+            parts.append('<div class="ev"><b dir="ltr">Evidence shown to the model (RETRIEVED; figure check: %s)</b>'
+                         % _h.escape(str(out["check"])))
+            for i, e in enumerate(out["evidence"], 1):
+                parts.append('<div dir="auto">[%d] %s</div><div class="cite">%s (%s)</div>'
+                             % (i, _h.escape(e["text"]), _h.escape(e["citation"]), _h.escape(e["trust"])))
+            parts.append("</div>")
+        if out.get("macro_unavailable"):
+            parts.append('<div class="note" dir="ltr">Macro data not available: %s</div>'
+                         % _h.escape("; ".join(out["macro_unavailable"])))
+        for n in out["notices"]:
+            parts.append('<div class="note" dir="ltr">%s</div>' % _h.escape(n))
+        parts.append('<div class="note">%s</div>' % _h.escape(render(out).rsplit("\n", 1)[-1]))
+        parts.append("</div>")
+    parts.append("</body></html>\n")
+    return "".join(parts)
+
+
+def write_html(path, outs, refresh_seconds=None):
+    L.ensure_parent_dir(path)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(render_html(outs, refresh_seconds))
+    return path
+
+
 def build_index_from(path):
     """The RAG index over a corpus file, or None for --corpus none."""
     if not path or path.lower() == "none":
@@ -386,7 +496,13 @@ def main(argv=None, runner=None, stdin=None):
     ap.add_argument("--audit", default=DEFAULT_AUDIT, help="audit log path")
     ap.add_argument("--no-audit", action="store_true")
     ap.add_argument("--json", action="store_true", help="print the full record as JSON")
+    ap.add_argument("--html", nargs="?", const=DEFAULT_HTML, default=None,
+                    help="also write the answer as a right-to-left HTML page and open it "
+                         "(default ON on Windows, whose console cannot show Persian correctly)")
+    ap.add_argument("--no-html", action="store_true", help="never write or open the HTML page")
+    ap.add_argument("--no-open", action="store_true", help="write the HTML page but do not open it")
     a = ap.parse_args(argv)
+    html_path = None if a.no_html else (a.html or (DEFAULT_HTML if os.name == "nt" else None))
 
     if runner is None:
         if a.server:
@@ -425,10 +541,24 @@ def main(argv=None, runner=None, stdin=None):
     audit = None if a.no_audit else open_audit(a.audit)
     bot = Assistant(runner, index=index, audit=audit, use_macro=not a.no_macro)
 
-    def one(q):
+    session = []
+
+    def one(q, interactive=False):
         out = bot.answer(q)
         print(L.safe(json.dumps(out, ensure_ascii=False, indent=2, default=str)
                      if a.json else render(out)))
+        if html_path:
+            session.append(out)
+            # Interactive: the page lists the whole session and reloads itself
+            # every 5 s, so it is opened once and then just follows along.
+            write_html(html_path, session, refresh_seconds=5 if interactive else None)
+            print("HTML (right-to-left): %s" % html_path)
+            if not a.no_open and len(session) == 1:
+                import webbrowser
+                try:
+                    webbrowser.open("file:///" + os.path.abspath(html_path).replace("\\", "/"))
+                except Exception:                     # noqa: BLE001 -- display only
+                    pass
 
     if a.question:
         one(a.question)
@@ -448,7 +578,7 @@ def main(argv=None, runner=None, stdin=None):
         if q in ("/quit", "/exit", "/q"):
             break
         if q:
-            one(q)
+            one(q, interactive=True)
     return 0
 
 

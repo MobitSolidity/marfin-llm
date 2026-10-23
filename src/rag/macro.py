@@ -95,7 +95,10 @@ SERIES: Dict[str, Dict[str, Any]] = {
         "title": "Market Yield on U.S. Treasury Securities at 10-Year Constant Maturity",
         "title_fa": "\u0628\u0627\u0632\u062f\u0647 \u0627\u0648\u0631\u0627\u0642 \u062e\u0632\u0627\u0646\u0647 \u06f1\u06f0 \u0633\u0627\u0644\u0647 \u0622\u0645\u0631\u06cc\u06a9\u0627",
         "terms": ("10-year", "10 year", "ten-year", "treasury yield", "dgs10",
-                  "\u062e\u0632\u0627\u0646\u0647"),                             # khazane
+                  "\u062e\u0632\u0627\u0646\u0647",                             # khazane
+                  # D-0136: "bazde-ye owragh-e 10 sale" (MEASURED owner question 2026-10-23)
+                  "\u0627\u0648\u0631\u0627\u0642 \u06f1\u06f0 \u0633\u0627\u0644\u0647",
+                  "\u0627\u0648\u0631\u0627\u0642 \u0642\u0631\u0636\u0647 \u06f1\u06f0 \u0633\u0627\u0644\u0647"),
     },
     "GDP": {
         "source": "fred", "unit": "Billions of Dollars", "units_note": "billion",
@@ -173,6 +176,34 @@ def spec(series: str, source: Optional[str] = None,
     return s
 
 
+#: D-0136: a question about central banks IN GENERAL ("the 6 central banks",
+#: "major central banks") names no single bank. With a policy-rate word it selects
+#: every catalogued policy rate -- but only when no specific bank was named.
+_GENERIC_CB = ("central banks", "major central banks", "central bank rates",
+               "\u0628\u0627\u0646\u06a9 \u0645\u0631\u06a9\u0632\u06cc",          # bank-e markazi
+               "\u0628\u0627\u0646\u06a9\u200c\u0647\u0627\u06cc \u0645\u0631\u06a9\u0632\u06cc")  # bank-ha-ye markazi
+
+
+def _terms_found(q: str, terms: Sequence[str]) -> List[str]:
+    return [fold(t) for t in terms if fold(t) in q]
+
+
+def strip_series_terms(question: str) -> str:
+    """
+    The folded question with every matched catalogue term removed.
+
+    D-0136: the router counts numbers to decide whether a question is a
+    CALCULATION. "10" in "10-year yield" / "اوراق ۱۰ ساله" is part of a series
+    NAME, not an operand -- MEASURED: the owner's question was sent to the tools
+    route because "۱۰ ساله" and "۶ بانک" counted as two operands.
+    """
+    q = " %s " % fold(question or "")
+    for s in SERIES.values():
+        for t in sorted(_terms_found(q, s["terms"]), key=len, reverse=True):
+            q = q.replace(t, " ")
+    return q
+
+
 def select(question: str) -> List[str]:
     """
     The catalogue series a question asks about, in catalogue order. [] when none.
@@ -191,7 +222,44 @@ def select(question: str) -> List[str]:
         if need and not any(fold(t) in q for t in need):
             continue
         out.append(key)
+    # Generic central-bank question: every policy rate, unless a bank was named.
+    if not any(k.startswith("WS_CBPOL:") for k in out):
+        rate_words = SERIES["WS_CBPOL:D.US"]["needs_any"]
+        generic = [g for g in _GENERIC_CB if fold(g) in q]
+        if generic and any(fold(t) in q for t in rate_words):
+            out.extend(k for k in SERIES if k.startswith("WS_CBPOL:"))
     return out
+
+
+#: Observations per calendar year, for sizing a request that must reach back
+#: to a named year (D-0136). BIS daily series include weekends (MEASURED: the
+#: 2026-10-15..20 window returned 6 consecutive calendar days).
+_PER_YEAR = {"daily": 366, "monthly": 12, "quarterly": 4}
+
+
+def years_in(question: str) -> List[int]:
+    """Gregorian years (1950..2099) the question names, Persian digits folded."""
+    import re
+    return sorted({int(y) for y in re.findall(r"(?<!\d)(19[5-9]\d|20\d\d)(?!\d)", fold(question or ""))})
+
+
+def window_for(series: str, years: Sequence[int], today: Optional[datetime.date] = None) -> Dict[str, Any]:
+    """
+    fetch() keyword arguments that reach the named years: a start/end window and
+    a `limit` large enough, counted back from today, to contain it. {} when no
+    year is named. A window beyond the 1000-observation cap is still returned:
+    fetch() then refuses with "no observation inside the window" rather than
+    answering a question about 2015 with 2026 data (MEASURED class: RAG-EN-004
+    asks for January 2024; the 13 newest CPI rows end at 2026-09).
+    """
+    if not years:
+        return {}
+    today = today or datetime.date.today()
+    first, last = min(years), max(years)
+    per = _PER_YEAR[spec(series)["frequency"]]
+    need = int((today.year - first + 1) * per) + per
+    return {"start_date": "%d-01-01" % first, "end_date": "%d-12-31" % last,
+            "limit": max(13, min(1000, need))}
 
 
 def _window(facts: Sequence[Fact], start: Optional[datetime.date],
@@ -201,12 +269,36 @@ def _window(facts: Sequence[Fact], start: Optional[datetime.date],
             and (end is None or f.period_end <= end)]
 
 
+#: D-0136: per-source spacing between NETWORK calls, from the registry's
+#: rate_limit_qps. A question that names several BIS series (MEASURED: the
+#: owner's "6 central banks" question selects 6) would otherwise fire them
+#: back-to-back against a 1-request-per-second source.
+_LAST_CALL: Dict[str, float] = {}
+
+
+def _throttle(source_key: str, sleep: Callable[[float], None], clock: Callable[[], float]) -> float:
+    from rag.sources import get_source
+    qps = get_source(source_key).rate_limit_qps
+    if not qps:
+        return 0.0
+    gap = 1.0 / float(qps)
+    last = _LAST_CALL.get(source_key)
+    now = clock()
+    wait = 0.0 if last is None else max(0.0, last + gap - now)
+    if wait:
+        sleep(wait)
+    _LAST_CALL[source_key] = clock()
+    return wait
+
+
 def fetch(series: str, source: Optional[str] = None, start_date: Optional[str] = None,
           end_date: Optional[str] = None, frequency: Optional[str] = None,
           limit: int = 13, api_key: Optional[str] = None,
           fred_get: Optional[Callable[..., Any]] = None,
           fred_meta: Optional[Callable[[str, str], Optional[str]]] = None,
-          bis_get: Optional[Callable[..., str]] = None) -> List[Fact]:
+          bis_get: Optional[Callable[..., str]] = None,
+          sleep: Optional[Callable[[float], None]] = None,
+          clock: Optional[Callable[[], float]] = None) -> List[Fact]:
     """
     Newest-last Facts for one catalogue series, inside [start_date, end_date].
 
@@ -232,7 +324,9 @@ def fetch(series: str, source: Optional[str] = None, start_date: Optional[str] =
         facts = _fred.fetch_observations(series, s["unit"], api_key=key, limit=limit,
                                          sort_order="desc", http_get=fred_get)
     else:
+        import time as _time
         dataflow, key = series.split(":", 1)
+        _throttle("bis_statistics", sleep or _time.sleep, clock or _time.monotonic)
         facts = _bis.fetch(dataflow, key, s["unit"], last_n=limit, http_get=bis_get)
     facts = sorted(_window(facts, start, end), key=lambda f: f.period_end)
     if not facts:
@@ -294,8 +388,18 @@ def computed_passage(series: str, yoy: Dict[str, Any], basis: Fact, lang: str = 
 
 
 def evidence_for(series: str, facts: Sequence[Fact], lang: str = "en",
-                 max_rows: int = 2) -> List[Passage]:
-    """Newest rows, plus (monthly index only) the year-earlier row and the COMPUTED change."""
+                 max_rows: int = 2, years: Sequence[int] = ()) -> List[Passage]:
+    """
+    Newest rows, plus (monthly index only) the year-earlier row and the COMPUTED change.
+
+    D-0136: when the question names a year, a monthly or quarterly series shows
+    EVERY row of that window (at most 12 + 4), so "January 2024" is in the
+    evidence -- MEASURED before the fix: only the two newest rows (Nov, Dec) were.
+    A daily series still shows only its newest rows: a year of daily rows would
+    fill the context.
+    """
+    if years and spec(series)["frequency"] in ("monthly", "quarterly"):
+        max_rows = 16
     out = to_passages(series, facts, lang, max_rows)
     if series == "CPIAUCSL":
         yoy = year_over_year(facts)
