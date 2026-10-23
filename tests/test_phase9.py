@@ -167,6 +167,7 @@ _env = read(".env.example")
 _keys = {l.split("=")[0] for l in _env.splitlines() if "=" in l and not l.startswith("#")}
 _want = {v["env_key"] for v in P.PROVIDERS.values() if isinstance(v, dict) and v.get("env_key")}
 _want.add("ALPHAVANTAGE_API_KEY")
+_want.add("FRED_API_KEY")
 check_true(".env.example names every key the code reads", _want <= _keys, "(V) missing %r" % (_want - _keys))
 check_true(".env.example contains no values", all(l.endswith("=") for l in _env.splitlines()
                                                     if "=" in l and not l.startswith("#")), "(V)")

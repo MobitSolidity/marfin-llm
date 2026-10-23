@@ -124,7 +124,8 @@ tests/test_phase7.py \
 tests/test_phase8.py \
 tests/test_phase8a.py \
 tests/test_phase9.py \
-tests/test_phase10.py"
+tests/test_phase10.py \
+tests/test_fred_bis.py"
 
 for t in $SUITES; do
   echo

@@ -199,9 +199,13 @@ _register(Source(
             "displayed. Recording the per-series caveat above while omitting "
             "this flat, unconditional obligation is how the gap arose: "
             "capturing PART of a licence is not complying with it.",
-    verified_on="2026-08-10",
-    verified_status="MEASURED: HTTP 400 'Variable api_key is not set' without "
-                    "a key; key not yet supplied, so UNVERIFIED end to end",
+    verified_on="2026-10-21",
+    verified_status="MEASURED 2026-10-21 (D-0133), END TO END with the owner's "
+                    "key (read from the FRED_API_KEY environment variable, never "
+                    "stored): HTTP 200, payload parsed -- CPIAUCSL 2026-09-01 = "
+                    "336.298 (957 observations); DGS10 2026-10-21 = 5.13. "
+                    "Without a key: HTTP 400 'Variable api_key is not set' "
+                    "(MEASURED 2026-08-10). Client: src/rag/fred.py.",
     doc_url="https://fred.stlouisfed.org/docs/api/fred/",
 ))
 
@@ -454,6 +458,35 @@ _register(Source(
     doc_url="https://markets.newyorkfed.org/static/docs/markets-api.html",
 ))
 
+# BIS STATISTICS (D-0133) -- a different licence from BIS publications. The
+# publications terms (bis_working_papers, disabled) cap extracts at 400 words;
+# the statistics terms say "use of the statistics is unrestricted, provided
+# that" the BIS is cited. Reading only the publications page had made "BIS" look
+# unusable as a whole.
+_register(Source(
+    key="bis_statistics",
+    name="BIS statistics SDMX API (statistics ONLY, not publications)",
+    base_url="https://stats.bis.org/api/v1/data",
+    trust_level="OFFICIAL_DATA",
+    rate_limit_qps=1,
+    licence="PERMITTED, citation REQUIRED. data.bis.org/help/legal (read "
+            "2026-10-21): 'The use of the statistics is unrestricted, provided "
+            "that: 1. if the statistics are reproduced, the BIS must be cited ... "
+            "as the source; 2. a translation must be stated not to be an official "
+            "BIS translation; 3. no implied endorsement or affiliation; 4. no "
+            "additional charge in a commercial product'; no warranty; 'nothing ... "
+            "shall be construed as containing any investment recommendation'. API "
+            "terms: the BIS may limit an IP; users may not modify, distribute or "
+            "decompile the APIs (the software). SCOPE: statistics only -- BIS "
+            "publications stay under the 400-word extract cap (bis_working_papers).",
+    verified_on="2026-10-21",
+    verified_status="MEASURED 2026-10-21 (D-0133): HTTP 200, payload parsed -- "
+                    "WS_CBPOL/D.US CSV: 2026-10-20 = 3.875 (US policy rate, "
+                    "mid-point of the 3.75-4.00 target range; the NY Fed API "
+                    "reported the same range the same day).",
+    doc_url="https://data.bis.org/help/legal",
+))
+
 # -------- DISABLED: permitted by licence, but NOT REACHABLE from here --------
 #
 # GDELT has the MOST PERMISSIVE licence in the entire review and is still
@@ -637,10 +670,13 @@ REQUIRED_NOTICES: Mapping[str, str] = MappingProxyType({
     "world_bank_indicators": "The World Bank Group authorizes the use of this "
                              "material subject to the terms and conditions on "
                              "its website, Legal.",
-    # IMF data carve-out: the terms page answered HTTP 403 to the sandbox on
-    # 2026-10-21, so this line is OUR wording (naming the source), NOT a
-    # quotation of a prescribed notice. Re-read the IMF terms on the target.
-    "imf_sdmx_data": "Source: International Monetary Fund (IMF data).",
+    # IMF data carve-out: the terms (read 2026-10-21 via imf.org's published
+    # text, D-0133) prescribe "Source: International Monetary Fund, Database
+    # Name, <<link to the dataset>>" -- the database name and link are filled
+    # in per dataset by the caller; this is the fixed part.
+    "imf_sdmx_data": "Source: International Monetary Fund, IMF data (https://data.imf.org).",
+    # BIS statistics: "the BIS must be cited ... as the source of the statistics".
+    "bis_statistics": "Source: Bank for International Settlements (BIS statistics).",
     # NY Fed: the Terms' prescribed default format, verbatim ("[year]" filled in
     # with the year the data is used -- 2026 for this build).
     "nyfed_markets_data": "\u00a9 2026 Federal Reserve Bank of New York. Content "

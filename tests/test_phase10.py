@@ -106,8 +106,9 @@ check("only the overdue source is probed", len(called), 1, method="(V)")
 from rag import sources as S                                            # noqa: E402
 real = MON.check_sources(S.SOURCES, POL, NOW)
 check("real registry: no CRITICAL", len(sev(real, "CRITICAL")), 0, method="(V)")
-check_true("real registry: fred is WARN (no key, unverified end to end)",
-           any(f["subject"] == "fred" and f["severity"] == "WARN" for f in real), "(V)")
+check_true("real registry: fred is INFO now -- verified end to end with the owner's key (D-0133)",
+           any(f["subject"] == "fred" and f["severity"] == "INFO" for f in real), "(V)")
+check("real registry: no source WARN at 2026-10-21", len(sev(real, "WARN")), 0, method="(V)")
 
 # ===========================================================================
 section("2. index update")
@@ -383,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.10.4 (D-0132)", REL.read_version() == "0.10.4", "(V)")
+check_true("VERSION file is 0.10.5 (D-0133)", REL.read_version() == "0.10.5", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -580,9 +581,10 @@ rep = json.load(open(out_json))
 check("CLI exit code matches its status", rc, {"OK": 0, "DUE": 1, "FAIL": 2}[rep["status"]], method="(V)")
 check("CLI report on the repo: no CRITICAL", rep["counts"]["CRITICAL"], 0, method="(V)")
 warns = {(f["check"], f["subject"]) for f in rep["findings"] if f["severity"] == "WARN"}
-check_true("CLI names the open owner item: fred key", ("source_refresh", "fred") in warns, "(V)")
+check_true("CLI: FRED is verified, so no FRED WARN (D-0133)", ("source_refresh", "fred") not in warns, "(V)")
 check_true("CLI: the risk limits are approved, so no approval WARN", ("risk_policy", "approval") not in warns, "(V)")
-check("CLI: exactly one WARN on the repo today (FRED key)", len(warns), 1, method="(V) %r" % sorted(warns))
+check("CLI: no WARN on the repo today -- every owner item is closed", len(warns), 0,
+      method="(V) %r" % sorted(warns))
 check_true("CLI covers every check family",
            {"source_refresh", "index_update", "dependencies", "licenses", "benchmark", "risk_policy",
             "versioning"} <= {f["check"] for f in rep["findings"]}, "(V)")
