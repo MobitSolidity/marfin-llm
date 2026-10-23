@@ -82,7 +82,9 @@ paper/live trading controls.
 | `src/calc/fixed_income.py` | Bond pricing, YTM, duration, convexity, DV01 (11 fns). |
 | `src/calc/derivatives.py` | Black-Scholes, binomial, implied vol, Greeks (13 fns). |
 | `src/calc/persian_num.py` | Persian/Arabic numeral parsing and formatting. |
-| `src/tools/registry.py` | Whitelisted dispatch for 84 tools; no execution capability. |
+| `src/tools/registry.py` | Whitelisted dispatch for 85 tools; no execution capability. |
+| `scripts/ask.py` | **Ask your own question (D-0135).** Routes each question to tools, live macro data, RAG or plain; reuses the measured prompts; checks every figure against the evidence and prints a warning above a contradicted reply. Persian guide: `docs/guides/ask-fa.md`. |
+| `src/rag/macro.py` | SS.8.3 `macro_data`: a closed catalogue of 11 FRED / BIS series, units re-checked against FRED's own metadata; COMPUTED 12-month CPI change. |
 | `evals/bilingual_eval_v1.jsonl` | 21-case bilingual evaluation set. |
 | `tests/` | 3,654 assertions across 18 suites, plus 986 seeded defects across 11 mutation batteries. |
 | `docs/legal/` | Terms-of-use research, quoted verbatim rather than summarised: market-data providers, research/news sources, the TradingView review, and the **AI-web-search review** that answers Request 45. |
@@ -121,10 +123,10 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.10.5. `python3 tools/maintain.py` → OK (0 CRITICAL, 0 WARN). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
+| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.11.0 (D-0135). `python3 tools/maintain.py` → OK (0 CRITICAL, 0 WARN). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Optional: send the paper-permission requests in `docs/legal/permission-requests/`. Phase 11 (live trading) is optional and never automatic. |
+| Next | On the i5-12400: `git pull`, then try `scripts/ask.py` (`docs/guides/ask-fa.md`). ECB paper permission pending (form sent); IMF closed (CCC unavailable under sanctions). Benchmark refresh due 2026-12-16. Phase 11 (live trading) is optional and never automatic. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

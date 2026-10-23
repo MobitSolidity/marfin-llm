@@ -4,8 +4,8 @@
   "phase_status": "PHASE_10_ACCEPTED_BY_USER",
   "user_approval_required": true,
   "conditional_pass_reason": "RESOLVED 2026-08-10: user supplied Q1-Q5 and approved Phase 0.",
-  "selected_base_model": null,
-  "model_revision": null,
+  "selected_base_model": "Qwen3.5-4B (unsloth/Qwen3.5-4B-GGUF, Q4_K_M)",
+  "model_revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
   "hardware_profile": {
     "build_sandbox": {
       "role": "authoring_only",
@@ -44,7 +44,9 @@
   "capability_manifest_version": "0.1.0",
   "risk_policy_version": "configs/risk-policy.json (2026-10-21, human_approved=true by owner, allow_short=true)",
   "market_data_providers": [
-    "alpha_vantage_free_tier"
+    "alpha_vantage_free_tier",
+    "fred (owner key via env)",
+    "bis_statistics"
   ],
   "broker_adapters": [],
   "tradingview_connector_level": 0,
@@ -60,11 +62,12 @@
       "package_install",
       "github_vcs",
       "rag_lexical_structured",
-      "financial_rag_citations"
+      "financial_rag_citations",
+      "macro_data_fred_bis",
+      "end_user_ask"
     ],
     "degraded": [
-      "host_ram",
-      "fred_macro_data"
+      "host_ram"
     ],
     "unavailable": [
       "local_llm_runtime",
@@ -310,14 +313,15 @@
     "paper_live_confusion_count_max": 0
   },
   "benchmark_summary": {
-    "status": "NONE - awaiting the user's Route A run on the i5-12400",
-    "note": "All sizing figures to date are ESTIMATED or COMPUTED, never MEASURED. The Phase 4 harness that will produce the first MEASURED figures is built and verified (346 assertions, 96/96 mutations killed), but it has never seen a model."
+    "status": "MEASURED on the i5-12400; baseline = Phase 8C (releases/benchmark-baseline.json)",
+    "verdict": "4 PASS / 6 FAIL / 2 UNMEASURED (D-0129)",
+    "refresh_due": "2026-12-16"
   },
-  "next_phase": 8,
-  "next_phase_name": "RAG and Tool-Enabled Evaluation (measurement pending)",
+  "next_phase": null,
+  "next_phase_name": "none automatic (Phase 10 ACCEPTED; Phase 11 optional, never automatic)",
   "next_phase_viable_in_sandbox": false,
-  "next_phase_note": "Phase 4 is APPROVED and its harness is BUILT AND VERIFIED, but the measurement is still absent. MEASURED in this sandbox 2026-08-16: pip install llama-cpp-python fails with [Errno 28] No space left on device while fetching cmake/ninja; 985 MiB total RAM against 2.33 GiB of weights. The blocker is unchanged -- only the tooling advanced.",
-  "last_updated": "2026-10-21",
+  "next_phase_note": "D-0135: build complete for the end user (scripts/ask.py). Owner actions: first real ask.py run on the i5-12400; benchmark refresh due 2026-12-16; ECB paper permission pending.",
+  "last_updated": "2026-10-23",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -381,7 +385,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0119",
+  "decisions_logged": "D-0001..D-0135",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -813,7 +817,9 @@
     ]
   },
   "awaiting_user_action": [
-    "optional: send the ECB/BIS/IMF paper-permission requests (docs/legal/permission-requests/)"
+    "first real run of scripts/ask.py on the i5-12400 (docs/guides/ask-fa.md)",
+    "benchmark refresh by 2026-12-16 (PHASE8_CONFIRM_RUN_FA.md)",
+    "ECB paper-permission reply (form submitted); IMF closed (CCC unavailable under sanctions)"
   ],
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
@@ -3085,5 +3091,17 @@
     "sources": 17,
     "enabled": 12,
     "maintenance": "OK"
+  },
+  "D-0135_ask_macro_2026_10_23": {
+    "ask": "scripts/ask.py (routes tools/macro/rag/plain; measured prompt builders; figure check; guard; notices; audit)",
+    "macro": "src/rag/macro.py (11 series; units from source; live MEASURED evidence/macro_live_2026-10-23.json)",
+    "citation_fix": "Persian percent word skipped like % (0 recorded grades affected)",
+    "release": "0.11.0",
+    "tests": {
+      "test_ask": 99,
+      "mutate_ask": "30/30",
+      "mutate_rag": "127 seeded, 0 survivors"
+    },
+    "not_done": "ask.py never run on the real model (sandbox cannot load it)"
   }
 }

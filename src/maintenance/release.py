@@ -47,6 +47,8 @@ PINNED_FILES = (
     "src/llm/style.py",
     "src/rag/citations.py",
     "src/rag/sources.py",
+    "src/rag/macro.py",
+    "scripts/ask.py",
     "src/safety/untrusted.py",
     "src/tools/registry.py",
     "scripts/run_phase4.py",

@@ -7837,3 +7837,89 @@ ECB/BIS/IMF papers.
 - ECB: info@ecb.europa.eu is unmonitored; requests go through the Information Request Form. Field-by-field guide (Category "Copyright and autographs" → Sub-Category "Copyright and Permissions", Details ≤ 4000 chars) VERIFIED from the form's survey schema.
 - IMF: reuse permissions are cleared via CCC Marketplace. No exact type of use fits local retrieval with no training; "AI Summarization" TOU exists (Oct 2026 release notes), but which rightsholders take part is not published. Possible OFAC barrier for users in Iran is flagged as UNVERIFIED; no workaround is advised.
 - Docs only: `docs/legal/permission-requests/HOW_TO_SUBMIT_FA.md` added, `README_FA.md` routes corrected. No source enabled; no code change; VERSION unchanged.
+
+## D-0135 — Build completed for the end user: `scripts/ask.py`, live `macro_data`, one citation defect fixed (2026-10-23)
+
+**Context.** The owner: ECB permission pending (form sent); IMF closed (CCC is not usable under sanctions; the
+owner already answered IMF by e-mail). "Go to the next steps and complete the build." Phase 10 is ACCEPTED; Phase 11
+is never automatic. An audit of what a user can actually DO with the project found the gap: every script measured
+fixed questions; none answered the owner's own question.
+
+**1. `scripts/ask.py` — the end-user path.**
+- Every prompt comes from the `run_phase4` builders that produced the graded results. The release options are always
+  on: second turn, refusal language, execution guard, min-trust 80, display, continue-budget 256. There is no second
+  prompt path (lesson of D-0091).
+- **Route.** Chosen without the model: `tools` (≥2 numbers and a tool family matched), then `macro` (catalogue
+  series named), then `rag` (evidence at trust ≥80), otherwise `plain`.
+- **Checks outside the model.**
+  - Every figure is verified against the evidence shown. A contradicted figure gets a warning printed ABOVE the
+    reply, and the reply is not edited.
+  - A tool result that the reply does not restate gets a warning (the FA-CALC-002 class).
+  - A reply claiming a trade is replaced by the guard notice, and stale warnings about the replaced text are dropped.
+- **Output.**
+  - Required notices: FRED verbatim, plus BIS.
+  - Hash-chained audit log (the Phase 8A `AuditLog`); `--no-audit` turns it off.
+- **Runtime.** In-process, or a loopback Ollama/LM Studio server only. Remote APIs are not offered on this path.
+
+**2. `src/rag/macro.py` — SS.8.3 `macro_data`.**
+- **Catalogue.** A closed list of 11 series: FRED CPIAUCSL, UNRATE, FEDFUNDS, DGS10 and GDP, plus BIS WS_CBPOL policy
+  rates for the US, euro area, UK, Japan, Canada and Switzerland.
+- **Units.** Read from the source itself on 2026-10-23. `fetch(fred_meta=…)` refuses when FRED later reports a
+  different unit.
+- **Refusals.**
+  - No resampling.
+  - No interpolation.
+  - An empty window is a refusal, never `[]`.
+- **12-month CPI change.** COMPUTED by the registry's `simple_return` from two visible index rows, and labelled
+  COMPUTED.
+- **Unit declaration (MEASURED design defect, fixed before shipping).** With `units_note=None` the verifier correctly
+  refused every bare CPI figure as "scale unknown". So each series now declares its source unit:
+  - index or percent: the source's unit string, scale 1;
+  - GDP: `billion`, so "30485.7 dollars" is CONTRADICTED.
+- **Percent figures.** The citation module skips them by design, so they are checked by
+  `macro.verify_percent_claim`, at half a unit of the claim's own last decimal.
+- **Live run, MEASURED** (`evidence/macro_live_2026-10-23.json`).
+  - All 11 series returned data, with 0 unit mismatches.
+  - CPI 336.298 (2026-09).
+  - 12-month change 3.72 % (COMPUTED).
+  - UNRATE 4.2; DGS10 5.13.
+  - Policy rates: US 3.875, euro area 2.5, UK 3.75, Japan 1.25, Canada 2.25, Switzerland 0.
+  - The FRED key came from the environment; it appears 0 times in the file.
+
+**3. Defect fixed in `src/rag/citations.extract_numbers` (MEASURED).**
+- **The defect.** "4.3%" was skipped as a percentage, but "۴٫۳ درصد" (the Persian word) was read as the bare
+  magnitude 4.3. That was one rule per language, and the Persian reading could inherit a passage's "million" through
+  the row rule.
+- **The fix.** The Persian word is now skipped like the signs.
+- **No recorded grade changes.** 0 recorded RAG replies contain "<n> درصد" (scanned across every merged evidence
+  file).
+- **Tests.** +3 assertions; +1 mutant in `mutate_rag`. The existing anchor was updated.
+
+**4. Hygiene.**
+- MODEL_CARD: version and suite count.
+- `deployment.md`: §3b ask, 27 suites.
+- README: Next row, 85 tools, new rows.
+- `run_phase4` docstring: 84 → 85.
+- `test_phase9`: each documented flag is now checked against the script that its own line runs.
+
+**Release.** 0.11.0, a MINOR feature release. Model sha, prompt options and inference are unchanged (verified:
+`required_bump` reports patch). `scripts/ask.py` and `src/rag/macro.py` are now pinned files.
+
+**Tests.**
+- `tests/test_ask.py`: 99 assertions.
+- `tests/mutate_ask.py`: 30/30 killed.
+  - The first pass left 9 survivors, all closed with behavioural assertions.
+  - 2 of those mutants were equivalent and were rewritten into real ones.
+- `mutate_rag`: 127 seeded, 124 killed, 3 documented equivalent, 0 survivors.
+
+**5. A pre-existing blind spot, found by the full `--mutate` sweep (MEASURED).**
+- **The finding.** `mutate_selector` reported 3 SKIPPED mutants, and the driver then printed FAILURES PRESENT.
+- **Not caused by this change.** The same 3 skips reproduce on the base commit 1048175.
+- **The cause.** D-0119 re-measured the token costs: returns_risk 2219 → 2426 and the all-tools cost 9122 → 9329.
+  The battery's anchors were not updated. So since D-0119, three guards on the context budget went untested,
+  silently.
+- **The fix.** The anchors were re-pointed, and the "reverted calibration" mutant now restores the pre-D-0119 value
+  9122. Result: 21/21 killed, 0 skipped.
+
+**Not done, and why.** `ask.py` has never run against the real model. This sandbox cannot load it: 0.96 GiB RAM.
+The first real run is the owner's. Nothing here changes a recorded measurement.

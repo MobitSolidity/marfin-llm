@@ -91,8 +91,12 @@ def extract_numbers(text: str) -> List[ClaimNumber]:
     for m in _NUM_RE.finditer(folded):
         raw = m.group(0)
         tail = folded[m.end():m.end() + 24]
-        if tail.lstrip().startswith("%") or tail.lstrip().startswith(
-                "\u066a"):
+        # D-0135: the Persian WORD for percent is skipped like the signs. MEASURED
+        # 2026-10-23: "4.3%" was skipped but "۴٫۳ درصد" was read as the bare
+        # magnitude 4.3 -- one rule for English, another for Persian, and the
+        # Persian one could take a passage's "million" scale through the row
+        # rule. 0 recorded RAG replies contain "<n> درصد", so no grade changes.
+        if tail.lstrip().startswith(("%", "\u066a", "\u062f\u0631\u0635\u062f")):
             continue
         try:
             # U+060C stripped alongside "," (D-0089b): the pattern now admits
