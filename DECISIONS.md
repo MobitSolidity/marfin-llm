@@ -7790,3 +7790,45 @@ ECB/BIS/IMF papers.
 - `test_rag`: 293.
 - `mutate_rag`: +2 mutants (notice; blog carve-out).
 - Registry: 16 sources, 11 enabled.
+
+## D-0133 — FRED key received and verified; BIS statistics licensed; paper-permission requests prepared (2026-10-21)
+
+**Owner input:**
+1. FRED API key.
+2. Option 2 (Twelve Data paid tier): **declined**.
+3. Option 3 (written permission for ECB, BIS and IMF papers): "enable it for me or explain how to enable it".
+
+**1. FRED: VERIFIED END TO END.**
+- MEASURED with the owner's key: HTTP 200, parsed JSON. CPIAUCSL 2026-09-01 = 336.298; DGS10 2026-10-21 = 5.13.
+- New client `src/rag/fred.py`:
+  - the registry gate runs before any network call;
+  - the key comes from the `FRED_API_KEY` environment variable only, must be 32 lowercase hex characters, and is
+    redacted from every error;
+  - FRED's "." missing marker is skipped, never read as 0;
+  - every Fact carries FRED provenance, and the mandatory notice is shown.
+- **The key is not stored anywhere in the project.**
+  - It reached the sandbox probe through the environment only.
+  - A test checks every tracked file against the owner's upload, when the upload is present.
+  - `.env.example` lists `FRED_API_KEY` with no value.
+- The last maintenance WARN is cleared. **Routine report: OK** (0 CRITICAL, 0 WARN).
+
+**2. Twelve Data:** not pursued, at the owner's request. Market data stays Alpha Vantage at END_OF_DAY.
+
+**3. Written permission for papers: it cannot be "enabled" by the assistant.**
+- A permission is granted to the person who asks, under their name and commitments. So:
+  - **Drafted** three requests (`docs/legal/permission-requests/{ECB,BIS,IMF}_EN.md`). Each states that the use is
+    local, single-user and non-commercial, with **no training**, quotes with citation only, and a polite rate.
+  - **Explained** the steps in Persian (`README_FA.md`). When a reply arrives, its exact conditions will be recorded
+    and enforced in code before anything is enabled.
+- While checking this, I found a licence that needs no request: **BIS statistics** (data.bis.org/help/legal) is
+  "unrestricted, provided that" the BIS is cited.
+  - API MEASURED: HTTP 200, CSV parsed. The US policy rate is 3.875, which matches the NY Fed range.
+  - Registered `bis_statistics` (OFFICIAL_DATA), with its citation notice and client `src/rag/bis_stats.py`.
+  - BIS **publications** stay disabled.
+- **IMF terms re-read:** the data notice now follows the format the IMF prescribes.
+
+**Registry:** 17 sources, 12 enabled. Release **0.10.5**.
+
+**Tests:**
+- New suite `tests/test_fred_bis.py` (offline, injected HTTP, fake key).
+- `run_all`: 26 suites.

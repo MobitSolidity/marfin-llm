@@ -121,10 +121,10 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.10.4. `python3 tools/maintain.py` → DUE (0 CRITICAL, 1 WARN: FRED key). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
+| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.10.5. `python3 tools/maintain.py` → OK (0 CRITICAL, 0 WARN). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
-| Next | Owner: send the FRED key. Project code is Apache-2.0 (D-0130). Phase 11 (live trading) is optional and never automatic. |
+| Next | Optional: send the paper-permission requests in `docs/legal/permission-requests/`. Phase 11 (live trading) is optional and never automatic. |
 | API providers | **12 registered, free and paid** (added 2026-08-27 at the user's request). The local model remains and remains the DEFAULT; the API is only *added*. Panel: `python scripts/panel.py` |
 | Active mode | `ANALYSIS_ONLY` |
 | Live trading | `DISABLED` — 10 of 12 SS.6.1 prerequisites unmet (MEASURED); unreachable by configuration |

@@ -813,7 +813,7 @@
     ]
   },
   "awaiting_user_action": [
-    "FRED API key (owner sending)"
+    "optional: send the ECB/BIS/IMF paper-permission requests (docs/legal/permission-requests/)"
   ],
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
@@ -3075,5 +3075,15 @@
     "release": "0.10.4",
     "sources": 16,
     "enabled": 11
+  },
+  "D-0133_fred_bis_permissions_2026_10_21": {
+    "fred": "VERIFIED END TO END (owner key via FRED_API_KEY env; never stored)",
+    "twelvedata": "declined by owner",
+    "bis_statistics": "licensed + enabled (unrestricted with citation)",
+    "paper_permissions": "requests drafted; owner sends",
+    "release": "0.10.5",
+    "sources": 17,
+    "enabled": 12,
+    "maintenance": "OK"
   }
 }

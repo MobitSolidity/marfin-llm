@@ -603,3 +603,27 @@ SEC, Fed Board, OFR and arXiv impose no attribution condition.
 
 With this section, every candidate named in this review has a recorded decision. The licences that remain need the
 owner personally (§10, last table).
+
+## 12. FRED verified end to end; BIS statistics licensed; paper permissions prepared (2026-10-21, D-0133)
+
+- **FRED: VERIFIED END TO END** with the owner's key.
+  - Result: HTTP 200 with parsed JSON. CPIAUCSL 2026-09-01 = 336.298 (957 observations); DGS10 2026-10-21 = 5.13.
+  - Client: `src/rag/fred.py`.
+  - The key is read only from the `FRED_API_KEY` environment variable and redacted from every error. It is in no
+    tracked file, and a test checks that.
+- **BIS statistics: LICENSED and enabled** as `bis_statistics`. This is a different licence from BIS publications:
+  - data.bis.org/help/legal: "The use of the statistics is unrestricted, provided that" the BIS is cited, a
+    translation is labelled unofficial, no endorsement is implied, and a commercial product adds no charge.
+  - API: HTTP 200, CSV parsed. US policy rate 2026-10-20 = 3.875, the mid-point of the 3.75–4.00 range the NY Fed API
+    reported.
+  - Client: `src/rag/bis_stats.py`.
+  - BIS **publications** stay disabled (400-word cap).
+- **IMF terms re-read** from imf.org's published text:
+  - The data carve-out is confirmed, and the IMF notice now uses the prescribed source format.
+  - Publications still need written permission for "copying or downloading IMF Content in any systematic way". The
+    LLM-training prohibition stands.
+- **Written permission for ECB, BIS and IMF papers:** draft requests are in `docs/legal/permission-requests/`. They
+  must be sent by the owner, because a permission binds the person who asks.
+  - BIS: form at bis.org/legal/permissionrequestform.htm.
+  - IMF: copyright@imf.org.
+  - ECB: info@ecb.europa.eu.
