@@ -208,12 +208,19 @@ check_true("TradingView is disabled as a source, as the TradingView doc says",
 section("deployment and run commands refer to flags that exist")
 # ===========================================================================
 _src = read("scripts/run_phase4.py")
-for doc in ("docs/deployment.md", "MODEL_CARD.md", "PHASE8_CONFIRM_RUN_FA.md"):
-    for flag in sorted(set(re.findall(r"(--[a-z][a-z-]+)", read(doc)))):
-        if flag in ("--think", "--version", "--mutate"):
-            continue
-        check_true("%s: flag %s exists in run_phase4" % (doc, flag),
-                   ('"%s"' % flag) in _src, "(V)")
+_ask = read("scripts/ask.py")
+for doc in ("docs/deployment.md", "MODEL_CARD.md", "PHASE8_CONFIRM_RUN_FA.md", "docs/guides/ask-fa.md"):
+    # D-0135: a flag is checked against the script its OWN line runs, so an
+    # ask.py flag is not demanded of run_phase4 (and vice versa).
+    for line in read(doc).splitlines():
+        prog, src = (("ask.py", _ask) if "ask.py" in line else ("run_phase4", _src))
+        for flag in sorted(set(re.findall(r"(--[a-z][a-z-]+)", line))):
+            if flag in ("--think", "--version", "--mutate"):
+                continue
+            if prog == "run_phase4" and ('"%s"' % flag) not in _src and ('"%s"' % flag) in _ask:
+                prog, src = "ask.py", _ask          # prose line about an ask.py option
+            check_true("%s: flag %s exists in %s" % (doc, flag, prog),
+                       ('"%s"' % flag) in src, "(V)")
 check_true("the deployment checksum is the Q4_K_M sha256 (upper-case for PowerShell)",
            q4["sha256"].upper() in read("docs/deployment.md"), "(V)")
 check_true("the Modelfile FROM line names the documented file", "Qwen3.5-4B-Q4_K_M.gguf" in

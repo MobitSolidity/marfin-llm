@@ -1,0 +1,90 @@
+{
+  "measured_on": "2026-10-23",
+  "decision": "D-0135",
+  "method": "src/rag/macro.py fetch() against the live APIs; FRED key from FRED_API_KEY (environment only, not recorded); fred_meta=fred_series_units, so FRED's own 'units' string was re-checked for every FRED series",
+  "label": "MEASURED",
+  "series": {
+    "CPIAUCSL": {
+      "date": "2026-09-01",
+      "value": 336.298,
+      "unit": "Index 1982-1984=100",
+      "trust": "OFFICIAL_DATA",
+      "yoy": {
+        "value": 0.03717250844268993,
+        "pct": 3.72,
+        "from": "2025-09-01",
+        "to": "2026-09-01",
+        "start": 324.245,
+        "end": 336.298,
+        "formula": "(end - start) / start",
+        "label": "COMPUTED",
+        "tool": "simple_return"
+      }
+    },
+    "UNRATE": {
+      "date": "2026-09-01",
+      "value": 4.2,
+      "unit": "Percent",
+      "trust": "OFFICIAL_DATA"
+    },
+    "FEDFUNDS": {
+      "date": "2026-09-01",
+      "value": 3.75,
+      "unit": "Percent",
+      "trust": "OFFICIAL_DATA"
+    },
+    "DGS10": {
+      "date": "2026-10-21",
+      "value": 5.13,
+      "unit": "Percent",
+      "trust": "OFFICIAL_DATA"
+    },
+    "GDP": {
+      "date": "2026-04-01",
+      "value": 32563.03,
+      "unit": "Billions of Dollars",
+      "trust": "OFFICIAL_DATA"
+    },
+    "WS_CBPOL:D.US": {
+      "date": "2026-10-20",
+      "value": 3.875,
+      "unit": "Percent per annum",
+      "trust": "OFFICIAL_DATA"
+    },
+    "WS_CBPOL:D.XM": {
+      "date": "2026-10-20",
+      "value": 2.5,
+      "unit": "Percent per annum",
+      "trust": "OFFICIAL_DATA"
+    },
+    "WS_CBPOL:D.GB": {
+      "date": "2026-10-19",
+      "value": 3.75,
+      "unit": "Percent per annum",
+      "trust": "OFFICIAL_DATA"
+    },
+    "WS_CBPOL:D.JP": {
+      "date": "2026-10-20",
+      "value": 1.25,
+      "unit": "Percent per annum",
+      "trust": "OFFICIAL_DATA"
+    },
+    "WS_CBPOL:D.CA": {
+      "date": "2026-10-19",
+      "value": 2.25,
+      "unit": "Percent per annum",
+      "trust": "OFFICIAL_DATA"
+    },
+    "WS_CBPOL:D.CH": {
+      "date": "2026-10-20",
+      "value": 0.0,
+      "unit": "Percent per annum",
+      "trust": "OFFICIAL_DATA"
+    }
+  },
+  "notes": [
+    "All 11 catalogue series returned data; 0 unit mismatches.",
+    "CPIAUCSL 12-month change COMPUTED by simple_return: 336.298/324.245-1 = 3.72 %.",
+    "BIS WS_CBPOL US 3.875 = mid-point of 3.75-4.00 (cross-check with the NY Fed range, D-0133)."
+  ]
+}

@@ -9,7 +9,7 @@ Every number below cites its evidence file. A number without a label is not a cl
 | **Base model** | Qwen3.5-4B (Qwen team), GGUF conversion by Unsloth, `unsloth/Qwen3.5-4B-GGUF` |
 | **Revision** | `e87f176479d0855a907a41277aca2f8ee7a09523` (V) |
 | **Architecture** | `qwen35` decoder-only transformer, 4,205,751,296 parameters, vocab 248,320, GGUF v3 (V, `evidence/phase7_gguf_headers_2026-10-16.json`) |
-| **Version** | System v0.8A (Phase 8A, D-0126). No adapter or LoRA: Phase 4 recommended against fine-tuning on this hardware (D-0116). |
+| **Version** | Release 0.11.0 (D-0135; `VERSION`, `releases/0.11.0.json`). Model, prompts and inference unchanged since 0.10.0. No adapter or LoRA: Phase 4 recommended against fine-tuning on this hardware (D-0116). |
 | **License** | Base model: Apache-2.0 (V, upstream card). Project code: Apache-2.0 (`LICENSE`, `NOTICE`; D-0130), excluding the third-party material listed in `NOTICE`; see `LICENSES.md`. |
 | **Datasets** | No training data (no fine-tuning). Evaluation data: `evals/bilingual_eval_v1.jsonl` (21 cases, authored), `evals/rag_*_combined.jsonl` (32 gold rows over SEC EDGAR and FRB passages), `evals/redteam_*` (Phase 6). |
 | **Dataset licenses** | SEC EDGAR: US-government public records, access rules recorded. FRB: public domain (V). Eval questions: authored for this project. Registry: `LICENSES.md`, `docs/legal/research-and-news-sources.md`. |
@@ -23,7 +23,7 @@ Every number below cites its evidence file. A number without a label is not a cl
 | **Tool dependencies** | 85 deterministic calculation tools (`src/tools/registry.py`, `src/calc/`), executed by the orchestrator, never by the model. Tool-call schema validity: 100 % (M). |
 | **TradingView limitations** | Machine use is **prohibited** by TradingView's terms (V, `docs/legal/tradingview-terms-review.md`). Supported: user-exported CSV import, validated webhooks (notifications only, never orders), and screenshots (labelled UNVERIFIED). |
 | **Broker-integration limitations** | No broker adapter is VERIFIED; every live write tool refuses. Paper trading runs only in the local simulated venue (`src/execution/paper.py`, Phase 8A PASS). |
-| **Last update** | 2026-10-20 (D-0126) |
+| **Last update** | 2026-10-23 (D-0135: end-user `scripts/ask.py`; live macro data `src/rag/macro.py`) |
 | **Hardware** | Target: Intel Core i5-12400 (6P/12T), Windows 11, CPU only (V, run headers). The build sandbox cannot run the model. |
 | **Inference settings** | Greedy (temperature 0); seed 20260831; ctx 16384; max_tokens 512; stop `<\|im_end\|>`, `<\|im_start\|>user`; think block pre-closed (D-0091); repeat_penalty 1.0. Recommended run flags: `--second-turn --refusal-language --execution-guard --min-trust 80 --display --continue-budget 256`. |
 | **Quantization** | **Q4_K_M** (chosen in D-0123 from the user's Persian review, 10 vs 7, and every automatic measure). Q5_K_M is the measured alternative. |
@@ -100,4 +100,4 @@ shown to the model, scale included (the 10⁶ error class).
   (M, D-0122).
 - Every run file records the model sha256, all prompt options, sampling, ctx, threads and the tool registry size.
   `merge_phase4` and `compare_quants` refuse to combine runs that differ in any of them.
-- Test suite: `bash tests/run_all.sh` (23 suites, 4521 assertions) and `--mutate` (mutation batteries).
+- Test suite: `bash tests/run_all.sh` (27 suites; no model needed) and `--mutate` (mutation batteries).

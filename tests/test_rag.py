@@ -491,6 +491,13 @@ check_true("SAME DIGITS without the scale word is CONTRADICTED",
            == "CONTRADICTED", "(D) the 10^6 error")
 check_true("percentages are not treated as magnitudes",
            extract_numbers("grew 12%") == [], "(C)")
+check_true("Persian percent sign is not a magnitude either",
+           extract_numbers("\u06f1\u06f2\u066a \u0631\u0634\u062f") == [], "(C)")
+check_true("D-0135: the Persian WORD for percent is skipped exactly like '%'",
+           extract_numbers("\u06f4\u066b\u06f3 \u062f\u0631\u0635\u062f") == []
+           and extract_numbers("4.3 \u062f\u0631\u0635\u062f") == [], "(M) read as 4.3 before D-0135")
+check_true("... while a number merely NEAR the word is still read",
+           [c.value for c in extract_numbers("\u062f\u0631\u0635\u062f \u0633\u0647\u0645 \u06f1\u06f2")] == [12.0], "(B) negative")
 check_true("scale word attaches to the number",
            extract_numbers("109.4 billion")[0].magnitude == 1.094e11, "(B)")
 

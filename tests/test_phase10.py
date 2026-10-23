@@ -384,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.10.5 (D-0133)", REL.read_version() == "0.10.5", "(V)")
+check_true("VERSION file is 0.11.0 (D-0135: ask.py + macro_data, a MINOR feature release)", REL.read_version() == "0.11.0", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -538,8 +538,11 @@ vr = REL.verify_against(newest)
 check_true("the working tree matches the newest release", vr["ok"],
            "(V) %s differs %r missing %r" % (newest["version"], vr["differs"], vr["missing"]))
 _chain = REL.list_releases()
-check_true("every release after 0.10.0 is a PATCH over its predecessor (no behaviour change since 0.10.0)",
+check_true("no release after 0.10.0 changed model, prompt options or inference (each needs only a PATCH)",
            all(REL.required_bump(a, b) == "patch" for a, b in zip(_chain, _chain[1:])), "(V)")
+_m110 = {r["version"]: r for r in _chain}.get("0.11.0", {})
+check_true("0.11.0 pins ask.py and macro.py (the new user-facing paths)",
+           {"scripts/ask.py", "src/rag/macro.py"} <= set(_m110.get("files", {})), "(V)")
 check_true("release history is 0.10.0, 0.10.1, 0.10.2, ... with no gaps or reuse",
            [r["version"] for r in _chain][:3] == ["0.10.0", "0.10.1", "0.10.2"]
            and len({r["version"] for r in _chain}) == len(_chain), "(V)")

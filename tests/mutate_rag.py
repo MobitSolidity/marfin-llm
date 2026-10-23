@@ -210,9 +210,12 @@ MUTATIONS = [
      "    if prov is None:",
      "    if False:"),
     ("citations.py", "percentages treated as magnitudes",
-     '        if tail.lstrip().startswith("%") or tail.lstrip().startswith(\n'
-     '                "\\u066a"):\n            continue',
+     '        if tail.lstrip().startswith(("%", "\\u066a", "\\u062f\\u0631\\u0635\\u062f")):\n'
+     '            continue',
      "        pass"),
+    ("citations.py", "D-0135 Persian percent word read as a magnitude again",
+     '"\\u066a", "\\u062f\\u0631\\u0635\\u062f")):',
+     '"\\u066a")):'),
     ("citations.py", "one failed claim no longer invalidates the answer",
      '    return {"ok": not bad, "n_claims": len(results),',
      '    return {"ok": True, "n_claims": len(results),'),

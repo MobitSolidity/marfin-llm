@@ -125,7 +125,8 @@ tests/test_phase8.py \
 tests/test_phase8a.py \
 tests/test_phase9.py \
 tests/test_phase10.py \
-tests/test_fred_bis.py"
+tests/test_fred_bis.py \
+tests/test_ask.py"
 
 for t in $SUITES; do
   echo
@@ -621,6 +622,16 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: Phase 10 source not restored, or its oracle is red"
     fail=1; }
   [ $p10m_status -ne 0 ] && fail=1
+  echo
+  echo "--- D-0135 macro_data and the ask.py end-user path --------------------"
+  askm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_ask.py)
+  askm_status=$?
+  echo "$askm" | grep -E "seeded [0-9]+"
+  echo "$askm" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$askm" | grep -q "restored+green True" || {
+    echo "  ERROR: ask/macro source not restored, or its oracle is red"
+    fail=1; }
+  [ $askm_status -ne 0 ] && fail=1
 fi
 
 echo

@@ -27,6 +27,15 @@ python scripts\run_phase4.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf --arms pla
   ollama run marfin-q4 --think=false "..."
   ```
 
+**3b. Ask your own question** (D-0135). The same prompts, options and checks as the recommended run above:
+```powershell
+python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf "What was Apple's net income in fiscal 2023?"
+python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf      # interactive; /quit to leave
+```
+Live US macro data and central-bank policy rates need `setx FRED_API_KEY <key>` (FRED) and network access
+(BIS needs no key). `--no-macro` keeps every question offline. `--server lmstudio --model-id <id>` uses a loopback
+server instead of loading the model in-process. Guide in Persian: `docs/guides/ask-fa.md`.
+
 **4. Execution mode.** No config file means ANALYSIS_ONLY. To enable paper trading, create
 `%USERPROFILE%\.marfin\execution.conf`:
 ```
@@ -37,7 +46,7 @@ LIVE_TRADING cannot be reached by configuration (SS.6.1).
 
 **5. Verify the installation**
 ```bash
-bash tests/run_all.sh          # 23 suites; no model needed
+bash tests/run_all.sh          # 27 suites; no model needed
 ```
 
 **Secrets:** API keys go in environment variables (see `.env.example`), never in files under version control.

@@ -35,7 +35,7 @@ WHAT IT DOES NOT DO, ON PURPOSE
     A harness that scored them itself would be certifying quality it never
     inspected.
   - It registers NO execution tool and cannot place an order. The tool registry
-    contains 84 calculators and zero brokers; the harness asserts this at
+    contains 85 calculators and zero brokers; the harness asserts this at
     startup and refuses to run if it ever stops being true.
   - It decides nothing. It writes numbers. Phase 4's task 7 decision is taken
     by the user, after reading them.
