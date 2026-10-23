@@ -7832,3 +7832,8 @@ ECB/BIS/IMF papers.
 **Tests:**
 - New suite `tests/test_fred_bis.py` (offline, injected HTTP, fake key).
 - `run_all`: 26 suites.
+
+## D-0134 — Permission-request routes corrected after auto-replies (2026-10-23)
+- ECB: info@ecb.europa.eu is unmonitored; requests go through the Information Request Form. Field-by-field guide (Category "Copyright and autographs" → Sub-Category "Copyright and Permissions", Details ≤ 4000 chars) VERIFIED from the form's survey schema.
+- IMF: reuse permissions are cleared via CCC Marketplace. No exact type of use fits local retrieval with no training; "AI Summarization" TOU exists (Oct 2026 release notes), but which rightsholders take part is not published. Possible OFAC barrier for users in Iran is flagged as UNVERIFIED; no workaround is advised.
+- Docs only: `docs/legal/permission-requests/HOW_TO_SUBMIT_FA.md` added, `README_FA.md` routes corrected. No source enabled; no code change; VERSION unchanged.

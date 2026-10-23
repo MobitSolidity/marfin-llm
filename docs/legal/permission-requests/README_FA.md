@@ -18,8 +18,8 @@
 | نهاد | کجا بفرستید | زمان پاسخ |
 |---|---|---|
 | **BIS** | فرم رسمی: https://www.bis.org/legal/permissionrequestform.htm — متن `BIS_EN.md` را در کادر توضیحات بگذارید | معمولاً رایگان است |
-| **IMF** | ایمیل به **copyright@imf.org** با متن `IMF_EN.md` (یا از طریق Copyright Clearance Center: marketplace.copyright.com) | — |
-| **ECB** | ایمیل به **info@ecb.europa.eu** با متن `ECB_EN.md` | — |
+| **IMF** | از طریق Copyright Clearance Center (marketplace.copyright.com)، چون IMF به ایمیل همین را پاسخ داد. جزئیات و جایگزین‌ها در `HOW_TO_SUBMIT_FA.md` | — |
+| **ECB** | فرم رسمی (ایمیل info@ecb خوانده نمی‌شود): https://form.ecb.europa.eu/services/rest/publicinformationrequest/?lang=en. راهنمای فیلدبه‌فیلد در `HOW_TO_SUBMIT_FA.md` | — |
 
 ## بعد از گرفتن پاسخ
 متن پاسخ را برایم بفرستید. من:
