@@ -8045,3 +8045,24 @@ are rendered as nested `<ul>`/`<ol>` lists. The item text is still escaped (test
     transient, and all 12 months are shown for a non-index series.
 
 **Release.** 0.11.3 (patch).
+
+## D-0139 — D-0138 confirmed on the target machine (2026-10-23)
+
+**Run (MEASURED, i5-12400, release 0.11.3).** Question: «تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟» ("US inflation in January 2024").
+- **Route:** `macro`, 3 evidence rows:
+  - 2023-01 CPI 300.42
+  - 2024-01 CPI 309.698
+  - COMPUTED 12-month change 3.09
+- **Reply:** **۳٫۰۹٪**, citing [3].
+- **Figure check:** SUPPORTED.
+- Before D-0138 the same question gave no percentage (D-0138). Hand check: 309.698 / 300.42 − 1 = 3.088 %.
+
+**One cosmetic model quirk, not fixed in code.** The reply called the evidence item «گذرنامه» (passport) instead of «شاهد»/«سند». It is a translation slip by the 4B model. It does not touch any figure or citation, and correcting the model's wording would mean a prompt change, which needs a new measured run (prompt options are pinned). Recorded here only.
+
+**State.** All four owner runs since D-0135 are now correct on the target:
+- Apple FY2023 net income
+- 6 policy rates + CPI inflation
+- January 2024 inflation
+- P/E
+
+No code change; no release.

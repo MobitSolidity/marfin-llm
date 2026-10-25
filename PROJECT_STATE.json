@@ -385,7 +385,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0138",
+  "decisions_logged": "D-0001..D-0139",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -817,9 +817,9 @@
     ]
   },
   "awaiting_user_action": [
-    "re-run scripts/ask.py after git pull (D-0136 fixes; answer also opens as an RTL page)",
     "benchmark refresh by 2026-12-16 (PHASE8_CONFIRM_RUN_FA.md)",
-    "ECB paper-permission reply (form submitted); IMF closed (CCC unavailable under sanctions)"
+    "ECB paper-permission reply (form submitted); IMF closed (CCC unavailable under sanctions)",
+    "optional: keep using scripts/ask.py and report any wrong figure or warning"
   ],
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
@@ -3155,5 +3155,13 @@
       "test_ask": 154,
       "mutate_ask": "63/63"
     }
+  },
+  "D-0139_d0138_confirmed_on_target_2026_10_23": {
+    "question": "US inflation January 2024 (Persian)",
+    "route": "macro",
+    "reply": "3.09%",
+    "check": "SUPPORTED",
+    "evidence_rows": 3,
+    "quirk": "model wrote 'گذرنامه' for evidence item (cosmetic; prompt pinned)"
   }
 }
