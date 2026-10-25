@@ -126,8 +126,17 @@ check_true("the Alpha Vantage carve-out says the fixtures are NOT licensed by th
            "NOT licensed to you by this project" in _NOTICE
            and "Not licensed to you by this project" in read("LICENSES.md"), "(V)")
 _FIXDIRS = sorted({t.split("/")[2] for t in _tracked if t.startswith("tests/fixtures/") and t.count("/") >= 3})
-check_true("every tests/fixtures/ subdirectory is a known carve-out (now: alpha_vantage only)",
-           _FIXDIRS == ["alpha_vantage"], "(V) %r" % _FIXDIRS)
+# D-0137: tests/fixtures/ask/ holds the project's OWN model output (a reply the
+# owner's i5-12400 produced through scripts/ask.py) -- not third-party data, so it
+# is Apache-2.0 with the rest of the project and needs no NOTICE carve-out. It is
+# listed here so that any OTHER new fixture directory still forces a decision.
+_OWN_FIXDIRS = {"ask"}
+check_true("every tests/fixtures/ subdirectory is a known carve-out (alpha_vantage) or project-own (ask)",
+           set(_FIXDIRS) - _OWN_FIXDIRS == {"alpha_vantage"}, "(V) %r" % _FIXDIRS)
+check_true("... and the project-own fixtures carry no third-party source",
+           all(not any(w in open(os.path.join(ROOT, t), encoding="utf-8").read().lower()
+                       for w in ("alpha vantage", "copyright", "all rights reserved"))
+               for t in _tracked if t.startswith("tests/fixtures/ask/")), "(V)")
 import ast                                                      # noqa: E402
 _third = set()
 for dp, _, fs in os.walk(os.path.join(ROOT, "scripts")):
