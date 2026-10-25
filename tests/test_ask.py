@@ -347,9 +347,16 @@ check("years_in reads Gregorian years, Persian digits folded",
       len(M.years_in("\u062a\u0648\u0631\u0645 \u06f2\u06f0\u06f2\u06f3")), 1, method="(B)")
 check_true("a CIK or '10 ساله' is not a year", M.years_in("CIK 0000320193") == []
            and M.years_in("\u0627\u0648\u0631\u0627\u0642 \u06f1\u06f0 \u0633\u0627\u0644\u0647") == [], "(A)")
+_wu = M.window_for("UNRATE", [2024], datetime.date(2026, 10, 23))
+_fu = M.fetch("UNRATE", api_key=K, fred_get=fred([{"date": "2024-%02d-01" % m, "value": "4.%d" % (m % 10)}
+                                                   for m in range(12, 0, -1)]), **_wu)
+check("a named year on a non-index monthly series shows all 12 months", len(M.evidence_for("UNRATE", _fu, years=[2024])),
+      12, method="(B)")
 _w = M.window_for("CPIAUCSL", [2024], datetime.date(2026, 10, 23))
-check_true("a named year gets that year's window and a limit that reaches it",
-           _w == {"start_date": "2024-01-01", "end_date": "2024-12-31", "limit": 48}, "(B) %r" % _w)
+check_true("a named year gets that year's window and a limit that reaches it -- CPI from one year EARLIER (D-0138)",
+           _w == {"start_date": "2023-01-01", "end_date": "2024-12-31", "limit": 60}, "(B) %r" % _w)
+check_true("a non-index series is NOT widened (UNRATE 2024 -> 2024 only)",
+           M.window_for("UNRATE", [2024], datetime.date(2026, 10, 23))["start_date"] == "2024-01-01", "(B) negative")
 _obs24 = [{"date": "2024-%02d-01" % m, "value": str(308 + m)} for m in range(12, 0, -1)]
 _f24 = M.fetch("CPIAUCSL", api_key=K, fred_get=fred(_obs24), **_w)
 check_true("RAG-EN-004 class: 'January 2024' IS in the evidence when the year is named",
@@ -445,6 +452,93 @@ check_true("HTML: Markdown bullets become nested lists; no literal '*' left",
 check_true("HTML: list text is still escaped; numbered lists become <ol>",
            A._reply_html("1. a\n2. <b onclick=x>y") == '<ol dir="auto"><li dir="auto">a</li><li dir="auto">&lt;b onclick=x&gt;y</li></ol>',
            "(A) SS.10")
+
+# ===========================================================================
+section("D-0138: the owner's third run -- inflation for a named month, and network retry")
+# ===========================================================================
+# Real FRED CPIAUCSL values (MEASURED 2026-10-23): 2023-01 = 300.42, 2024-01 = 309.698.
+_obs2324 = ([{"date": "2024-%02d-01" % m, "value": "309.698" if m == 1 else str(310 + m)} for m in range(12, 0, -1)]
+            + [{"date": "2023-%02d-01" % m, "value": "300.42" if m == 1 else str(301 + m)} for m in range(12, 0, -1)])
+_f2324 = M.fetch("CPIAUCSL", api_key=K, fred_get=fred(_obs2324),
+                 **M.window_for("CPIAUCSL", [2024], datetime.date(2026, 10, 23)))
+_yj = M.year_over_year(_f2324, at=datetime.date(2024, 1, 1))
+check("January 2024 12-month inflation = 309.698 / 300.42 - 1 -> 3.09 %", _yj["pct"], 3.09, method="(B) 3.0884")
+check_true("... COMPUTED from the same month a year earlier, never a neighbour",
+           _yj["from"] == "2023-01-01" and _yj["to"] == "2024-01-01" and _yj["label"] == "COMPUTED", "(V)")
+check_true("year_over_year(at=a month not in the data) -> None",
+           M.year_over_year(_f2324, at=datetime.date(2022, 1, 1)) is None, "(A)")
+_evj = M.evidence_for("CPIAUCSL", _f2324, years=[2024], months=[1])
+check("'January 2024': exactly base row + month row + COMPUTED row", len(_evj), 3, method="(M) was 12 rows, no %")
+check_true("... and the COMPUTED row carries 3.09", _evj[-1].text.endswith("| 3.09") and "COMPUTED" in _evj[-1].text, "(V)")
+check("'2024' (no month): 12 months, 12 bases, 12 changes", len(M.evidence_for("CPIAUCSL", _f2324, years=[2024])),
+      36, method="(B)")
+check_true("months_in reads English and Persian month names",
+           M.months_in("US inflation in January 2024") == [1]
+           and M.months_in("\u062a\u0648\u0631\u0645 \u0698\u0627\u0646\u0648\u06cc\u0647 \u06f2\u06f0\u06f2\u06f4") == [1]
+           and M.months_in("\u062a\u0648\u0631\u0645 \u0645\u0647 \u06f2\u06f0\u06f2\u06f4") == [5], "(B)")
+check_true("... a Persian month name inside another word is not a month ('مهمان' is not 'مه')",
+           M.months_in("\u0645\u0647\u0645\u0627\u0646 \u06f2\u06f0\u06f2\u06f4") == [], "(A)")
+_bot_j = A.Assistant(RP.ModelRunner(_Say("\u062a\u0648\u0631\u0645 \u0698\u0627\u0646\u0648\u06cc\u0647 \u06f2\u06f0\u06f2\u06f4 "
+                                          "\u0628\u0631\u0627\u0628\u0631 \u06f3\u066b\u06f0\u06f9\u066a \u0628\u0648\u062f.")),
+                     index=None, macro_fetch=lambda k, **kw: M.fetch(k, api_key=K, fred_get=fred(_obs2324), **kw),
+                     clock=lambda: NOW)
+_oj = _bot_j.answer("\u062a\u0648\u0631\u0645 \u0622\u0645\u0631\u06cc\u06a9\u0627 \u062f\u0631 \u0698\u0627\u0646\u0648\u06cc\u0647 "
+                    "\u06f2\u06f0\u06f2\u06f4 \u0686\u0642\u062f\u0631 \u0628\u0648\u062f\u061f")
+check_true("the owner's question end to end: 3 evidence rows, reply '۳٫۰۹٪' SUPPORTED",
+           len(_oj["evidence"]) == 3 and _oj["check"] == "SUPPORTED", "(M) %s %d" % (_oj["check"], len(_oj["evidence"])))
+
+# --- retry ----------------------------------------------------------------
+from rag import bis_stats as _B                                   # noqa: E402
+_calls, _waits = [], []
+
+
+def _flaky(n_fail, msg="could not read BIS statistics API: <urlopen error _ssl.c:993: The handshake operation timed out>"):
+    def get(url, t):
+        _calls.append(url)
+        if len(_calls) <= n_fail:
+            raise _B.BisStatsError(msg)
+        return CSV
+    return get
+
+
+_log = []
+_r1 = M.fetch("WS_CBPOL:D.XM", bis_get=_flaky(1), sleep=_waits.append, clock=lambda: 0.0, retries_log=_log)
+check_true("the owner's TLS handshake timeout is retried and then succeeds", _r1[-1].value == 2.5
+           and len(_calls) == 2 and len(_log) == 1, "(M) failed with no retry before")
+_calls.clear(); _waits.clear()
+check_raises("a persistent timeout gives up after RETRIES (2) more attempts",
+             lambda: M.fetch("WS_CBPOL:D.XM", bis_get=_flaky(99), sleep=_waits.append, clock=lambda: 0.0),
+             _B.BisStatsError)
+check("... 3 attempts in total, with the 2 s and 5 s back-offs", len(_calls), 3, method="(B)")
+check_true("... back-off waits were 2.0 and 5.0 s", [w for w in _waits if w in (2.0, 5.0)] == [2.0, 5.0], "(B) %r" % _waits)
+_calls.clear()
+check_raises("a DATA error is never retried (same payload would come back)",
+             lambda: M.fetch("WS_CBPOL:D.XM", bis_get=lambda u, t: (_calls.append(u), "<xml/>")[1],
+                             sleep=lambda x: None, clock=lambda: 0.0), _B.BisStatsError)
+check("... exactly 1 attempt", len(_calls), 1, method="(A)")
+check_true("a bare TLS 'handshake' failure (no 'timed out' in it) is transient",
+           M.is_transient(_B.BisStatsError("could not read BIS statistics API: [SSL] handshake failure")), "(M) the owner's error class")
+_calls.clear()
+check_raises("with a source that never recovers, exactly RETRIES+1 = 3 attempts are made",
+             lambda: M.fetch("WS_CBPOL:D.XM", bis_get=_flaky(99), sleep=lambda x: None, clock=lambda: 0.0),
+             _B.BisStatsError)
+check("... 3, not more", len(_calls), 3, method="(A) a dead source must not be hammered")
+check_true("HTTP 503 is transient; HTTP 404 is not",
+           M.is_transient(_B.BisStatsError("HTTP 503 from BIS statistics API"))
+           and not M.is_transient(_B.BisStatsError("HTTP 404 from BIS statistics API")), "(B)")
+check_true("a non-network exception is never classed transient", not M.is_transient(ValueError("timed out")), "(A)")
+
+
+def _down_tls(key, **kw):
+    if key == "WS_CBPOL:D.GB":
+        raise _B.BisStatsError("could not read BIS statistics API: <urlopen error _ssl.c:993: The handshake operation timed out>")
+    return _mf3(key, **kw)
+
+
+_od = A.Assistant(RP.ModelRunner(_Say(OWNER_REPLY)), index=None, macro_fetch=_down_tls, clock=lambda: NOW).answer(_Q3)
+check_true("a source that still fails is reported in plain words, with the raw error kept in the record",
+           any("network timeout after 2 retries" in n for n in _od["macro_unavailable"])
+           and any("_ssl.c:993" in e for e in _od.get("macro_errors", [])), "(V)")
 
 # ===========================================================================
 section("audit log: every turn chained; tampering detected")
