@@ -250,20 +250,26 @@ class Assistant(object):
     def _macro(self, question, series, out):
         passages, used, notes = [], [], []
         years = MACRO.years_in(question)
+        months = MACRO.months_in(question) if years else []
         for key in series:
             try:
                 # D-0136: a question naming a year gets that year's window, never
                 # just the newest rows (RAG-EN-004: "January 2024").
                 facts = self.macro_fetch(key, **MACRO.window_for(key, years, self.clock().date()))
             except (MACRO.MacroError, AccessError, RuntimeError, ValueError) as exc:
-                notes.append("%s: %s" % (key, exc))
+                # D-0138: say WHICH source failed and that it was retried, in
+                # plain words; the raw TLS text stays in the record for support.
+                notes.append("%s (%s): %s" % (key, MACRO.SERIES[key]["source"],
+                                              "network timeout after %d retries" % MACRO.RETRIES
+                                              if MACRO.is_transient(exc) else exc))
+                out.setdefault("macro_errors", []).append("%s: %s" % (key, exc))
                 continue
             # D-0136: several series in one question -> newest row each (CPI keeps
             # its year-earlier row + COMPUTED change). MEASURED: the owner's
             # 10-series question rendered 22 evidence rows at 2 per series.
             rows = 1 if (len(series) > 2 and not years) else 2
             passages.extend(MACRO.evidence_for(key, facts, lang=out["lang"], years=years,
-                                               max_rows=rows))
+                                               max_rows=rows, months=months))
             used.append(key)
         out["macro_series"] = used
         out["macro_unavailable"] = notes

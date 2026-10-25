@@ -8002,3 +8002,46 @@ are rendered as nested `<ul>`/`<ol>` lists. The item text is still escaped (test
 "period lengths not masked". A whole-answer assertion now kills it.
 
 **Release.** 0.11.2 (patch).
+
+## D-0138 — Owner's third run: two real gaps (named-month inflation; no network retry) (2026-10-23)
+
+**Runs (MEASURED, i5-12400).**
+
+1. **Policy rates + inflation.** The figure check said SUPPORTED, and all 6 figures shown were exact. But 2 of 6 BIS
+   calls (euro area, UK) failed with `_ssl.c:993: The handshake operation timed out` and were **dropped with no
+   retry**. The model then noted that those banks were missing. That was honest, but the data was obtainable.
+2. **«تورم آمریکا در ژانویه ۲۰۲۴»** (US inflation in January 2024).
+   - The evidence had the 12 CPI index rows of 2024 and no percentage.
+   - The model said the inflation percentage was not in the evidence. That is correct behaviour; the defect was
+     mine.
+   - Inflation for a month is its 12-month change, which needs the same month of the PRIOR year, and the window
+     fetched only 2024.
+3. **P/E question.** `tools`, `pe_ratio` = 17.857…, reply 17.86. Correct.
+
+**Fixes.**
+
+- **Retry.** Transport failures are retried up to 2 times, with 2 s and 5 s back-off: timeouts, TLS handshake,
+  refused or reset connections, DNS, HTTP 429/5xx. Data and format errors are never retried, and neither is
+  HTTP 404. The BIS 1-request-per-second spacing still applies on every attempt.
+- **Failure message.** A source that still fails is reported as "network timeout after 2 retries". The raw error is
+  kept in the record as `macro_errors`.
+- **Named-year window.** For the index series (CPI), the window starts ONE YEAR earlier.
+- **Inflation per month.** `year_over_year(at=…)` computes the 12-month change for any month, with the registry's
+  `simple_return`.
+  - For a named year, the evidence is each month's index row, its base row and its COMPUTED change.
+  - A month whose base is missing gets no change row.
+- **Month names.** `months_in` reads English and Persian Gregorian month names. A Persian name must stand alone:
+  «مهمان» is not «مه». With a named month, only that month is shown.
+- **Live check, MEASURED.** «ژانویه ۲۰۲۴» now gives 3 rows: 2023-01 300.42, 2024-01 309.698, and the COMPUTED
+  change **3.09 %**.
+
+**Tests.**
+- `test_ask`: 131 → 154 assertions.
+- `mutate_ask`: 49 → 63 mutants, 63/63 killed.
+  - The first pass left 3 survivors and 1 skip.
+  - "Retry loop bound" was EQUIVALENT (the `attempt >= RETRIES` cap still holds). It was replaced by a real mutant,
+    "cap raised".
+  - The other gaps were closed with behavioural assertions: the attempt count exactly 3, a bare "handshake" error is
+    transient, and all 12 months are shown for a non-index series.
+
+**Release.** 0.11.3 (patch).

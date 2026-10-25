@@ -235,12 +235,47 @@ def select(question: str) -> List[str]:
 #: to a named year (D-0136). BIS daily series include weekends (MEASURED: the
 #: 2026-10-15..20 window returned 6 consecutive calendar days).
 _PER_YEAR = {"daily": 366, "monthly": 12, "quarterly": 4}
+#: Index series whose meaningful "rate" is a COMPUTED 12-month change.
+_YOY_SERIES = ("CPIAUCSL",)
 
 
 def years_in(question: str) -> List[int]:
     """Gregorian years (1950..2099) the question names, Persian digits folded."""
     import re
     return sorted({int(y) for y in re.findall(r"(?<!\d)(19[5-9]\d|20\d\d)(?!\d)", fold(question or ""))})
+
+
+#: Month names (English, Persian), folded. Persian Gregorian month names as
+#: Iranian writers use them for foreign data; Solar Hijri names are NOT mapped
+#: (a Hijri month would need a calendar conversion the question does not imply).
+_MONTHS = {
+    1: ("january", "jan ", "\u0698\u0627\u0646\u0648\u06cc\u0647"),
+    2: ("february", "feb ", "\u0641\u0648\u0631\u06cc\u0647"),
+    3: ("march", "\u0645\u0627\u0631\u0633"),
+    4: ("april", "\u0622\u0648\u0631\u06cc\u0644"),
+    5: (" may ", "\u0645\u0647"),
+    6: ("june", "\u0698\u0648\u0626\u0646"),
+    7: ("july", "\u0698\u0648\u0626\u06cc\u0647"),
+    8: ("august", "\u0627\u0648\u062a"),
+    9: ("september", "\u0633\u067e\u062a\u0627\u0645\u0628\u0631"),
+    10: ("october", "\u0627\u06a9\u062a\u0628\u0631"),
+    11: ("november", "\u0646\u0648\u0627\u0645\u0628\u0631"),
+    12: ("december", "\u062f\u0633\u0627\u0645\u0628\u0631"),
+}
+
+
+def months_in(question: str) -> List[int]:
+    """Calendar months the question names (1..12). Persian words must stand alone."""
+    import re
+    q = " %s " % fold(question or "")
+    out = []
+    for m, names in _MONTHS.items():
+        for n in names:
+            n = fold(n)
+            if re.search(r"(?<![\w\u0600-\u06ff])%s(?![\w\u0600-\u06ff])" % re.escape(n.strip()), q):
+                out.append(m)
+                break
+    return sorted(set(out))
 
 
 def window_for(series: str, years: Sequence[int], today: Optional[datetime.date] = None) -> Dict[str, Any]:
@@ -257,8 +292,14 @@ def window_for(series: str, years: Sequence[int], today: Optional[datetime.date]
     today = today or datetime.date.today()
     first, last = min(years), max(years)
     per = _PER_YEAR[spec(series)["frequency"]]
-    need = int((today.year - first + 1) * per) + per
-    return {"start_date": "%d-01-01" % first, "end_date": "%d-12-31" % last,
+    # D-0138: CPI is an index, and "inflation in January 2024" is its 12-month
+    # change -- which needs January 2023. The window therefore starts ONE YEAR
+    # EARLIER for the index series, so every month of the named year has its
+    # base. MEASURED on the owner's run: only 2024 was fetched, and the model
+    # (correctly) said the percentage was not in the evidence.
+    start_year = first - 1 if series in _YOY_SERIES else first
+    need = int((today.year - start_year + 1) * per) + per
+    return {"start_date": "%d-01-01" % start_year, "end_date": "%d-12-31" % last,
             "limit": max(13, min(1000, need))}
 
 
@@ -291,6 +332,40 @@ def _throttle(source_key: str, sleep: Callable[[float], None], clock: Callable[[
     return wait
 
 
+#: D-0138: a TRANSPORT failure (timeout, refused connection, TLS handshake,
+#: HTTP 429/5xx) is retried; a data/format error never is -- re-asking for a
+#: payload that failed validation would return the same payload. MEASURED on the
+#: owner's machine 2026-10-23: 2 of 6 BIS calls failed with "_ssl.c:993: The
+#: handshake operation timed out" and were dropped with no second attempt.
+RETRIES = 2
+BACKOFF_S = (2.0, 5.0)
+_TRANSIENT = ("timed out", "timeout", "temporarily", "connection reset", "connection refused",
+              "connection aborted", "handshake", "remote end closed", "name resolution",
+              "getaddrinfo", "network is unreachable", "http 429", "http 500", "http 502",
+              "http 503", "http 504")
+
+
+def is_transient(exc: BaseException) -> bool:
+    """True only for network/transport failures worth one more attempt."""
+    if not isinstance(exc, (_fred.FredError, _bis.BisStatsError)):
+        return False
+    msg = str(exc).lower()
+    return any(t in msg for t in _TRANSIENT)
+
+
+def _with_retry(call: Callable[[], Any], sleep: Callable[[float], None],
+                attempts_log: Optional[List[str]] = None) -> Any:
+    for attempt in range(RETRIES + 1):
+        try:
+            return call()
+        except (_fred.FredError, _bis.BisStatsError) as exc:
+            if attempt >= RETRIES or not is_transient(exc):
+                raise
+            if attempts_log is not None:
+                attempts_log.append(str(exc)[:120])
+            sleep(BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)])
+
+
 def fetch(series: str, source: Optional[str] = None, start_date: Optional[str] = None,
           end_date: Optional[str] = None, frequency: Optional[str] = None,
           limit: int = 13, api_key: Optional[str] = None,
@@ -298,7 +373,8 @@ def fetch(series: str, source: Optional[str] = None, start_date: Optional[str] =
           fred_meta: Optional[Callable[[str, str], Optional[str]]] = None,
           bis_get: Optional[Callable[..., str]] = None,
           sleep: Optional[Callable[[float], None]] = None,
-          clock: Optional[Callable[[], float]] = None) -> List[Fact]:
+          clock: Optional[Callable[[], float]] = None,
+          retries_log: Optional[List[str]] = None) -> List[Fact]:
     """
     Newest-last Facts for one catalogue series, inside [start_date, end_date].
 
@@ -321,13 +397,18 @@ def fetch(series: str, source: Optional[str] = None, start_date: Optional[str] =
                 raise MacroError("FRED now reports unit %r for %s, but the catalogue was "
                                  "verified as %r; refusing rather than mislabelling"
                                  % (got, series, _FRED_UNIT[series]))
-        facts = _fred.fetch_observations(series, s["unit"], api_key=key, limit=limit,
-                                         sort_order="desc", http_get=fred_get)
+        import time as _time
+        facts = _with_retry(lambda: _fred.fetch_observations(
+            series, s["unit"], api_key=key, limit=limit, sort_order="desc", http_get=fred_get),
+            sleep or _time.sleep, retries_log)
     else:
         import time as _time
         dataflow, key = series.split(":", 1)
-        _throttle("bis_statistics", sleep or _time.sleep, clock or _time.monotonic)
-        facts = _bis.fetch(dataflow, key, s["unit"], last_n=limit, http_get=bis_get)
+
+        def _one():
+            _throttle("bis_statistics", sleep or _time.sleep, clock or _time.monotonic)
+            return _bis.fetch(dataflow, key, s["unit"], last_n=limit, http_get=bis_get)
+        facts = _with_retry(_one, sleep or _time.sleep, retries_log)
     facts = sorted(_window(facts, start, end), key=lambda f: f.period_end)
     if not facts:
         raise MacroError("no %s observation inside the requested window (%s .. %s); "
@@ -347,15 +428,21 @@ def fred_series_units(series: str, api_key: str, timeout: float = 20.0) -> Optio
         return None
 
 
-def year_over_year(facts: Sequence[Fact]) -> Optional[Dict[str, Any]]:
+def year_over_year(facts: Sequence[Fact], at: Optional[datetime.date] = None) -> Optional[Dict[str, Any]]:
     """
-    COMPUTED 12-month change of a monthly index: (latest / same month a year
-    earlier) - 1. None when the year-earlier observation is not in `facts` --
-    never an approximation from a neighbouring month.
+    COMPUTED 12-month change of a monthly index: (value at `at`, default the
+    latest / same month a year earlier) - 1. None when either observation is not
+    in `facts` -- never an approximation from a neighbouring month.
     """
     if not facts:
         return None
-    last = max(facts, key=lambda f: f.period_end)
+    if at is None:
+        last = max(facts, key=lambda f: f.period_end)
+    else:
+        hit = [f for f in facts if f.period_end == at]
+        if not hit:
+            return None
+        last = hit[0]
     try:
         prior_date = last.period_end.replace(year=last.period_end.year - 1)
     except ValueError:            # 29 Feb
@@ -388,7 +475,8 @@ def computed_passage(series: str, yoy: Dict[str, Any], basis: Fact, lang: str = 
 
 
 def evidence_for(series: str, facts: Sequence[Fact], lang: str = "en",
-                 max_rows: int = 2, years: Sequence[int] = ()) -> List[Passage]:
+                 max_rows: int = 2, years: Sequence[int] = (),
+                 months: Sequence[int] = ()) -> List[Passage]:
     """
     Newest rows, plus (monthly index only) the year-earlier row and the COMPUTED change.
 
@@ -399,6 +487,8 @@ def evidence_for(series: str, facts: Sequence[Fact], lang: str = "en",
     fill the context.
     """
     if years and spec(series)["frequency"] in ("monthly", "quarterly"):
+        if series in _YOY_SERIES:
+            return _named_year_yoy_evidence(series, facts, years, lang, months)
         max_rows = 16
     out = to_passages(series, facts, lang, max_rows)
     if series == "CPIAUCSL":
@@ -408,6 +498,30 @@ def evidence_for(series: str, facts: Sequence[Fact], lang: str = "en",
             out = to_passages(series, prior, lang, 1) + out
             out.append(computed_passage(series, yoy, prior[0], lang))
     return out
+
+
+def _named_year_yoy_evidence(series: str, facts: Sequence[Fact], years: Sequence[int],
+                             lang: str, months: Sequence[int] = ()) -> List[Passage]:
+    """
+    D-0138: for a named year, every month of that year as a row AND its COMPUTED
+    12-month change (from the same month a year earlier, also in the evidence).
+    A month whose base is missing gets no change row -- never an estimate.
+    Bounded: at most 2 named years x (12 index + 12 base + 12 change) rows.
+    """
+    yrs = sorted(set(years))[-2:]
+    rows = [f for f in facts if f.period_end.year in yrs
+            and (not months or f.period_end.month in months)]
+    bases = []
+    changes = []
+    for f in sorted(rows, key=lambda x: x.period_end):
+        y = year_over_year(facts, at=f.period_end)
+        if y is None:
+            continue
+        b = [g for g in facts if g.period_end.isoformat() == y["from"]]
+        bases.extend(b)
+        changes.append(computed_passage(series, y, b[0], lang))
+    return (to_passages(series, bases, lang, len(bases) or 1) if bases else []) \
+        + to_passages(series, rows, lang, len(rows) or 1) + changes
 
 
 def to_passages(series: str, facts: Sequence[Fact], lang: str = "en",
