@@ -225,6 +225,17 @@ class Assistant(object):
             if pct:
                 statuses.append(pct)
         for claim in L.split_claims(visible):
+            if macro_series:
+                # D-0137: a claim whose only magnitudes are percentages was
+                # already judged by verify_percent_claim above. verify_claim
+                # SKIPS percentages by design, so it reports "no numeric
+                # magnitude" (UNSUPPORTED) for exactly those lines -- MEASURED on
+                # the owner's 2026-10-23 run: 7 correct figures, verdict
+                # PARTIALLY_SUPPORTED. Also drop the "12" of "12-month" / "۱۲ ماهه":
+                # a period length, not a figure (it matched a stray 12 by luck).
+                claim = MACRO.mask_period_words(claim)
+                if not MACRO.non_percent_magnitudes(claim):
+                    continue
             per = [verify_claim(claim, p).status for p in passages]
             statuses.append("SUPPORTED" if "SUPPORTED" in per else
                             "CONTRADICTED" if "CONTRADICTED" in per else "UNSUPPORTED")
@@ -394,6 +405,8 @@ body{font-family:Vazirmatn,"Segoe UI",Tahoma,Arial,sans-serif;font-size:17px;lin
 .meta{color:#666;font-size:.85em;direction:ltr;text-align:left}
 .warn{background:#fff3cd;border:1px solid #e0b400;padding:.5em .8em;border-radius:6px;margin:.6em 0}
 .reply p{margin:.4em 0}
+.reply ul,.reply ol{margin:.3em 0;padding-inline-start:1.6em}
+.reply li{margin:.15em 0}
 .ev,.calc{font-size:.9em;color:#333;border-top:1px dashed #ccc;margin-top:.8em;padding-top:.5em}
 .ev div,.calc div{margin:.25em 0}
 .cite{color:#777;font-size:.85em;direction:ltr;text-align:left}
@@ -408,6 +421,47 @@ def _inline(text):
     import re as _re
     esc = _h.escape(text or "", quote=True)
     return _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", esc)
+
+
+_BULLET = None
+
+
+def _reply_html(text):
+    """
+    D-0137: the model writes Markdown lists ("*   item", "    *   sub-item",
+    "1. item"). MEASURED on the owner's page: the stars were shown literally.
+    Lines become <ul>/<ol> items, nested by indentation (4 spaces or a tab per
+    level, at most 3 levels); every other line is a paragraph. Each line's TEXT
+    still goes through _inline (escaped; only **bold** becomes markup), so the
+    list structure is the only thing added.
+    """
+    import re as _re
+    global _BULLET
+    if _BULLET is None:
+        _BULLET = _re.compile(r"^(?P<ind>[ \t]*)(?:(?P<ul>[*\-\u2022])|(?P<ol>\d{1,3}[.)]))\s+(?P<body>.*)$")
+    out, stack = [], []                      # stack of open list tags, one per level
+    for line in text.splitlines():
+        m = _BULLET.match(line)
+        if not m:
+            while stack:
+                out.append("</%s>" % stack.pop())
+            if line.strip():
+                out.append('<p dir="auto">%s</p>' % _inline(line.strip()))
+            continue
+        ind = m.group("ind").replace("\t", "    ")
+        level = min(len(ind) // 2 // 2 + 1, 3)          # 0-3 spaces -> 1, 4-7 -> 2, ...
+        tag = "ul" if m.group("ul") else "ol"
+        while len(stack) > level:
+            out.append("</%s>" % stack.pop())
+        if len(stack) == level and stack[-1] != tag:
+            out.append("</%s>" % stack.pop())
+        while len(stack) < level:
+            out.append('<%s dir="auto">' % tag)
+            stack.append(tag)
+        out.append('<li dir="auto">%s</li>' % _inline(m.group("body")))
+    while stack:
+        out.append("</%s>" % stack.pop())
+    return "".join(out)
 
 
 def render_html(outs, refresh_seconds=None):
@@ -425,11 +479,7 @@ def render_html(outs, refresh_seconds=None):
             if out.get("data_as_of") else ""))
         for w in out["warnings"]:
             parts.append('<div class="warn" dir="auto">%s</div>' % _inline(w))
-        parts.append('<div class="reply">')
-        for line in (out["reply"] or "(empty reply)").splitlines():
-            if line.strip():
-                parts.append('<p dir="auto">%s</p>' % _inline(line))
-        parts.append("</div>")
+        parts.append('<div class="reply">%s</div>' % _reply_html(out["reply"] or "(empty reply)"))
         if out["tool_results"]:
             parts.append('<div class="calc" dir="ltr"><b>Calculations (deterministic tool, COMPUTED)</b>')
             for e in out["tool_results"]:

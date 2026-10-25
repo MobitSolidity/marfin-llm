@@ -478,6 +478,31 @@ def verify_percent_claim(claim: str, passages: Sequence[Passage]) -> Optional[st
     return "SUPPORTED"
 
 
+_PERIOD_RE = None
+
+
+def mask_period_words(claim: str) -> str:
+    """
+    Remove period LENGTHS ("12-month", "12 months", "۱۲ ماهه", "10-year", "۱۰ ساله")
+    from a claim. They are part of what a figure IS, not a figure to verify.
+    """
+    import re
+    global _PERIOD_RE
+    if _PERIOD_RE is None:
+        _PERIOD_RE = re.compile(
+            r"\d+\s*-?\s*(?:month|months|year|years|day|days|quarter|quarters|"
+            r"\u0645\u0627\u0647\u0647|\u0645\u0627\u0647|\u0633\u0627\u0644\u0647|\u0633\u0627\u0644|"
+            r"\u0631\u0648\u0632\u0647|\u0641\u0635\u0644\u0647)\b", re.I)
+    return _PERIOD_RE.sub(" ", fold(claim or ""))
+
+
+def non_percent_magnitudes(claim: str) -> List[Any]:
+    """The magnitudes rag.citations would check (percentages excluded, as there)."""
+    from rag.citations import extract_numbers
+    from rag.normalize import mask_non_quantities
+    return extract_numbers(mask_non_quantities(claim or ""))
+
+
 def notices(series_keys: Sequence[str]) -> List[str]:
     """The attribution lines the sources used require (FRED's is verbatim)."""
     return required_notices(sorted({SERIES[k]["source"] for k in series_keys if k in SERIES}))

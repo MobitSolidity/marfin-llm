@@ -390,6 +390,63 @@ check_true("the page is valid UTF-8 and holds the reply",
            "96,995" in open(_hp, encoding="utf-8").read(), "(V)")
 
 # ===========================================================================
+section("D-0137: the owner's second real run -- 7 correct figures must read SUPPORTED")
+# ===========================================================================
+OWNER_REPLY = open(os.path.join(HERE, "fixtures", "ask", "owner_reply_2026-10-23_rates_cpi.txt"),
+                   encoding="utf-8").read()
+_RATES = {"US": "3.875", "XM": "2.5", "GB": "3.75", "JP": "1.25", "CA": "2.25", "CH": "0"}
+
+
+def _mf3(key, **kw):
+    if key.startswith("WS_CBPOL"):
+        return M.fetch(key, bis_get=lambda u, t: "TIME_PERIOD,OBS_VALUE\n2026-10-20,%s\n" % _RATES[key[-2:]],
+                       sleep=lambda x: None, **kw)
+    return M.fetch(key, api_key=K, fred_get=fred(CPI_OBS), **kw)
+
+
+class _Say(object):
+    def __init__(self, text):
+        self.text = text
+
+    def __call__(self, prompt, max_tokens=256, echo=False, **kw):
+        return {"choices": [{"text": self.text}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+
+
+_Q3 = "\u0646\u0631\u062e \u0628\u0647\u0631\u0647 \u0628\u0627\u0646\u06a9\u200c\u0647\u0627\u06cc \u0645\u0631\u06a9\u0632\u06cc \u0648 \u062a\u0648\u0631\u0645 \u0622\u0645\u0631\u06cc\u06a9\u0627 \u0631\u0627 \u0628\u06af\u0648"
+
+
+def _ask3(text):
+    return A.Assistant(RP.ModelRunner(_Say(text)), index=None, macro_fetch=_mf3, clock=lambda: NOW).answer(_Q3)
+
+
+o3 = _ask3(OWNER_REPLY)
+check_true("owner's reply (6 policy rates + 3.72 % inflation, all exact) -> SUPPORTED, no warning",
+           o3["route"] == "macro" and o3["check"] == "SUPPORTED" and o3["warnings"] == [],
+           "(M) was PARTIALLY_SUPPORTED: percent-only lines read as 'no magnitude'")
+check("... over 9 evidence rows (CPI x2 + COMPUTED + 6 rates)", len(o3["evidence"]), 9, method="(M)")
+o3b = _ask3(OWNER_REPLY.replace("\u06f2.\u06f5\u066a", "\u06f2.\u06f7\u06f5\u066a"))
+check_true("one rate changed (2.5 -> 2.75) -> CONTRADICTED + warning",
+           o3b["check"] == "CONTRADICTED" and o3b["warnings"], "(A)")
+o3c = _ask3(OWNER_REPLY + "\n\u0634\u0627\u062e\u0635 CPI \u0628\u0631\u0627\u0628\u0631 \u06f3\u06f4\u06f0 \u0628\u0648\u062f.")
+check_true("a wrong non-percent figure (CPI 340) is still checked -> CONTRADICTED", o3c["check"] == "CONTRADICTED", "(A)")
+check_true("'12-month' / '۱۲ ماهه' / '10-year' are period lengths, not figures",
+           M.non_percent_magnitudes(M.mask_period_words("12-month inflation, the 10-year yield, \u06f1\u06f2 \u0645\u0627\u0647\u0647")) == [],
+           "(M) '12' matched a stray value by luck before")
+check_true("... while a real figure next to them survives",
+           [c.value for c in M.non_percent_magnitudes(M.mask_period_words("CPI was 336.298 in a 12 month window"))]
+           == [336.298], "(B) negative")
+_o12 = A.Assistant(RP.ModelRunner(_Say("Over the 12 months to September, CPI rose to 336.298.")), index=None,
+                  macro_fetch=_mf3, clock=lambda: NOW).answer("What is US inflation?")
+check_true("a correct reply mentioning '12 months' is SUPPORTED (the 12 is not checked as a figure)",
+           _o12["check"] == "SUPPORTED", "(M) single-passage verify_claim calls it CONTRADICTED: 'claimed 12'")
+_hr = A._reply_html(OWNER_REPLY)
+check_true("HTML: Markdown bullets become nested lists; no literal '*' left",
+           "*   " not in _hr and _hr.count("<ul") == 4 and _hr.count("<li") == 9, "(M) stars were shown literally")
+check_true("HTML: list text is still escaped; numbered lists become <ol>",
+           A._reply_html("1. a\n2. <b onclick=x>y") == '<ol dir="auto"><li dir="auto">a</li><li dir="auto">&lt;b onclick=x&gt;y</li></ol>',
+           "(A) SS.10")
+
+# ===========================================================================
 section("audit log: every turn chained; tampering detected")
 # ===========================================================================
 ok, n, problem = audit.verify()

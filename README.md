@@ -123,7 +123,7 @@ paper/live trading controls.
 
 | Field | Value |
 |---|---|
-| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.11.1 (D-0136). `python3 tools/maintain.py` → OK (0 CRITICAL, 0 WARN). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
+| Current phase | **10 — Monitoring and Maintenance: ACCEPTED** by the owner (D-0129, 2026-10-21). Release 0.11.2 (D-0137). `python3 tools/maintain.py` → OK (0 CRITICAL, 0 WARN). Phase 8C confirmation run graded: 4 PASS / 6 FAIL / 2 UNMEASURED, 69/74 replies identical to Phase 7. |
 | Status | Phases 4 and 6 closed (4: FAIL, hardware-bound, accepted D-0116; 6: all criteria PASS, D-0121). Phase 7 sandbox half done: checksums, header/template/token validation, comparison instrument (all M). |
 | Route | **A — the user's own machine** (approved 2026-08-16) |
 | Next | On the i5-12400: `git pull`, then try `scripts/ask.py` (`docs/guides/ask-fa.md`). ECB paper permission pending (form sent); IMF closed (CCC unavailable under sanctions). Benchmark refresh due 2026-12-16. Phase 11 (live trading) is optional and never automatic. |

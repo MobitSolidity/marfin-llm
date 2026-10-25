@@ -7971,3 +7971,34 @@ The first real run is the owner's. Nothing here changes a recorded measurement.
   - The first pass left 1 survivor (evidence escaping) and 1 skip (an anchor moved by the router fix). Both are fixed.
 
 **Release.** 0.11.1, a patch: the model, prompt options and inference are unchanged. This is a fix of pinned files.
+
+## D-0137 — Owner's second real run: all 7 figures correct; the checker under-reported it (2026-10-23)
+
+**Run (MEASURED, i5-12400).** «نرخ بهره بانک‌های مرکزی و تورم آمریکا را بگو».
+- Route `macro`, 9 evidence rows.
+- The reply gave all 6 policy rates (US 3.875, euro area 2.5, UK 3.75, Japan 1.25, Canada 2.25, Switzerland 0), each
+  with its date and citation [4]–[9].
+- It also gave the 12-month inflation rate of 3.72 %, cited [3], the COMPUTED row.
+- **Every figure is exact.** The RTL HTML page rendered correctly. The reply is kept as
+  `tests/fixtures/ask/owner_reply_2026-10-23_rates_cpi.txt`.
+
+**Defect 1, in the checker (MEASURED, reproduced exactly).** The verdict printed was PARTIALLY_SUPPORTED, but the
+correct verdict was SUPPORTED. Two causes:
+- **Percent-only lines.** `verify_percent_claim` had already SUPPORTED every percentage. But `verify_claim` (rag
+  citations) skips percentages by design, so it then reported each percent-only line as "no numeric magnitude" =
+  UNSUPPORTED, which diluted the verdict.
+- **Period lengths.** "۱۲ ماهه" (12-month) was read as the figure 12. In this run it happened to match a stray 12. A
+  single-passage check calls "Over the 12 months … 336.298" CONTRADICTED.
+
+**Fix 1.** On macro answers:
+- Period lengths (12-month, 10-year, ۱۲ ماهه, ۱۰ ساله …) are masked before checking.
+- A line whose only magnitudes are percentages is judged by the percent check alone.
+- A wrong rate (2.5 → 2.75) and a wrong non-percent figure (CPI 340) are both still CONTRADICTED (tested).
+
+**Defect 2, in the display.** Markdown bullets ("*   …") showed as literal stars on the HTML page. **Fix 2:** they
+are rendered as nested `<ul>`/`<ol>` lists. The item text is still escaped (tested with `<b onclick=…>`).
+
+**Tests.** `test_ask` 122 → 131 assertions. `mutate_ask` 44 → 49, all 49 killed. The first pass had 1 survivor:
+"period lengths not masked". A whole-answer assertion now kills it.
+
+**Release.** 0.11.2 (patch).

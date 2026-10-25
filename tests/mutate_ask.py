@@ -99,6 +99,15 @@ MUTATIONS = [
      '        parts.append(\'<div class="turn" dir="%s">\' % "ltr")'),
     (ASK, "--html flag ignored", "    html_path = None if a.no_html else (a.html or (DEFAULT_HTML if os.name == \"nt\" else None))",
      "    html_path = None"),
+    # --- D-0137 ------------------------------------------------------------
+    (ASK, "percent-only lines counted as unsupported again",
+     "                if not MACRO.non_percent_magnitudes(claim):\n                    continue",
+     "                if False:\n                    continue"),
+    (ASK, "period lengths not masked", "                claim = MACRO.mask_period_words(claim)", "                pass"),
+    (MAC, "Persian 'maahe' period word dropped", '"\\u0645\\u0627\\u0647\\u0647|', '"'),
+    (ASK, "Markdown lists not rendered", '        m = _BULLET.match(line)', '        m = None'),
+    (ASK, "list item text not escaped", "        out.append('<li dir=\"auto\">%s</li>' % _inline(m.group(\"body\")))",
+     "        out.append('<li dir=\"auto\">%s</li>' % m.group(\"body\"))"),
 ]
 
 
