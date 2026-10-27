@@ -313,15 +313,15 @@
     "paper_live_confusion_count_max": 0
   },
   "benchmark_summary": {
-    "status": "MEASURED on the i5-12400; baseline = Phase 8C (releases/benchmark-baseline.json)",
-    "verdict": "4 PASS / 6 FAIL / 2 UNMEASURED (D-0129)",
-    "refresh_due": "2026-12-16"
+    "status": "MEASURED on the i5-12400; baseline = 2026-10-25 rerun (releases/benchmark-baseline.json)",
+    "verdict": "4 PASS / 6 FAIL / 2 UNMEASURED (D-0140; same as 8C)",
+    "refresh_due": "2026-12-24"
   },
   "next_phase": null,
-  "next_phase_name": "none automatic (Phase 10 ACCEPTED; Phase 11 optional, never automatic)",
+  "next_phase_name": "Phase 11 STARTED on request (D-0140), BLOCKED: 3/8 prerequisites; waits on owner (broker, licensed real-time data, live-policy approval)",
   "next_phase_viable_in_sandbox": false,
-  "next_phase_note": "D-0135: build complete for the end user (scripts/ask.py). Owner actions: first real ask.py run on the i5-12400; benchmark refresh due 2026-12-16; ECB paper permission pending.",
-  "last_updated": "2026-10-23",
+  "next_phase_note": "D-0140: web UI scripts/ui.py; Phase 11 readiness gate BLOCKED; ECB cancelled; benchmark 2026-10-25 is the baseline.",
+  "last_updated": "2026-10-26",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -817,9 +817,10 @@
     ]
   },
   "awaiting_user_action": [
-    "benchmark refresh by 2026-12-16 (PHASE8_CONFIRM_RUN_FA.md)",
-    "ECB paper-permission reply (form submitted); IMF closed (CCC unavailable under sanctions)",
-    "optional: keep using scripts/ask.py and report any wrong figure or warning"
+    "benchmark refresh by 2026-12-24 (PHASE8_CONFIRM_RUN_FA.md)",
+    "Phase 11: choose a broker (sanctions eligibility UNVERIFIED) and a licensed real-time data source; review/approve configs/live-policy.json",
+    "try the web UI on the i5-12400: python scripts\\ui.py --model ... (docs/guides/ui-fa.md)",
+    "ECB paper permission CANCELLED (owner, 2026-10-26); IMF closed (CCC unavailable under sanctions)"
   ],
   "phase_4": {
     "name": "RAG and Tool-Enabled Evaluation",
@@ -3163,5 +3164,48 @@
     "check": "SUPPORTED",
     "evidence_rows": 3,
     "quirk": "model wrote 'گذرنامه' for evidence item (cosmetic; prompt pinned)"
+  },
+  "D-0140_benchmark_ecb_phase11_ui_2026_10_26": {
+    "benchmark_2026_10_25": {
+      "verdict": "4 PASS / 6 FAIL / 2 UNMEASURED",
+      "identical_replies_vs_8c": "72/74",
+      "changed": "EN-TERM-001 tools+plain: guard notice -> real answer",
+      "guard_blocked": "0/74",
+      "decode_tps": [
+        4.95,
+        5.03
+      ],
+      "ttft_s": [
+        29.063,
+        31.14
+      ],
+      "rss_gib": 4.753,
+      "baseline": "evidence/phase8c_rerun_verdict_2026-10-25.json"
+    },
+    "ecb": "CANCELLED by owner; papers stay disabled; data enabled",
+    "phase_11": {
+      "status": "STARTED_BLOCKED",
+      "prerequisites_met": "3/8",
+      "ss61_unmet": "10/12",
+      "live_policy": "configs/live-policy.json DRAFT, human_approved false",
+      "drill": "paper 10/10 PASS (MEASURED); live NOT RUN",
+      "report": "docs/phase-reports/phase-11.md"
+    },
+    "ui": {
+      "script": "scripts/ui.py",
+      "guide": "docs/guides/ui-fa.md",
+      "bind": "127.0.0.1 only",
+      "tests": {
+        "test_ui": 144,
+        "mutate_ui": "38/38"
+      }
+    },
+    "release": "0.12.0"
+  },
+  "phase_11": {
+    "name": "Live-Trading Enablement",
+    "status": "STARTED_ON_OWNER_REQUEST_2026_10_26_BLOCKED",
+    "live_trading_enabled": false,
+    "report": "docs/phase-reports/phase-11.md"
   }
 }

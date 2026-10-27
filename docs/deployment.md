@@ -27,6 +27,12 @@ python scripts\run_phase4.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf --arms pla
   ollama run marfin-q4 --think=false "..."
   ```
 
+**3a. The web UI** (D-0140): every capability on one right-to-left page, at http://127.0.0.1:8765 (loopback only). Persian guide: `docs/guides/ui-fa.md`.
+```powershell
+python scripts\ui.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf
+python scripts\ui.py                      # without a model: everything except "ask"
+```
+
 **3b. Ask your own question** (D-0135). The same prompts, options and checks as the recommended run above:
 ```powershell
 python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf "What was Apple's net income in fiscal 2023?"
@@ -48,7 +54,7 @@ LIVE_TRADING cannot be reached by configuration (SS.6.1).
 
 **5. Verify the installation**
 ```bash
-bash tests/run_all.sh          # 27 suites; no model needed
+bash tests/run_all.sh          # 28 suites; no model needed
 ```
 
 **Secrets:** API keys go in environment variables (see `.env.example`), never in files under version control.

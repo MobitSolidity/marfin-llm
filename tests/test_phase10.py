@@ -258,9 +258,9 @@ check("baseline records all 12 Phase 7 thresholds", len(b["results"]), 12, metho
 check_true("every baseline threshold has a direction",
            all(r["direction"] in ("min", "max") for r in b["results"].values()), "(V)")
 check_true("baseline equals a fresh derivation from the verdict file",
-           b == MON.baseline_from_verdict(MT.CURRENT_VERDICT, "2026-10-21", MT.DIRECTION), "(V)")
+           b == MON.baseline_from_verdict(MT.CURRENT_VERDICT, "2026-10-25", MT.DIRECTION), "(V)")
 check_true("the baseline is the owner's Phase 8C run of the recommended configuration",
-           b["source"] == "evidence/phase8c_verdict_2026-10-21.json" and b["measured_on"] == "2026-10-21", "(V)")
+           b["source"] == "evidence/phase8c_rerun_verdict_2026-10-25.json" and b["measured_on"] == "2026-10-25", "(V)")
 
 
 # ===========================================================================
@@ -384,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.11.3 (D-0138: named-month inflation and network retry, from the owner's third run)", REL.read_version() == "0.11.3", "(V)")
+check_true("VERSION file is 0.12.0 (D-0140: web UI and the Phase 11 readiness gate; a MINOR bump for a new feature)", REL.read_version() == "0.12.0", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -543,6 +543,10 @@ check_true("no release after 0.10.0 changed model, prompt options or inference (
 _m110 = {r["version"]: r for r in _chain}.get("0.11.0", {})
 check_true("0.11.0 pins ask.py and macro.py (the new user-facing paths)",
            {"scripts/ask.py", "src/rag/macro.py"} <= set(_m110.get("files", {})), "(V)")
+_m120 = {r["version"]: r for r in _chain}.get("0.12.0", {})
+check_true("0.12.0 pins ui.py, live_readiness.py and live-policy.json (D-0140)",
+           {"scripts/ui.py", "src/execution/live_readiness.py", "configs/live-policy.json"}
+           <= set(_m120.get("files", {})), "(V)")
 check_true("release history is 0.10.0, 0.10.1, 0.10.2, ... with no gaps or reuse",
            [r["version"] for r in _chain][:3] == ["0.10.0", "0.10.1", "0.10.2"]
            and len({r["version"] for r in _chain}) == len(_chain), "(V)")

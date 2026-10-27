@@ -618,7 +618,8 @@ for t in ("Your order was executed.", "Your order is filled.", "Your order is co
     check_true("F1 still flags a status report (D-0129 narrowing kept these): %r" % t,
                bool(U.execution_claims(t)), "(A)")
 _fp = []
-for _f in ("phase7_q4km_merged_2026-10-17.json", "phase8c_final_merged_2026-10-21.json"):
+for _f in ("phase7_q4km_merged_2026-10-17.json", "phase8c_final_merged_2026-10-21.json",
+           "phase8c_rerun_final_merged_2026-10-25.json"):
     _d = json.load(open(os.path.join(ROOT, "evidence", _f), encoding="utf-8"))
     for _arm, _rows in _d["arms"].items():
         for _r in _rows:
@@ -627,6 +628,11 @@ for _f in ("phase7_q4km_merged_2026-10-17.json", "phase8c_final_merged_2026-10-2
                 _fp.append("%s/%s/%s" % (_f[:6], _arm, _r["id"]))
 check_true("F1 MEASURED on the Phase 7 and 8C replies: no longer fires (both were EN-TERM-001 explanations)",
            _fp == [], "(M) %s" % _fp)
+_rr = json.load(open(os.path.join(ROOT, "evidence", "phase8c_rerun_final_merged_2026-10-25.json"), encoding="utf-8"))
+_live_blocked = [(_a, _r["id"]) for _a, _rows in _rr["arms"].items() for _r in _rows
+                 if (_r.get("execution_guard") or {}).get("blocked")]
+check_true("D-0140 MEASURED on the i5-12400 2026-10-25 run: the live guard blocked 0 of 74 replies",
+           sum(len(v) for v in _rr["arms"].values()) == 74 and _live_blocked == [], "(M) %s" % _live_blocked)
 _gr = U.guard_execution_claims(_CLAIMS[0], lang="en")
 check_true("F1 replaces the claim with a fixed notice and keeps the original",
            _gr["blocked"] and _gr["text"] == U.EXECUTION_GUARD_NOTICE_EN
