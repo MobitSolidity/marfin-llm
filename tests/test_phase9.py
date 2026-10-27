@@ -218,11 +218,14 @@ section("deployment and run commands refer to flags that exist")
 # ===========================================================================
 _src = read("scripts/run_phase4.py")
 _ask = read("scripts/ask.py")
-for doc in ("docs/deployment.md", "MODEL_CARD.md", "PHASE8_CONFIRM_RUN_FA.md", "docs/guides/ask-fa.md"):
+_ui = read("scripts/ui.py")
+for doc in ("docs/deployment.md", "MODEL_CARD.md", "PHASE8_CONFIRM_RUN_FA.md", "docs/guides/ask-fa.md",
+            "docs/guides/ui-fa.md"):
     # D-0135: a flag is checked against the script its OWN line runs, so an
     # ask.py flag is not demanded of run_phase4 (and vice versa).
     for line in read(doc).splitlines():
-        prog, src = (("ask.py", _ask) if "ask.py" in line else ("run_phase4", _src))
+        prog, src = (("ui.py", _ui) if "ui.py" in line else ("ask.py", _ask) if "ask.py" in line
+                     else ("run_phase4", _src))
         for flag in sorted(set(re.findall(r"(--[a-z][a-z-]+)", line))):
             if flag in ("--think", "--version", "--mutate"):
                 continue

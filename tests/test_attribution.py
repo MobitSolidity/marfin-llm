@@ -398,7 +398,7 @@ check_true("the new edges add no import cycle",
 # ---------------------------------------------------------------------------
 section("impact: the incidents it exists for, and its negatives")
 # ---------------------------------------------------------------------------
-check("run_all.sh SUITES read, not re-declared", len(I.suites()), 27,
+check("run_all.sh SUITES read, not re-declared", len(I.suites()), 28,
       method="(V) 18 + test_attribution.py + test_redteam.py (D-0116) + test_phase7.py (D-0121) + test_phase8.py (D-0123) + 8a/9 (D-0126/7) + test_phase10.py (D-0128) + test_fred_bis.py (D-0133) + test_ask.py (D-0135)")
 r = I.analyse(["src/rag/normalize.py"])
 bats = {b["battery"] for b in r["batteries"]}

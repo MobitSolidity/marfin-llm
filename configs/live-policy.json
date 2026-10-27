@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "decision": "D-0140",
+  "environment": "LIVE",
+  "status": "DRAFT_NOT_ACTIVE",
+  "human_approved": false,
+  "requested_by_owner_on": "2026-10-26",
+  "drafted_by": "assistant (D-0140); every number below is an ESTIMATED proposal for the owner to change or approve",
+  "broker": null,
+  "broker_note": "Not chosen. The owner must name a broker; whether it accepts the owner's jurisdiction under sanctions is UNVERIFIED until the broker itself confirms it in writing.",
+  "account_allowlist": [],
+  "limits": {
+    "instrument_allowlist": ["AAPL", "MSFT"],
+    "max_order_notional": 1000.0,
+    "max_daily_notional": 3000.0,
+    "max_position_qty": 50.0,
+    "max_concentration_pct": 20.0,
+    "max_daily_loss": 200.0,
+    "max_orders_per_minute": 2,
+    "price_deviation_pct": 0.5,
+    "max_quote_age_s": 2.0,
+    "preview_ttl_s": 30.0,
+    "allow_short": false,
+    "max_leverage": 1.0
+  },
+  "per_order_confirmation": "ALWAYS",
+  "automation_policy": null,
+  "rollback_plan": "docs/phase-reports/phase-11.md#rollback"
+}

@@ -8066,3 +8066,36 @@ are rendered as nested `<ul>`/`<ol>` lists. The item text is still escaped (test
 - P/E
 
 No code change; no release.
+
+## D-0140 — 2026-10-25 benchmark graded; ECB cancelled; Phase 11 started (BLOCKED); local web UI (2026-10-26)
+
+**(a) Benchmark rerun, MEASURED on the i5-12400 2026-10-25** (`evidence/phase8c_rerun_*_2026-10-25.json`).
+- Verdict: **4 PASS / 6 FAIL / 2 UNMEASURED**, identical to Phase 8C (2026-10-21). Citation 90.48, unsupported 7.69, abstention 88.89, calc 100, fabricated 1, schema 100.
+- Speed: decode 4.95–5.03 tok/s (8C: 4.11–5.00); TTFT 29.1–31.1 s (8C: 29.2–32.5); RSS 4.753 GiB (8C: 4.737).
+- 72 of 74 replies are identical to 8C. The 2 that differ are EN-TERM-001 (tools and plain): the execution-guard notice is now replaced by a correct stop-loss vs stop-limit explanation, which confirms the D-0129 guard fix on the target. The live guard blocked 0 of 74 replies (asserted in `test_redteam`).
+- This run is now the baseline (`tools/maintain.py` CURRENT_VERDICT, `--record-baseline`). Refresh due 2026-12-24 (COMPUTED: 60 days).
+
+**(b) ECB paper permission: CANCELLED by the owner.** IMF was already closed (CCC unusable under sanctions). ECB and IMF papers stay disabled; their statistical data stays enabled. No code change was needed: no ECB papers source exists. Docs: `permission-requests/README_FA.md`, `HOW_TO_SUBMIT_FA.md` (archived).
+
+**(c) Phase 11 started on the owner's explicit request. Verdict: BLOCKED.**
+- `src/execution/live_readiness.py` is a report, not a switch: 3 of 8 prerequisites met. Unmet: verified broker, licensed real-time data, approved live limits, live audit, live emergency test. SS.6.1: still 10 of 12 unmet. `live_trading_enabled()` is False, even with `mode = LIVE_TRADING`.
+- `configs/live-policy.json` is a DRAFT (`human_approved: false`, broker null, empty account allowlist). Its limits are ESTIMATED and tighter than paper. `check_live_policy` refuses any looser limit, any instrument outside the paper allowlist, a short-selling escalation, a non-`LIVE-` account, and per-order confirmation other than ALWAYS.
+- Kill-switch drill: 10 steps, MEASURED PASS on a paper engine. It is proven to FAIL on a defective engine. The live drill was NOT RUN.
+- Deliverables and the activation and rollback plans: `docs/phase-reports/phase-11.md`. Broker eligibility under sanctions is UNVERIFIED for every candidate; the owner must choose a broker.
+
+**(d) `scripts/ui.py`, the local web UI (stdlib `http.server`).** Persian RTL. Pages: dashboard, ask, the 85 calculators (forms built from the schemas), macro data, paper trading, audit, maintenance, providers, Phase 11.
+- Safety:
+  - loopback bind only, and a Host-header check against DNS rebinding;
+  - a per-process CSRF token on every POST;
+  - CSP `default-src 'none'`, no script in the page;
+  - every untrusted string escaped (`ask.turn_html` is shared with the ask.py page).
+- Paper commit requires principal HUMAN, the preview token and a typed `CONFIRM`. Quotes are typed by the user and labelled USER_SUPPLIED. The UI never writes the execution config. There is no live path.
+- Guide: `docs/guides/ui-fa.md`.
+
+**Tests.** `test_ui` 144 assertions; run_all 5227 assertions, 28 suites, ALL GREEN; every battery 0 survivors and 0 skips (mutate_ask 63/63 after re-anchoring 2 HTML mutants blinded by the turn_html move). `mutate_ui` 38/38 killed. The first pass left 2 survivors:
+- "Result not escaped" was a test gap. Closed by an all-fields escape assertion.
+- "Drill preview check" was EQUIVALENT. Replaced by a whole-condition mutant, killed by the defective-engine drill.
+
+An interrupted battery run left one mutant (`if False:` on `--host`) in `ui.py`. It was found by `git status` (R23) and restored before anything was trusted.
+
+**Release.** 0.12.0 (minor: new feature). Pins ui.py, live_readiness.py and live-policy.json. run_all: 28 suites.

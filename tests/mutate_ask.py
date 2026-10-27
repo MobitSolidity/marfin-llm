@@ -93,10 +93,10 @@ MUTATIONS = [
      "            rows = 2"),
     (ASK, "HTML not escaped", '    esc = _h.escape(text or "", quote=True)', '    esc = text or ""'),
     (ASK, "HTML evidence not escaped",
-     "                             % (i, _h.escape(e[\"text\"]), _h.escape(e[\"citation\"]), _h.escape(e[\"trust\"])))",
-     "                             % (i, e[\"text\"], _h.escape(e[\"citation\"]), _h.escape(e[\"trust\"])))"),
-    (ASK, "Persian turn not right-to-left", '        parts.append(\'<div class="turn" dir="%s">\' % ("rtl" if rtl else "ltr"))',
-     '        parts.append(\'<div class="turn" dir="%s">\' % "ltr")'),
+     "                     % (i, _h.escape(e[\"text\"]), _h.escape(e[\"citation\"]), _h.escape(e[\"trust\"])))",
+     "                     % (i, e[\"text\"], _h.escape(e[\"citation\"]), _h.escape(e[\"trust\"])))"),   # D-0140: re-anchored (turn_html)
+    (ASK, "Persian turn not right-to-left", '    parts.append(\'<div class="turn" dir="%s">\' % ("rtl" if rtl else "ltr"))',
+     '    parts.append(\'<div class="turn" dir="%s">\' % "ltr")'),   # D-0140: re-anchored (turn_html)
     (ASK, "--html flag ignored", "    html_path = None if a.no_html else (a.html or (DEFAULT_HTML if os.name == \"nt\" else None))",
      "    html_path = None"),
     # --- D-0137 ------------------------------------------------------------

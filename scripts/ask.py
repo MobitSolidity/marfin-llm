@@ -470,6 +470,44 @@ def _reply_html(text):
     return "".join(out)
 
 
+def turn_html(out):
+    """D-0140: ONE answered turn as an HTML fragment (shared by the page and scripts/ui.py)."""
+    import html as _h
+    parts = []
+    rtl = out["lang"] == "fa"
+    parts.append('<div class="turn" dir="%s">' % ("rtl" if rtl else "ltr"))
+    parts.append('<div class="q" dir="auto">%s</div>' % _inline(out["question"]))
+    parts.append('<div class="meta">route: %s%s</div>' % (
+        _h.escape(out["route"]), (" &middot; data as of: %s" % _h.escape(out["data_as_of"]))
+        if out.get("data_as_of") else ""))
+    for w in out["warnings"]:
+        parts.append('<div class="warn" dir="auto">%s</div>' % _inline(w))
+    parts.append('<div class="reply">%s</div>' % _reply_html(out["reply"] or "(empty reply)"))
+    if out["tool_results"]:
+        parts.append('<div class="calc" dir="ltr"><b>Calculations (deterministic tool, COMPUTED)</b>')
+        for e in out["tool_results"]:
+            txt = ("%s(%s) = %s%s" % (e["name"], json.dumps(e["arguments"], ensure_ascii=False),
+                                      e["value"], " %s" % e["unit"] if e.get("unit") else "")
+                   if e["ok"] else "%s: ERROR %s" % (e["name"], e["error"]))
+            parts.append("<div>%s</div>" % _h.escape(txt))
+        parts.append("</div>")
+    if out["evidence"]:
+        parts.append('<div class="ev"><b dir="ltr">Evidence shown to the model (RETRIEVED; figure check: %s)</b>'
+                     % _h.escape(str(out["check"])))
+        for i, e in enumerate(out["evidence"], 1):
+            parts.append('<div dir="auto">[%d] %s</div><div class="cite">%s (%s)</div>'
+                         % (i, _h.escape(e["text"]), _h.escape(e["citation"]), _h.escape(e["trust"])))
+        parts.append("</div>")
+    if out.get("macro_unavailable"):
+        parts.append('<div class="note" dir="ltr">Macro data not available: %s</div>'
+                     % _h.escape("; ".join(out["macro_unavailable"])))
+    for n in out["notices"]:
+        parts.append('<div class="note" dir="ltr">%s</div>' % _h.escape(n))
+    parts.append('<div class="note">%s</div>' % _h.escape(render(out).rsplit("\n", 1)[-1]))
+    parts.append("</div>")
+    return "".join(parts)
+
+
 def render_html(outs, refresh_seconds=None):
     """A complete HTML page for one or more answered turns (newest last)."""
     import html as _h
@@ -477,37 +515,7 @@ def render_html(outs, refresh_seconds=None):
                          if refresh_seconds else "")
     parts = [head]
     for out in outs:
-        rtl = out["lang"] == "fa"
-        parts.append('<div class="turn" dir="%s">' % ("rtl" if rtl else "ltr"))
-        parts.append('<div class="q" dir="auto">%s</div>' % _inline(out["question"]))
-        parts.append('<div class="meta">route: %s%s</div>' % (
-            _h.escape(out["route"]), (" &middot; data as of: %s" % _h.escape(out["data_as_of"]))
-            if out.get("data_as_of") else ""))
-        for w in out["warnings"]:
-            parts.append('<div class="warn" dir="auto">%s</div>' % _inline(w))
-        parts.append('<div class="reply">%s</div>' % _reply_html(out["reply"] or "(empty reply)"))
-        if out["tool_results"]:
-            parts.append('<div class="calc" dir="ltr"><b>Calculations (deterministic tool, COMPUTED)</b>')
-            for e in out["tool_results"]:
-                txt = ("%s(%s) = %s%s" % (e["name"], json.dumps(e["arguments"], ensure_ascii=False),
-                                          e["value"], " %s" % e["unit"] if e.get("unit") else "")
-                       if e["ok"] else "%s: ERROR %s" % (e["name"], e["error"]))
-                parts.append("<div>%s</div>" % _h.escape(txt))
-            parts.append("</div>")
-        if out["evidence"]:
-            parts.append('<div class="ev"><b dir="ltr">Evidence shown to the model (RETRIEVED; figure check: %s)</b>'
-                         % _h.escape(str(out["check"])))
-            for i, e in enumerate(out["evidence"], 1):
-                parts.append('<div dir="auto">[%d] %s</div><div class="cite">%s (%s)</div>'
-                             % (i, _h.escape(e["text"]), _h.escape(e["citation"]), _h.escape(e["trust"])))
-            parts.append("</div>")
-        if out.get("macro_unavailable"):
-            parts.append('<div class="note" dir="ltr">Macro data not available: %s</div>'
-                         % _h.escape("; ".join(out["macro_unavailable"])))
-        for n in out["notices"]:
-            parts.append('<div class="note" dir="ltr">%s</div>' % _h.escape(n))
-        parts.append('<div class="note">%s</div>' % _h.escape(render(out).rsplit("\n", 1)[-1]))
-        parts.append("</div>")
+        parts.append(turn_html(out))
     parts.append("</body></html>\n")
     return "".join(parts)
 

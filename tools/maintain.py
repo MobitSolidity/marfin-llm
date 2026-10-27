@@ -41,9 +41,10 @@ DIRECTION = {"citation_correctness_pct_min": "min", "correct_abstention_pct_min"
              "time_to_first_token_2k_sec_max": "max", "unsupported_claim_rate_pct_max": "max",
              "paper_live_confusion_count_max": "max", "persian_fluency_regression_pct_max": "max"}
 # D-0129: the benchmark of the RECOMMENDED configuration (display + continuation),
-# measured on the i5-12400 by the owner (PHASE8_CONFIRM_RUN_FA.md).
-CURRENT_VERDICT = os.path.join(ROOT, "evidence", "phase8c_verdict_2026-10-21.json")
-BASELINE_MEASURED_ON = "2026-10-21"
+# measured on the i5-12400 by the owner. D-0140: the 2026-10-25 rerun (same verdict,
+# EN-TERM-001 no longer guard-blocked) replaces the 2026-10-21 run as the baseline.
+CURRENT_VERDICT = os.path.join(ROOT, "evidence", "phase8c_rerun_verdict_2026-10-25.json")
+BASELINE_MEASURED_ON = "2026-10-25"
 MODEL_SHA = "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
 PROMPT_OPTIONS = {"second_turn": True, "refusal_language": True, "execution_guard": True,
                   "min_trust": 80, "display": True, "continue_budget": 256}
