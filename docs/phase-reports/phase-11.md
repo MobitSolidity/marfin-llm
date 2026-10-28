@@ -1,5 +1,12 @@
 # Phase 11: Live-Trading Enablement (D-0140)
 
+> **SUSPENDED, 2026-10-27 (D-0141).** The owner has no broker for now and asked for this phase to
+> be put on hold. `configs/live-policy.json` status is `SUSPENDED_NO_BROKER`; the readiness gate
+> now reports the verdict `SUSPENDED` (MEASURED), which is never ready, whatever else is met.
+> Nothing below was deleted: the draft policy, the paper kill-switch drill and the plans stay as
+> they are. To resume, the owner chooses a broker and asks for Phase 11 to restart; the status is
+> then set back to DRAFT by a human edit, never by code.
+
 Started 2026-10-26 on the owner's explicit request. Verdict: **BLOCKED**. Live trading stays
 unreachable, and nothing in this phase can switch it on.
 

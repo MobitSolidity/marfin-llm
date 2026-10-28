@@ -23,7 +23,8 @@ MUTATIONS = [
     (UI, "quote not labelled USER_SUPPLIED", '"USER_SUPPLIED (typed in the UI)"', '"UI"'),
     (UI, "commit form offered on a REFUSE preview", '                if pv["verdict"] == "PASS":\n                    keep', '                if True:\n                    keep'),
     (UI, "macro series not checked against the catalogue", "                if series not in MACRO.SERIES:", "                if False:"),
-    (UI, "calculator result not escaped", "% (esc(r[\"value\"]), esc(r.get(\"units\") or \"\")", "% (r[\"value\"], esc(r.get(\"units\") or \"\")"),
+    (UI, "calculator result not escaped", "% (pretty, esc(r[\"value\"]), esc(r.get(\"units\") or \"\")",
+     "% (pretty, r[\"value\"], esc(r.get(\"units\") or \"\")"),   # D-0141: re-anchored (redesign)
     (UI, "refusal message not escaped", "esc(r[\"error\"]), esc(r.get(\"message\")))", "esc(r[\"error\"]), r.get(\"message\"))"),
     (UI, "maintenance message not escaped", "            esc(x[\"subject\"]), esc(x[\"message\"]))", "            esc(x[\"subject\"]), x[\"message\"])"),
     (UI, "audit chain not verified", "        ok, n, problem = PP.AuditLog.verify(log)", "        ok, n, problem = True, 0, \"\""),
@@ -36,7 +37,8 @@ MUTATIONS = [
     (UI, "bad number crashes instead of refusing", "    except Exception:                                   # noqa: BLE001 -- converted, not swallowed",
      "    except ZeroDivisionError:"),
     (UI, "blank calc field sent as empty string", '        if raw == "":\n            continue', '        if False:\n            continue'),
-    (UI, "CSP header dropped", "\"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'\"", "\"\""),
+    (UI, "CSP header dropped", "CSP = (\"default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; \"",
+     "CSP = (\"\""),   # D-0141: re-anchored (strict CSP constant)
     (UI, "form token missing from forms", "        return '<input type=\"hidden\" name=\"csrf\" value=\"%s\">' % esc(self.csrf)", "        return ''"),
     (UI, "internal error shown as a normal page", '"خطای داخلی", \'<div class="err">INTERNAL ERROR (%s): %s<br>\'', '"خطای داخلی", \'<div class="err">%s %s<br>\''),
     (ASK, "turn_html stops escaping evidence", "                     % (i, _h.escape(e[\"text\"]), _h.escape(e[\"citation\"])",

@@ -127,7 +127,8 @@ tests/test_phase9.py \
 tests/test_phase10.py \
 tests/test_fred_bis.py \
 tests/test_ask.py \
-tests/test_ui.py"
+tests/test_ui.py \
+tests/test_datahub.py"
 
 for t in $SUITES; do
   echo
@@ -643,6 +644,16 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: ui/live_readiness source not restored, or its oracle is red"
     fail=1; }
   [ $uim_status -ne 0 ] && fail=1
+  echo
+  echo "--- D-0141 multi-source data layer and the Persian formula catalogue ---"
+  dhm=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_datahub.py)
+  dhm_status=$?
+  echo "$dhm" | grep -E "seeded [0-9]+"
+  echo "$dhm" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$dhm" | grep -q "restored+green True" || {
+    echo "  ERROR: datahub/ecb/worldbank/bis/catalog source not restored, or its oracle is red"
+    fail=1; }
+  [ $dhm_status -ne 0 ] && fail=1
 fi
 
 echo

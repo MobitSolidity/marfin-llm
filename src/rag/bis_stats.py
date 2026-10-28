@@ -95,3 +95,48 @@ def fetch(dataflow: str, key: str, unit: str, last_n: int = 1, timeout: float = 
     check_access("bis_statistics")                      # gate BEFORE the network call
     return facts_from_csv(dataflow, key, (http_get or _http_get)(data_url(dataflow, key, last_n),
                                                                timeout), unit)
+
+
+def facts_per_area(dataflow: str, text: str, unit: str) -> List[Fact]:
+    """
+    D-0141: one CSV holding SEVERAL reference areas (key "D." = every area, or "D.US+GB")
+    -> Facts whose concept names the area, "WS_CBPOL:D.US". facts_from_csv() above gives
+    every row the requested key, which is right for one series and wrong for many, so it
+    is left untouched and this is separate. MEASURED 2026-10-27: WS_CBPOL/D. with
+    lastNObservations=1 returned 49 areas, including 9 euro members whose series stop in
+    1998-2000 (superseded by XM) -- callers must look at each row's own date.
+    """
+    src = check_access("bis_statistics")
+    if not unit:
+        raise BisStatsError("a unit is required: a bare BIS number has no meaning (SS.5.2)")
+    rows = list(csv.DictReader(io.StringIO(text or "")))
+    need = ("FREQ", "REF_AREA", "OBS_VALUE", "TIME_PERIOD")
+    if not rows or any(k not in rows[0] for k in need):
+        raise BisStatsError("not a multi-area BIS SDMX CSV payload (missing %s)" % ", ".join(need))
+    out: List[Fact] = []
+    for r in rows:
+        area, freq = (r.get("REF_AREA") or "").strip(), (r.get("FREQ") or "").strip()
+        if not re.match(r"^[A-Z0-9]{2,3}$", area) or freq != "D":
+            raise BisStatsError("unexpected area %r / frequency %r" % (area, freq))
+        v = (r.get("OBS_VALUE") or "").strip()
+        if v in ("", "NaN", "NA"):
+            continue                     # missing observation: skipped, never 0
+        try:
+            val = float(v)
+        except ValueError:
+            raise BisStatsError("non-numeric BIS value %r for %s" % (v, area))
+        d = (r.get("TIME_PERIOD") or "").strip()
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+            raise BisStatsError("only daily series are parsed here; got period %r" % (d,))
+        key = "%s.%s" % (freq, area)
+        prov = provenance_for("bis_statistics", url="%s/%s/%s" % (BASE_URL, dataflow, key),
+                              source_id="%s/%s" % (dataflow, key), note="BIS statistics %s %s" % (dataflow, key))
+        out.append(Fact("%s:%s" % (dataflow, key), val, unit, prov, period_start=d, period_end=d,
+                        period_kind="instant", entity=area))
+    return out
+
+
+def fetch_per_area(dataflow: str, key: str, unit: str, last_n: int = 1, timeout: float = 20.0,
+                   http_get: Optional[Callable[[str, float], str]] = None) -> List[Fact]:
+    check_access("bis_statistics")                      # gate BEFORE the network call
+    return facts_per_area(dataflow, (http_get or _http_get)(data_url(dataflow, key, last_n), timeout), unit)

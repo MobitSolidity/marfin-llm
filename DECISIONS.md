@@ -8099,3 +8099,35 @@ No code change; no release.
 An interrupted battery run left one mutant (`if False:` on `--host`) in `ui.py`. It was found by `git status` (R23) and restored before anything was trusted.
 
 **Release.** 0.12.0 (minor: new feature). Pins ui.py, live_readiness.py and live-policy.json. run_all: 28 suites.
+
+## D-0141 — Phase 11 suspended (no broker); multi-source market data; redesigned UI; Persian formula catalogue (2026-10-27)
+
+Owner request, 2026-10-27: (1) no broker for now, put Phase 11 on hold; (2) use whichever source, or several, gives the most data and covers the most markets; (3) make the UI optimised, responsive, modern, more interactive, with more features; (4) organise the offline formulas, each with a one-line usage under a rule.
+
+**(1) Phase 11 SUSPENDED.** `configs/live-policy.json` status `SUSPENDED_NO_BROKER` (with `suspended_on`, `suspended_reason`). `live_readiness.readiness()` now reports `suspended` and the verdict `SUSPENDED`, which is never ready whatever else is met (tested, and mutation-checked). Nothing was deleted: the draft policy, plans and paper drill stay. Resuming is a human edit, never code.
+
+**(2) Data sources, probed live MEASURED 2026-10-27.** No single free, licensed source covers every market, so the hub combines five:
+- ECB EXR: 29 currencies, daily reference rates per EUR (`src/rag/ecb_stats.py`).
+- BIS WS_CBPOL key `D.`: 49 areas in one call, 37 current; stale series (more than 400 days old, e.g. former euro members) are flagged, not hidden (`bis_stats.facts_per_area`).
+- FRED, public-domain series only: DGS2, DGS10, DGS30, T10Y2Y, DCOILWTICO, DCOILBRENTEU, DHHNGSP, DTWEXBGS. SP500 is excluded because its series notes carry a copyright claim.
+- World Bank: 10 annual indicators for 58 catalogue countries (`src/rag/worldbank.py`; the HTTP-200 error shape is refused).
+- Alpha Vantage free tier: end of day, 25 requests/day, needs `ALPHAVANTAGE_API_KEY`.
+- Not used: Twelve Data (paid, declined by the owner), TradingView (terms prohibit), Stooq (terms unreadable), Iran market (descoped).
+
+Rules (`src/rag/datahub.py`): cross rates are COMPUTED only from same-day fixes, and a conversion across different days is refused; in-memory cache (600 s), nothing on disk; one retry, for transient errors only; every client error becomes `DataError` and is shown, never replaced by a number; missing values are skipped, never 0; the registry access gate runs before any network call.
+
+**(3) UI.**
+- Responsive shell: sidebar on wide screens, a `<details>` menu below 900 px; dark mode (remembered in the browser).
+- Strict CSP: `default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; ...`. There is no inline style or script; `app.css` and `app.js` are served from a fixed whitelist. The JS is progressive enhancement only (search, filters, theme, copy, busy states, Ctrl+Enter), never builds markup from data and never evaluates strings. Charts are attribute-only SVG.
+- New "Markets" page with 7 tabs: overview, FX (converter and 90-day chart), policy rates, US rates and commodities, world economies (multi-line chart), stocks, sources. The ask page gains example chips.
+- CSRF, the loopback Host check, escaping and the paper flow are unchanged.
+
+**(4) Formulas.** `src/tools/catalog_fa.py`: all 85 tools in 7 categories (returns 18, trade 6, valuation 12, ratios 14, technical 13, bonds 11, options 11). Each has a Persian title, a one-line usage shown under a rule line, and a runnable example; there are Persian labels and hints for all 115 parameters and Persian names for enum values. The index has search and category chips; each form has "fill with example", and results are formatted (big number, or a table for structured results) with the exact value available.
+
+**Tests.**
+- New suite `test_datahub`: 91 assertions, all offline fakes. `test_ui` has 207.
+- `mutate_datahub`: 47/47 killed. The first pass left 4 survivors, all test gaps, now closed: CSV column check, newest fix kept, provider OSError shown, category sizes pinned.
+- `mutate_ui`: 38/38 after re-anchoring 2 mutants moved by the redesign.
+- run_all: 29 suites.
+
+**Release.** 0.13.0 (minor: new features). Pins the data hub, the ECB and World Bank clients, the catalogue, and `app.css`/`app.js`.

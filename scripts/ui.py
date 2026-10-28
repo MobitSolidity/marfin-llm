@@ -76,6 +76,8 @@ from execution import paper as PP                              # noqa: E402
 from rag import macro as MACRO                                 # noqa: E402
 from tools import registry as REG                              # noqa: E402
 from calc.persian_num import parse_number                      # noqa: E402
+from rag import datahub as DH                                  # noqa: E402
+from tools import catalog_fa as CAT                            # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -87,37 +89,23 @@ PAPER_CASH = 100000.0
 #: Typed by the human on the commit form. Distinct from the kill-switch phrase on purpose.
 COMMIT_PHRASE = "CONFIRM"
 
-NAV = (("/", "داشبورد"), ("/ask", "پرسش"), ("/calc", "ماشین‌حساب‌ها"), ("/macro", "داده‌های کلان"),
-       ("/paper", "معاملهٔ کاغذی"), ("/audit", "گزارش ممیزی"), ("/maintenance", "نگهداری"),
-       ("/providers", "ارائه‌دهنده‌ها"), ("/phase11", "فاز ۱۱ (معاملهٔ واقعی)"))
+NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"), ("/calc", "فرمول‌ها و ماشین‌حساب‌ها"),
+       ("/ask", "پرسش از مدل"), ("/macro", "سری‌های کلان"), ("/paper", "معاملهٔ کاغذی"),
+       ("/audit", "گزارش ممیزی"), ("/maintenance", "نگهداری"), ("/providers", "ارائه‌دهنده‌ها"),
+       ("/phase11", "فاز ۱۱ (معلق)"))
 
-CSS = """
-body{font-family:Vazirmatn,"Segoe UI",Tahoma,Arial,sans-serif;font-size:16px;line-height:1.8;margin:0;
-     background:#f4f5f7;color:#222}
-header{background:#1f3a5f;color:#fff;padding:.6em 1.2em}
-header b{font-size:1.2em;margin-inline-end:1em}
-nav a{color:#fff;margin-inline-end:1em;text-decoration:none;white-space:nowrap}
-nav a.on{border-bottom:2px solid #ffd166}
-main{max-width:64em;margin:1em auto;padding:0 1em}
-.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1em 1.3em;margin:1em 0}
-.ok{color:#11772e;font-weight:bold}.bad{color:#b00020;font-weight:bold}.due{color:#a36b00;font-weight:bold}
-.warn{background:#fff3cd;border:1px solid #e0b400;padding:.5em .8em;border-radius:6px;margin:.6em 0}
-.err{background:#fde2e4;border:1px solid #b00020;padding:.5em .8em;border-radius:6px;margin:.6em 0}
-.banner{background:#e7f0ff;border:1px solid #3a6fd8;padding:.5em .8em;border-radius:6px;margin:.6em 0;font-weight:bold}
-table{border-collapse:collapse;width:100%;font-size:.92em}td,th{border:1px solid #ddd;padding:.3em .5em;vertical-align:top}
-th{background:#eef1f5}
-.ltr{direction:ltr;text-align:left}code,pre{direction:ltr;text-align:left;font-family:Consolas,monospace;font-size:.88em}
-pre{white-space:pre-wrap;background:#f7f7f7;padding:.6em;border-radius:6px;max-height:30em;overflow:auto}
-input,select,textarea{font:inherit;padding:.25em .4em;margin:.15em 0}textarea{width:100%}
-button{font:inherit;padding:.35em 1.1em;background:#1f3a5f;color:#fff;border:0;border-radius:6px;cursor:pointer}
-button.danger{background:#b00020}
-label{display:inline-block;min-width:11em}
-.turn{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1em 1.4em;margin:1em 0}
-.q{font-weight:bold}.meta,.cite{color:#666;font-size:.85em;direction:ltr;text-align:left}
-.ev,.calc{font-size:.9em;border-top:1px dashed #ccc;margin-top:.8em;padding-top:.5em}.note{color:#555;font-size:.85em}
-.grid a{display:inline-block;margin:.15em .3em;padding:.1em .5em;background:#eef1f5;border-radius:4px;
-        text-decoration:none;color:#1f3a5f;direction:ltr}
-"""
+#: D-0141: the look lives in two static files, served from a fixed whitelist (never a path
+#: taken from the request), so the Content-Security-Policy can forbid inline styles and
+#: inline scripts entirely.
+ASSET_DIR = os.path.join(_HERE, "ui_assets")
+STATIC = {"/static/app.css": ("app.css", "text/css; charset=utf-8"),
+          "/static/app.js": ("app.js", "text/javascript; charset=utf-8")}
+CSP = ("default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; "
+       "form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+try:
+    VERSION = open(os.path.join(_ROOT, "VERSION"), encoding="utf-8").read().strip()
+except OSError:                                     # pragma: no cover -- display only
+    VERSION = "?"
 
 
 def esc(x):
@@ -174,6 +162,113 @@ def form_to_arguments(schema, form):
     return args
 
 
+def fmtn(v, nd=None):
+    """A number for display: grouped thousands, sensible decimals. None -> a dash."""
+    if v is None:
+        return "\u2014"
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    a = abs(v)
+    if nd is None:
+        nd = 0 if a >= 1e6 else (2 if a >= 10 else 4)
+    return "{:,.{nd}f}".format(v, nd=nd)
+
+
+def svg_line(points, w=640, h=180, pad=30, label=""):
+    """
+    A line chart as inline SVG built from attributes only (no style attribute, so the
+    Content-Security-Policy can forbid inline styles). Every text node is escaped.
+    points: [(x label, value)], oldest first.
+    """
+    pts = [(str(x), float(y)) for x, y in points if y is not None]
+    if len(pts) < 2:
+        return '<p class="muted">برای نمودار دست‌کم دو نقطه لازم است.</p>'
+    ys = [y for _, y in pts]
+    lo, hi = min(ys), max(ys)
+    if hi == lo:
+        lo, hi = lo - 1.0, hi + 1.0
+    n = len(pts)
+
+    def X(i):
+        return pad + (w - 2 * pad) * i / float(n - 1)
+
+    def Y(y):
+        return h - pad - (h - 2 * pad) * (y - lo) / (hi - lo)
+    line = " ".join("%.1f,%.1f" % (X(i), Y(y)) for i, (_, y) in enumerate(pts))
+    area = "M%.1f,%.1f L%s L%.1f,%.1f Z" % (X(0), h - pad, line.replace(" ", " L"), X(n - 1), h - pad)
+    grid = "".join('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/><text class="ax" x="2" y="%.1f">%s</text>'
+                   % (pad, Y(v), w - pad, Y(v), Y(v) - 3, esc(fmtn(v))) for v in (lo, (lo + hi) / 2.0, hi))
+    dots = "" if n > 160 else "".join(
+        '<circle class="pt" cx="%.1f" cy="%.1f" r="5"><title>%s: %s</title></circle>'
+        % (X(i), Y(y), esc(x), esc(fmtn(y))) for i, (x, y) in enumerate(pts))
+    xl = ('<text class="ax" x="%d" y="%d">%s</text><text class="ax" x="%d" y="%d" text-anchor="end">%s</text>'
+          % (pad, h - 8, esc(pts[0][0]), w - pad, h - 8, esc(pts[-1][0])))
+    return ('<svg class="chart%s" viewBox="0 0 %d %d" role="img" aria-label="%s">%s<path class="area" d="%s"/>'
+            '<polyline class="line" points="%s"/>%s%s</svg>') % (
+        " down" if ys[-1] < ys[0] else "", w, h, esc(label), grid, area, line, dots, xl)
+
+
+def svg_multi(series, w=680, h=240, pad=34):
+    """Several lines on one x axis (years). series: [(name, [(x, value)])]. Returns (svg, legend)."""
+    xs = sorted({x for _, pts in series for x, _ in pts})
+    ys = [y for _, pts in series for _, y in pts if y is not None]
+    if len(xs) < 2 or not ys:
+        return '<p class="muted">داده برای نمودار کافی نیست.</p>', ""
+    lo, hi = min(ys), max(ys)
+    if hi == lo:
+        lo, hi = lo - 1.0, hi + 1.0
+    pos = {x: i for i, x in enumerate(xs)}
+
+    def X(x):
+        return pad + (w - 2 * pad) * pos[x] / float(len(xs) - 1)
+
+    def Y(y):
+        return h - pad - (h - 2 * pad) * (y - lo) / (hi - lo)
+    out = ["".join('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/><text class="ax" x="2" y="%.1f">%s</text>'
+                   % (pad, Y(v), w - pad, Y(v), Y(v) - 3, esc(fmtn(v))) for v in (lo, (lo + hi) / 2.0, hi))]
+    legend = []
+    for i, (name, pts) in enumerate(series):
+        p = [(x, y) for x, y in sorted(pts) if y is not None]
+        cls = "s%d" % (i % 8)
+        if len(p) >= 2:
+            out.append('<polyline class="m %s" points="%s"/>' % (cls, " ".join("%.1f,%.1f" % (X(x), Y(y)) for x, y in p)))
+        out.extend('<circle class="pt" cx="%.1f" cy="%.1f" r="5"><title>%s %s: %s</title></circle>'
+                   % (X(x), Y(y), esc(name), esc(x), esc(fmtn(y))) for x, y in p)
+        legend.append('<span><i class="%s"></i>%s</span>' % (cls, esc(name)))
+    out.append('<text class="ax" x="%d" y="%d">%s</text><text class="ax" x="%d" y="%d" text-anchor="end">%s</text>'
+               % (pad, h - 8, esc(xs[0]), w - pad, h - 8, esc(xs[-1])))
+    return ('<svg class="chart" viewBox="0 0 %d %d" role="img">%s</svg>' % (w, h, "".join(out)),
+            '<div class="legend">%s</div>' % "".join(legend))
+
+
+def svg_bar(value, vmax):
+    """A horizontal bar, width as an SVG attribute (never a style)."""
+    width = 0.0 if not vmax else max(0.0, min(100.0, abs(value) / float(vmax) * 100.0))
+    return ('<svg class="bar" viewBox="0 0 100 10" preserveAspectRatio="none"><rect class="track" width="100" height="10" rx="5"/>'
+            '<rect class="fill %s" width="%.1f" height="10" rx="5"/></svg>') % ("neg" if value < 0 else "pos", width)
+
+
+def value_table(v):
+    """A dict or list result (MACD, Bollinger, a coupon schedule) as an escaped table."""
+    if isinstance(v, dict):
+        return '<div class="tbl"><table>%s</table></div>' % "".join(
+            '<tr><th class="ltr">%s</th><td class="num">%s</td></tr>' % (esc(k), esc(fmtn(x) if isinstance(x, (int, float)) else x))
+            for k, x in v.items())
+    if isinstance(v, list) and v and all(isinstance(r, dict) for r in v):
+        cols = list(v[0])
+        return '<div class="tbl"><table><tr>%s</tr>%s</table></div>' % (
+            "".join('<th class="ltr">%s</th>' % esc(c) for c in cols),
+            "".join("<tr>%s</tr>" % "".join('<td class="num">%s</td>' % esc(fmtn(r.get(c)) if isinstance(r.get(c), (int, float)) else r.get(c))
+                                            for c in cols) for r in v))
+    return "<code>%s</code>" % esc(v)
+
+
+def notices_html(ns):
+    return "".join('<p class="note ltr">%s</p>' % esc(n) for n in ns or ())
+
+
 class App(object):
     """
     Pure request handling: handle(method, path, query, form, host) -> Response. The HTTP
@@ -182,8 +277,9 @@ class App(object):
     """
 
     def __init__(self, assistant=None, paper_dir=PAPER_DIR, ask_audit_path=ASK.DEFAULT_AUDIT,
-                 macro_fetch=None, clock=_now, model_label=None, readiness=None, maintain=None):
+                 macro_fetch=None, clock=_now, model_label=None, readiness=None, maintain=None, hub=None):
         self.assistant = assistant
+        self.hub = hub or DH.DataHub()
         self.csrf = secrets.token_urlsafe(24)
         self.paper_dir = paper_dir
         self.ask_audit_path = ask_audit_path
@@ -204,18 +300,33 @@ class App(object):
                                           PP.RiskLimits(lim.pop("instrument_allowlist"), **lim))
         return self._engine
 
-    def page(self, path, title, body, status=200):
-        nav = "".join('<a href="%s"%s>%s</a>' % (h, ' class="on"' if h == path else "", esc(t))
+    def page(self, path, title, body, status=200, subtitle=""):
+        nav = "".join('<a href="%s"%s><span class="dot"></span>%s</a>' % (h, ' class="on"' if h == path else "", esc(t))
                       for h, t in NAV)
         doc = ('<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
                '<meta name="viewport" content="width=device-width,initial-scale=1">'
-               '<title>%s - marfin-llm</title><style>%s</style></head><body>'
-               '<header><b>marfin-llm</b><nav>%s</nav></header><main><h2>%s</h2>%s'
-               '<p class="note">این خروجی تحلیلی است، نه توصیهٔ مالی شخصی. معاملهٔ واقعی در این برنامه غیرفعال است.</p>'
-               '</main></body></html>') % (esc(title), CSS, nav, esc(title), body)
-        return Response(status, doc, headers={"Content-Security-Policy":
-                                              "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
-                                              "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"})
+               '<meta name="color-scheme" content="light dark">'
+               '<title>%s - marfin-llm</title><link rel="stylesheet" href="/static/app.css">'
+               '<script src="/static/app.js" defer></script></head><body><div class="shell">'
+               '<aside class="side"><a class="brand" href="/"><span class="logo">m</span><span>marfin<b>llm</b></span></a>'
+               '<nav class="nav">%s</nav><div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
+               '<div class="main"><header class="top"><details class="menu"><summary>منو</summary>'
+               '<nav class="nav nav-m">%s</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
+               '<button class="theme" type="button" data-theme-toggle title="روشن / تیره">&#9680;</button></header>'
+               '<main class="content">%s</main>'
+               '<footer class="foot">این خروجی تحلیلی است، نه توصیهٔ مالی شخصی. معاملهٔ واقعی در این برنامه غیرفعال است '
+               '(فاز ۱۱ معلق).</footer></div></div></body></html>') % (
+            esc(title), nav, esc(VERSION), nav, esc(title),
+            ('<p class="sub">%s</p>' % esc(subtitle)) if subtitle else "", body)
+        return Response(status, doc, headers={"Content-Security-Policy": CSP,
+                                              "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+                                              "X-Content-Type-Options": "nosniff"})
+
+    def static(self, path):
+        name, ctype = STATIC[path]
+        with open(os.path.join(ASSET_DIR, name), encoding="utf-8") as fh:
+            return Response(200, fh.read(), ctype, headers={"X-Content-Type-Options": "nosniff",
+                                                            "Content-Security-Policy": CSP})
 
     def hidden(self):
         return '<input type="hidden" name="csrf" value="%s">' % esc(self.csrf)
@@ -231,7 +342,10 @@ class App(object):
                             "text/plain; charset=utf-8")
         if method not in ("GET", "POST"):
             return Response(405, "method not allowed", "text/plain; charset=utf-8")
-        routes = {"/": self.p_home, "/ask": self.p_ask, "/calc": self.p_calc, "/macro": self.p_macro,
+        if method == "GET" and path in STATIC:
+            return self.static(path)
+        routes = {"/": self.p_home, "/markets": self.p_markets, "/ask": self.p_ask, "/calc": self.p_calc,
+                  "/macro": self.p_macro,
                   "/paper": self.p_paper, "/audit": self.p_audit, "/maintenance": self.p_maintenance,
                   "/providers": self.p_providers, "/phase11": self.p_phase11}
         fn = routes.get(path)
@@ -246,23 +360,225 @@ class App(object):
     # -- pages -----------------------------------------------------------------
     def p_home(self, method, q, f):
         mf = M.manifest()
-        rows = [("حالت اجرا (execution mode)", '<code>%s</code> (منبع: %s)' % (esc(mf["mode"]), esc(mf["source"]))),
-                ("معاملهٔ واقعی", '<span class="bad">غیرفعال</span> (%d از %d پیش‌نیاز برآورده نشده)'
-                 % (len(mf["unmet_live_prerequisites"]), mf["n_live_prerequisites"])),
-                ("مدل", esc(self.model_label) if self.assistant else
-                 '<span class="due">بارگذاری نشده</span>: صفحهٔ «پرسش» به مدل نیاز دارد. با <code>--model</code> یا <code>--server</code> اجرا کنید.'),
-                ("ماشین‌حساب‌ها", "%d ابزار قطعی" % len(REG.tool_names())),
-                ("سری‌های کلان", "%d سری (FRED و BIS)" % len(MACRO.SERIES)),
-                ("کلید FRED", '<span class="ok">تنظیم شده</span>' if os.environ.get("FRED_API_KEY")
-                 else '<span class="due">تنظیم نشده</span>: سری‌های FRED کار نمی‌کنند؛ BIS کار می‌کند')]
-        body = '<div class="card"><table>%s</table></div>' % "".join(
-            "<tr><th>%s</th><td>%s</td></tr>" % (esc(a), b) for a, b in rows)
-        body += ('<div class="card"><b>از کجا شروع کنم؟</b><ul>'
-                 '<li><a href="/ask">پرسش</a>: سؤال مالی به فارسی یا انگلیسی. برنامه خودش مسیر را انتخاب می‌کند: محاسبه، داده‌های کلان، اسناد یا پاسخ ساده.</li>'
-                 '<li><a href="/calc">ماشین‌حساب‌ها</a>: محاسبهٔ دقیق بدون مدل (P/E، CAGR، اندازهٔ پوزیشن، اوراق، اختیار معامله، ...).</li>'
-                 '<li><a href="/macro">داده‌های کلان</a>: تورم، بیکاری، نرخ بهره و نرخ بانک‌های مرکزی، مستقیم از منبع.</li>'
-                 '<li><a href="/paper">معاملهٔ کاغذی</a>: تمرین سفارش با پول مجازی، با همهٔ کنترل‌های ریسک.</li></ul></div>')
-        return self.page("/", "داشبورد", body)
+        unmet, total = len(mf["unmet_live_prerequisites"]), mf["n_live_prerequisites"]
+        model = (esc(self.model_label) if self.assistant else
+                 '<span class="due">بارگذاری نشده</span>')
+        stats = [
+            ("حالت اجرا", '<code>%s</code>' % esc(mf["mode"]), "از %s" % esc(mf["source"])),
+            ("معاملهٔ واقعی", '<span class="bad">غیرفعال</span>', "فاز ۱۱ معلق (%d از %d پیش‌نیاز برآورده نشده)"
+             % (unmet, total)),
+            ("مدل زبانی", model, "صفحهٔ «پرسش» به مدل نیاز دارد" if not self.assistant else "محلی، بدون اینترنت"),
+            ("فرمول‌ها", "%d" % len(REG.tool_names()), "%d دسته، هر کدام با آموزش کوتاه" % len(CAT.CATEGORIES)),
+            ("منابع داده", "%d" % len(DH.SOURCES_FA), "ECB، BIS، FRED، بانک جهانی، Alpha Vantage"),
+            ("کلید FRED", '<span class="ok">تنظیم شده</span>' if os.environ.get("FRED_API_KEY")
+             else '<span class="due">تنظیم نشده</span>', "اوراق، نفت، گاز و شاخص دلار به آن نیاز دارند"),
+        ]
+        body = '<div class="stats">%s</div>' % "".join(
+            '<div class="stat"><div class="k">%s</div><div class="v">%s</div><div class="d">%s</div></div>' % (esc(k), v, d)
+            for k, v, d in stats)
+        if not self.assistant:
+            body += ('<div class="warn">مدل بارگذاری نشده است. برای صفحهٔ «پرسش»، برنامه را با <code>--model</code> یا '
+                     '<code>--server</code> اجرا کنید. بقیهٔ صفحه‌ها بدون مدل کار می‌کنند.</div>')
+        tiles = (("/markets", "بازارها و داده‌ها", "نرخ ۲۹ ارز، نرخ بهرهٔ ۴۰ بانک مرکزی، اوراق و نفت آمریکا، شاخص‌های ۵۸ کشور"),
+                 ("/calc", "فرمول‌ها و ماشین‌حساب‌ها", "۸۵ محاسبهٔ دقیق آفلاین با آموزش و مثال آماده"),
+                 ("/ask", "پرسش از مدل", "سؤال به فارسی یا انگلیسی؛ اعداد با شواهد کنترل می‌شوند"),
+                 ("/paper", "معاملهٔ کاغذی", "تمرین سفارش با پول مجازی و همهٔ کنترل‌های ریسک"),
+                 ("/macro", "سری‌های کلان", "تورم، بیکاری و نرخ بهره با بازهٔ زمانی دلخواه"),
+                 ("/audit", "گزارش ممیزی", "همهٔ پرسش‌ها و سفارش‌ها با زنجیرهٔ هش قابل بررسی"))
+        body += '<div class="tiles">%s</div>' % "".join(
+            '<a class="tile" href="%s"><b>%s</b><span>%s</span></a>' % (h, esc(t), esc(d)) for h, t, d in tiles)
+        return self.page("/", "داشبورد", body, subtitle="همه چیز روی همین رایانه اجرا می‌شود؛ هیچ پرسشی بیرون نمی‌رود.")
+
+    # -- markets (D-0141) ------------------------------------------------------------------
+    MARKET_TABS = (("overview", "نمای کلی"), ("fx", "ارزها"), ("rates", "نرخ بهرهٔ بانک‌های مرکزی"),
+                   ("us", "اوراق و کالا"), ("world", "اقتصاد کشورها"), ("stocks", "سهام"), ("sources", "منابع"))
+
+    def _try(self, fn):
+        try:
+            return fn(), None
+        except DH.DataError as exc:
+            return None, '<div class="err">دریافت نشد (هیچ عددی جایگزین نمی‌شود): <code>%s</code></div>' % esc(exc)
+
+    def _fx_table(self, fx, limit=None):
+        rows = fx["rows"][:limit] if limit else fx["rows"]
+        return ('<div class="tbl"><table><tr><th>ارز</th><th>کد</th><th class="num">به ازای ۱ یورو</th>'
+                '<th class="num">به ازای ۱ دلار</th><th class="num">تاریخ</th></tr>%s</table></div>') % "".join(
+            '<tr><td><a href="/markets?tab=fx&amp;ccy=%s">%s</a></td><td class="ltr">%s</td><td class="num">%s</td>'
+            '<td class="num">%s</td><td class="num">%s</td></tr>' % (
+                esc(urllib.parse.quote(r["ccy"])), esc(r["name_fa"]), esc(r["ccy"]), esc(fmtn(r["per_eur"])),
+                esc(fmtn(r["per_usd"])), esc(r["date"])) for r in rows)
+
+    def _rates_table(self, pr, limit=None, stale=False):
+        rows = [r for r in pr["rows"] if r["stale"] == stale]
+        rows = rows[:limit] if limit else rows
+        vmax = max([abs(r["rate"]) for r in rows] or [1.0])
+        return ('<div class="tbl"><table><tr><th>کشور / منطقه</th><th class="num">نرخ (٪)</th><th></th>'
+                '<th class="num">تاریخ</th></tr>%s</table></div>') % "".join(
+            '<tr><td>%s <span class="muted ltr">%s</span></td><td class="num">%s</td><td>%s</td><td class="num">%s</td></tr>'
+            % (esc(r["name_fa"]), esc(r["area"]), esc(fmtn(r["rate"], 2)), svg_bar(r["rate"], vmax), esc(r["date"]))
+            for r in rows)
+
+    def _spark_card(self, s, href):
+        if s.get("error"):
+            return ('<div class="card spark-card"><b>%s</b><p class="muted ltr">%s</p><div class="err">%s</div></div>'
+                    % (esc(s["title_fa"]), esc(s["unit"]), esc(s["error"])))
+        pts = s["points"]
+        first, last = pts[0]["value"], pts[-1]["value"]
+        chg = last - first
+        return ('<a class="card spark-card tile" href="%s"><b>%s</b><div class="v">%s</div><div class="u ltr">%s &middot; %s</div>'
+                '%s<div class="u">تغییر در %d روز معاملاتی: <span class="%s">%s</span></div></a>') % (
+            href, esc(s["title_fa"]), esc(fmtn(last)), esc(s["unit"]), esc(pts[-1]["date"]),
+            svg_line([(p["date"], p["value"]) for p in pts], w=300, h=80, pad=6, label=s["series"]),
+            len(pts), "ok" if chg >= 0 else "bad", esc(("+" if chg >= 0 else "") + fmtn(chg)))
+
+    def p_markets(self, method, q, f):
+        tab = q.get("tab") or "overview"
+        if tab not in dict(self.MARKET_TABS):
+            tab = "overview"
+        tabs = '<nav class="tabs">%s</nav>' % "".join(
+            '<a href="/markets?tab=%s"%s>%s</a>' % (k, ' class="on"' if k == tab else "", esc(t)) for k, t in self.MARKET_TABS)
+        body = tabs + getattr(self, "_mk_" + tab)(q)
+        return self.page("/markets", "بازارها و داده‌ها", body,
+                         subtitle="داده‌های رسمی روزانه یا سالانه از چند منبع مجاز؛ هیچ‌کدام لحظه‌ای نیست.")
+
+    def _mk_overview(self, q):
+        out = ['<div class="grid g2">']
+        fx, err = self._try(self.hub.fx)
+        out.append('<div class="card"><h2>ارزهای اصلی</h2>%s%s<p class="note">%s</p><a href="/markets?tab=fx">همهٔ ۲۹ ارز و '
+                   'مبدل ارز &larr;</a></div>' % (err or self._fx_table(
+                       {"rows": [r for r in fx["rows"] if r["ccy"] in ("USD", "GBP", "JPY", "CHF", "CNY", "TRY")]}),
+                       notices_html(fx["notices"]) if fx else "", esc(fx["note"]) if fx else ""))
+        pr, err = self._try(self.hub.policy_rates)
+        out.append('<div class="card"><h2>بالاترین نرخ‌های بهرهٔ سیاستی</h2>%s%s<a href="/markets?tab=rates">همهٔ بانک‌های '
+                   'مرکزی &larr;</a></div>' % (err or self._rates_table(pr, limit=8), notices_html(pr["notices"]) if pr else ""))
+        out.append("</div>")
+        board = self.hub.fred_board(30)
+        out.append('<h2>اوراق خزانه، نفت، گاز و دلار آمریکا</h2><div class="grid g3">%s</div>' % "".join(
+            self._spark_card(s, "/markets?tab=us&amp;series=%s" % esc(s["series"])) for s in board))
+        out.append(notices_html(DH.required_notices(["fred"])))
+        return "".join(out)
+
+    def _mk_fx(self, q):
+        fx, err = self._try(self.hub.fx)
+        if err:
+            return err
+        ccys = ["EUR"] + [r["ccy"] for r in fx["rows"]]
+        conv = ""
+        if q.get("amount") or q.get("from") or q.get("to"):
+            try:
+                amount = parse_number((q.get("amount") or "").strip())
+                c = self.hub.convert(amount, q.get("from") or "", q.get("to") or "", fx)
+                conv = ('<div class="card result"><div class="muted">%s %s =</div><div class="big" id="fx-result">%s %s</div>'
+                        '<p class="note">نرخ: ۱ %s = %s %s &middot; تاریخ نرخ‌ها %s &middot; %s</p>'
+                        '<button type="button" class="ghost is-hidden" data-copy="#fx-result">کپی</button></div>') % (
+                    esc(fmtn(c["amount"])), esc(c["from"]), esc(fmtn(c["result"])), esc(c["to"]), esc(c["from"]),
+                    esc(fmtn(c["rate"], 6)), esc(c["to"]), esc(c["date"]), esc(c["label"]))
+            except (DH.DataError, ValueError) as exc:
+                conv = '<div class="err">تبدیل انجام نشد: <code>%s</code></div>' % esc(exc)
+
+        def sel(name, cur):
+            return '<select name="%s">%s</select>' % (name, "".join(
+                '<option value="%s"%s>%s %s</option>' % (esc(c), " selected" if c == cur else "", esc(c),
+                                                       esc(DH.CURRENCIES.get(c, "یورو"))) for c in ccys))
+        form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="fx">'
+                '<h2>مبدل ارز</h2><div class="form-row"><label>مبلغ<input name="amount" dir="ltr" value="%s"></label>'
+                '<label>از%s</label><label>به%s</label><button>تبدیل</button></div>'
+                '<p class="note">نرخ متقاطع از دو نرخ مرجع همان روز محاسبه می‌شود (COMPUTED)؛ اگر تاریخ‌ها فرق کنند رد می‌شود.</p>'
+                '</form>') % (esc(q.get("amount") or "100"), sel("from", q.get("from") or "USD"), sel("to", q.get("to") or "EUR"))
+        chart = ""
+        ccy = q.get("ccy") or "USD"
+        hist, herr = self._try(lambda: self.hub.fx_history(ccy, 90))
+        if hist:
+            chart = ('<div class="card"><h2>%s در برابر یورو (۹۰ روز اخیر)</h2>%s<p class="note ltr">%s per EUR, ECB reference rate</p>'
+                     '</div>') % (esc(DH.CURRENCIES.get(ccy, ccy)), svg_line([(p["date"], p["value"]) for p in hist],
+                                                                           label=ccy), esc(ccy))
+        else:
+            chart = herr or ""
+        return (conv + form + chart + '<div class="card"><h2>نرخ مرجع همهٔ ارزها</h2><p class="note">%s</p>%s%s</div>'
+                % (esc(fx["note"]), self._fx_table(fx), notices_html(fx["notices"])))
+
+    def _mk_rates(self, q):
+        pr, err = self._try(self.hub.policy_rates)
+        if err:
+            return err
+        return ('<div class="card"><h2>%d بانک مرکزی با دادهٔ جاری</h2>%s<p class="note">%s</p>%s</div>'
+                '<details class="card"><summary>سری‌های قدیمی و متوقف‌شده (%d)</summary>%s</details>') % (
+            pr["n_current"], self._rates_table(pr), esc(pr["note"]), notices_html(pr["notices"]),
+            len(pr["rows"]) - pr["n_current"], self._rates_table(pr, stale=True))
+
+    def _mk_us(self, q):
+        series = q.get("series")
+        if series:
+            s, err = self._try(lambda: self.hub.fred_series(series, 250))
+            if err:
+                return err + '<p><a href="/markets?tab=us">&larr; همهٔ سری‌ها</a></p>'
+            pts = s["points"]
+            vals = [p["value"] for p in pts]
+            stats = (("آخرین", fmtn(vals[-1])), ("کمینه", fmtn(min(vals))), ("بیشینه", fmtn(max(vals))),
+                     ("میانگین", fmtn(sum(vals) / len(vals))))
+            return ('<p><a href="/markets?tab=us">&larr; همهٔ سری‌ها</a></p><div class="card"><h2>%s</h2>'
+                    '<p class="muted ltr">%s &middot; %s &middot; %d observations</p><div class="stats">%s</div>%s%s</div>') % (
+                esc(s["title_fa"]), esc(s["series"]), esc(s["unit"]), len(pts),
+                "".join('<div class="stat"><div class="k">%s</div><div class="v ltr">%s</div></div>' % (esc(k), esc(v))
+                        for k, v in stats),
+                svg_line([(p["date"], p["value"]) for p in pts], h=240, label=s["series"]), notices_html(s["notices"]))
+        board = self.hub.fred_board(60)
+        return ('<div class="grid g3">%s</div>%s<p class="note">S&amp;P 500 عمداً حذف شده است: یادداشت FRED برای آن '
+                'ادعای حق نشر دارد.</p>') % ("".join(self._spark_card(s, "/markets?tab=us&amp;series=%s" % esc(s["series"]))
+                                                for s in board), notices_html(DH.required_notices(["fred"])))
+
+    def _mk_world(self, q):
+        ind = q.get("ind") or "FP.CPI.TOTL.ZG"
+        if ind not in DH.WB_INDICATORS:
+            ind = "FP.CPI.TOTL.ZG"
+        chosen = [c for c in (q.get("c") or "IR,TR,US,XM,CN,GB").split(",") if c in DH.COUNTRIES][:8] or ["IR", "US"]
+        opts = "".join('<option value="%s"%s>%s</option>' % (esc(k), " selected" if k == ind else "", esc(v[1]))
+                       for k, v in DH.WB_INDICATORS.items())
+        form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="world">'
+                '<div class="form-row"><label>شاخص<select name="ind">%s</select></label>'
+                '<label>کشورها (کد دوحرفی، با کاما، حداکثر ۸)<input name="c" dir="ltr" value="%s"></label>'
+                '<button>نمایش</button></div><p class="note">کدها: %s</p></form>') % (
+            opts, esc(",".join(chosen)), esc("، ".join("%s %s" % (k, v[1]) for k, v in sorted(DH.COUNTRIES.items()))))
+        w, err = self._try(lambda: self.hub.world(ind, chosen, mrv=8))
+        if err:
+            return form + err
+        chart, legend = svg_multi([(r["name_fa"], [(p["year"], p["value"]) for p in r["points"]]) for r in w["rows"]])
+        years = sorted({p["year"] for r in w["rows"] for p in r["points"]})
+        table = '<div class="tbl"><table><tr><th>کشور</th>%s</tr>%s</table></div>' % (
+            "".join('<th class="num">%s</th>' % y for y in years),
+            "".join("<tr><td>%s</td>%s</tr>" % (esc(r["name_fa"]), "".join(
+                '<td class="num">%s</td>' % esc(fmtn({p["year"]: p["value"] for p in r["points"]}.get(y))) for y in years))
+                for r in w["rows"]))
+        return form + ('<div class="card"><h2>%s</h2><p class="muted ltr">%s &middot; %s</p>%s%s%s<p class="note">%s</p>%s</div>'
+                       % (esc(w["title_fa"]), esc(ind), esc(w["unit"]), chart, legend, table, esc(w["note"]),
+                          notices_html(w["notices"])))
+
+    def _mk_stocks(self, q):
+        sym = (q.get("symbol") or "").strip()
+        form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="stocks">'
+                '<div class="form-row"><label>نماد سهم (مثلاً IBM یا AAPL)<input name="symbol" dir="ltr" value="%s"></label>'
+                '<button>دریافت قیمت پایانی</button></div><p class="note">Alpha Vantage رایگان: فقط قیمت پایانی روز، ۲۵ درخواست در روز، '
+                'به کلید <code>ALPHAVANTAGE_API_KEY</code> نیاز دارد. قیمت لحظه‌ای در نسخهٔ رایگان از نظر مقررات مجاز نیست.</p></form>'
+                ) % esc(sym)
+        if not sym:
+            return form
+        s, err = self._try(lambda: self.hub.stock(sym))
+        if err:
+            return form + err
+        return form + ('<div class="card"><h2 class="ltr">%s</h2><div class="big">%s</div><p class="note">%s &middot; %s</p>%s'
+                       '<p class="note ltr">%s</p></div>') % (
+            esc(s["symbol"]), esc(fmtn(s["last"]["value"])), esc(s["last"]["date"]), esc(s["note"]),
+            svg_line([(p["date"], p["value"]) for p in s["points"]], h=240, label=s["symbol"]), esc(s["label"]))
+
+    def _mk_sources(self, q):
+        rows = "".join('<tr><td>%s</td><td>%s</td><td>%s</td><td class="ltr">%s</td></tr>' % (
+            esc(n), esc(d), esc(k), esc(key)) for key, n, d, k in DH.SOURCES_FA)
+        return ('<div class="card"><h2>منابع داده و دلیل انتخاب</h2><p>هیچ منبع رایگانی همهٔ بازارها را پوشش نمی‌دهد و مجوز '
+                'استفادهٔ ماشینی هم داشته باشد؛ پس برای هر نوع دارایی قوی‌ترین منبع مجاز انتخاب شده و همه کنار هم کار می‌کنند.</p>'
+                '<div class="tbl"><table><tr><th>منبع</th><th>چه می‌دهد</th><th>نیاز</th><th>کلید ثبت</th></tr>%s</table></div>'
+                '<p class="note">کنار گذاشته‌شده‌ها: Twelve Data (پولی)، TradingView (شرایطش استفادهٔ ماشینی را منع می‌کند)، '
+                'Stooq (شرایطش خوانا نبود)، بازار ایران (به تصمیم مالک خارج از محدوده). داده‌ها روی دیسک ذخیره نمی‌شوند و '
+                'فقط %d دقیقه در حافظه می‌مانند.</p></div>') % (rows, int(DH.CACHE_TTL_S // 60))
 
     def p_ask(self, method, q, f):
         body = ""
@@ -277,28 +593,54 @@ class App(object):
                 body += '<div class="err">بدون مدل نمی‌توان پاسخ داد.</div>'
             else:
                 self.history.append(self.assistant.answer(question))
-        body += ('<form method="post" class="card">%s<textarea name="question" rows="3" dir="auto" '
-                 'placeholder="مثلاً: نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟"></textarea><br>'
-                 '<button>بپرس</button> <span class="note">روی i5-12400 هر پاسخ حدود ۳۰ تا ۹۰ ثانیه طول می‌کشد (MEASURED در بنچمارک).</span></form>'
-                 % self.hidden())
+        examples = ("نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟", "سهمی با قیمت ۱۵۰ دلار و سود هر سهم ۸٫۴۰ دلار؛ P/E چقدر است؟",
+                    "موجودی ۵۰٬۰۰۰ دلار، ریسک ۲٪، ورود ۸۰ و حد ضرر ۷۶؛ چند سهم بخرم؟", "What was Apple's net income in fiscal 2023?")
+        body += ('<form method="post" class="card" data-busy="در حال فکر کردن...">%s<textarea id="q" name="question" rows="3" '
+                 'dir="auto" placeholder="مثلاً: نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟"></textarea>'
+                 '<div class="chips">%s</div><div class="form-row"><button>بپرس</button>'
+                 '<span class="note">Ctrl+Enter هم ارسال می‌کند. روی i5-12400 هر پاسخ حدود ۳۰ تا ۹۰ ثانیه طول می‌کشد '
+                 '(MEASURED در بنچمارک).</span></div></form>') % (self.hidden(), "".join(
+                     '<button type="button" class="chip is-hidden" data-target="#q" data-fill="%s">%s</button>'
+                     % (esc(e), esc(e)) for e in examples))
         for out in reversed(self.history):
             body += ASK.turn_html(out)
-        return self.page("/ask", "پرسش", body)
+        return self.page("/ask", "پرسش از مدل", body,
+                         subtitle="مسیر خودکار: محاسبه، داده‌های کلان، اسناد یا پاسخ ساده؛ اعداد پاسخ با شواهد کنترل می‌شوند.")
+
+    def _calc_index(self, unknown=""):
+        cats = CAT.by_category()
+        chips = '<button type="button" class="chip on is-hidden" data-cat-chip="all">همه</button>' + "".join(
+            '<button type="button" class="chip is-hidden" data-cat-chip="%s">%s (%d)</button>' % (k, esc(t), len(n))
+            for k, t, n in cats)
+        secs = []
+        for key, title, names in cats:
+            cards = "".join(
+                '<a class="tool-card" href="/calc?tool=%s" data-cat="%s" data-search="%s"><span class="tool-title">%s</span>'
+                '<span class="rule"></span><span class="tool-usage">%s</span><span class="tool-name ltr">%s</span></a>' % (
+                    esc(urllib.parse.quote(n)), key, esc(" ".join((n, CAT.TOOLS[n][1], CAT.TOOLS[n][2], title))),
+                    esc(CAT.TOOLS[n][1]), esc(CAT.TOOLS[n][2]), esc(n)) for n in names)
+            secs.append('<section class="cat" id="cat-%s"><h2>%s <span class="badge">%d</span></h2><div class="cards">%s</div>'
+                        '</section>' % (key, esc(title), len(names), cards))
+        head = ('<div class="toolbar"><input id="tool-search" class="search is-hidden" type="search" '
+                'placeholder="جست‌وجو: نام فارسی، انگلیسی یا کاربرد (کلید /)" aria-label="جست‌وجو"> '
+                '<span class="muted"><span id="tool-count">%d</span> فرمول</span></div><div class="chips">%s</div>'
+                '<p id="tool-empty" class="muted is-hidden">فرمولی با این عبارت پیدا نشد.</p>') % (len(CAT.TOOLS), chips)
+        body = (('<div class="err">ابزار ناشناخته: <code>%s</code></div>' % esc(unknown)) if unknown else "") + head + "".join(secs)
+        return self.page("/calc", "فرمول‌ها و ماشین‌حساب‌ها", body,
+                         subtitle="%d محاسبهٔ قطعی و آفلاین؛ به مدل یا اینترنت نیاز ندارند. زیر نام هر فرمول کاربردش آمده است."
+                         % len(CAT.TOOLS))
 
     def p_calc(self, method, q, f):
         schemas = {s["function"]["name"]: s for s in REG.tool_schemas()}
         name = (f.get("tool") if method == "POST" else q.get("tool")) or ""
         if name not in schemas:
-            body = '<div class="card"><p>%d ماشین‌حساب قطعی. هیچ‌کدام به مدل یا اینترنت نیاز ندارند. یکی را انتخاب کنید:</p><div class="grid">%s</div></div>' % (
-                len(schemas), "".join('<a href="/calc?tool=%s" title="%s">%s</a>' % (
-                    esc(urllib.parse.quote(n)), esc(schemas[n]["function"]["description"]), esc(n))
-                    for n in sorted(schemas)))
-            if name:
-                body = '<div class="err">ابزار ناشناخته: <code>%s</code></div>' % esc(name) + body
-            return self.page("/calc", "ماشین‌حساب‌ها", body)
+            return self._calc_index(unknown=name)
         sch = schemas[name]
         fn = sch["function"]
         req = set(fn["parameters"]["required"])
+        cat, title, usage, example = CAT.TOOLS[name]
+        values = dict(f) if method == "POST" else (
+            {k: CAT.example_text(v) for k, v in example.items()} if q.get("example") else {})
         result = ""
         if method == "POST":
             try:
@@ -307,33 +649,50 @@ class App(object):
             except ValueError as exc:
                 r = {"ok": False, "error": "invalid_argument", "message": str(exc)}
             if r["ok"]:
-                result = ('<div class="card"><b>نتیجه (COMPUTED):</b> <code>%s</code> %s<br>'
-                          '<span class="note">فرمول:</span> <code>%s</code><br><span class="note">ورودی‌ها:</span> <code>%s</code>%s</div>'
-                          % (esc(r["value"]), esc(r.get("units") or ""), esc(r.get("formula")),
+                v = r["value"]
+                pretty = (('<div class="big" id="calc-value">%s</div>' % esc(fmtn(v, 6 if abs(v) < 10 else 4)))
+                          if isinstance(v, (int, float)) and not isinstance(v, bool) else
+                          value_table(v) if isinstance(v, (dict, list)) else "")
+                result = ('<div class="card result"><div class="muted">نتیجه (COMPUTED)</div>%s'
+                          '<details><summary class="note">مقدار دقیق و جزئیات</summary><p><code>%s</code> %s</p>'
+                          '<span class="note">فرمول:</span> <code>%s</code><br><span class="note">ورودی‌ها:</span> <code>%s</code>%s'
+                          '</details><button type="button" class="ghost is-hidden" data-copy="#calc-value">کپی</button></div>'
+                          % (pretty, esc(r["value"]), esc(r.get("units") or ""), esc(r.get("formula")),
                              esc(json.dumps(r.get("inputs"), ensure_ascii=False, default=str)),
                              ("<br><span class=\"note\">%s</span>" % esc(r["notes"])) if r.get("notes") else ""))
             else:
-                result = '<div class="err">امتناع: <code>%s</code> %s</div>' % (esc(r["error"]), esc(r.get("message")))
-        rows = []
+                result = '<div class="card refusal"><b>امتناع</b>: <code>%s</code> %s</div>' % (esc(r["error"]), esc(r.get("message")))
+        fields = []
         for p, spec in fn["parameters"]["properties"].items():
             t = spec.get("type")
-            val = esc(f.get(p, "")) if method == "POST" else ""
+            label, hint = CAT.PARAMS[p]
+            cur = values.get(p, "")
             if "enum" in spec:
                 ctl = '<select name="%s"><option value=""></option>%s</select>' % (esc(p), "".join(
-                    '<option%s>%s</option>' % (" selected" if f.get(p) == o else "", esc(o)) for o in spec["enum"]))
+                    '<option value="%s"%s>%s</option>' % (esc(o), " selected" if cur == o else "", esc(CAT.ENUM_FA.get(o, o)))
+                    for o in spec["enum"]))
             elif t == "boolean":
-                ctl = '<select name="%s"><option value=""></option><option>true</option><option>false</option></select>' % esc(p)
+                ctl = '<select name="%s"><option value=""></option>%s</select>' % (esc(p), "".join(
+                    '<option value="%s"%s>%s</option>' % (o, " selected" if cur == o else "", lab)
+                    for o, lab in (("true", "بله (true)"), ("false", "خیر (false)"))))
+            elif t == "array":
+                ctl = '<textarea name="%s" rows="2" dir="ltr" placeholder="اعداد را با کاما جدا کنید">%s</textarea>' % (
+                    esc(p), esc(cur))
             else:
-                ctl = '<input name="%s" value="%s" dir="ltr" size="40"%s>' % (
-                    esc(p), val, ' placeholder="اعداد را با کاما جدا کنید"' if t == "array" else "")
-            rows.append("<tr><th class=\"ltr\">%s%s</th><td>%s <span class=\"note\">%s</span></td></tr>"
-                        % (esc(p), " *" if p in req else "", ctl, esc(t)))
-        body = ('<p><a href="/calc">&larr; همهٔ ماشین‌حساب‌ها</a></p><div class="card"><h3 class="ltr">%s</h3>'
-                '<p class="ltr">%s</p><form method="post">%s<input type="hidden" name="tool" value="%s">'
-                '<table>%s</table><p class="note">* الزامی. ارقام فارسی هم پذیرفته می‌شوند (۸٫۴۰).</p>'
-                '<button>محاسبه</button></form></div>%s') % (
-            esc(name), esc(fn["description"]), self.hidden(), esc(name), "".join(rows), result)
-        return self.page("/calc", "ماشین‌حساب: " + name, body)
+                ctl = '<input name="%s" value="%s" dir="ltr" inputmode="decimal">' % (esc(p), esc(cur))
+            fields.append('<div class="field"><label>%s%s <span class="muted ltr">%s</span></label>%s<span class="hint">%s</span></div>'
+                          % (esc(label), ' <span class="req">*</span>' if p in req else "", esc(p), ctl, esc(hint)))
+        body = ('<p><a href="/calc">&larr; همهٔ فرمول‌ها</a> &middot; <span class="badge">%s</span></p>'
+                '<div class="card"><h2>%s <span class="muted ltr">%s</span></h2><hr class="rule"><p class="usage">%s</p>'
+                '<p class="note ltr">%s</p><p class="example">مثال آماده: <a href="/calc?tool=%s&amp;example=1">پر کردن فرم با '
+                'مثال</a> <span class="muted ltr">%s</span></p>'
+                '<form method="post">%s<input type="hidden" name="tool" value="%s"><div class="fields">%s</div>'
+                '<p class="note"><span class="req">*</span> الزامی؛ خانهٔ خالی یعنی مقدار پیش‌فرض. ارقام فارسی (۸٫۴۰) و '
+                'جداکنندهٔ هزارگان (۵۰٬۰۰۰) هم پذیرفته می‌شوند.</p><button>محاسبه</button></form></div>%s') % (
+            esc(CAT.category_title(cat)), esc(title), esc(name), esc(usage), esc(fn["description"]),
+            esc(urllib.parse.quote(name)), esc(json.dumps(example, ensure_ascii=False)), self.hidden(), esc(name),
+            "".join(fields), result)
+        return self.page("/calc", title, body, subtitle=usage)
 
     def p_macro(self, method, q, f):
         result = ""

@@ -190,8 +190,14 @@ def readiness(live_path: str = LIVE_POLICY, paper_path: str = PAPER_POLICY,
         "rollback plan": "DRAFTED (docs/phase-reports/phase-11.md#rollback)",
     }
     ready = all(p["met"] for p in prereq) and not unmet
-    return {"phase": 11, "ready": ready,
-            "verdict": "READY_FOR_OWNER_APPROVAL" if ready else "BLOCKED",
+    # D-0141: the owner suspended Phase 11 (no broker). A suspended phase is never ready,
+    # whatever the other checks say, and the verdict says SUSPENDED rather than BLOCKED so
+    # nobody reads "blocked" as "someone is working on unblocking it".
+    suspended = str(live.get("status", "")).startswith("SUSPENDED")
+    ready = ready and not suspended
+    return {"phase": 11, "ready": ready, "suspended": suspended,
+            "suspended_reason": live.get("suspended_reason") if suspended else None,
+            "verdict": "SUSPENDED" if suspended else ("READY_FOR_OWNER_APPROVAL" if ready else "BLOCKED"),
             "live_trading_enabled": M.live_trading_enabled(),
             "prerequisites": prereq,
             "n_met": sum(p["met"] for p in prereq), "n_total": len(prereq),
