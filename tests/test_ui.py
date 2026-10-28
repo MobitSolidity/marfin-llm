@@ -40,6 +40,7 @@ def conf(text):
 
 conf("mode = ANALYSIS_ONLY\n")
 import ui as U                                                      # noqa: E402
+import _fake_data as FD                                             # noqa: E402
 
 NOW = datetime.datetime(2026, 10, 26, 15, 0, tzinfo=datetime.timezone.utc)
 
@@ -49,6 +50,7 @@ def app(**kw):
     kw.setdefault("paper_dir", os.path.join(d, "paper"))
     kw.setdefault("ask_audit_path", os.path.join(d, "ask.jsonl"))
     kw.setdefault("clock", lambda: NOW)
+    kw.setdefault("hub", FD.hub())          # D-0141: offline data sources, never the network
     kw.setdefault("maintain", lambda: {"status": "OK", "counts": {"INFO": 1},
                                        "findings": [{"severity": "INFO", "check": "c", "subject": "s",
                                                      "message": "<b>m</b>"}]})
@@ -65,8 +67,8 @@ section("Phase 11 live policy: tighter than paper, never active, never approved 
 LIVE = json.load(open(LR.LIVE_POLICY, encoding="utf-8"))
 PAPER = json.load(open(LR.PAPER_POLICY, encoding="utf-8"))
 check_true("shipped live policy has no problems", LR.check_live_policy(LIVE, PAPER) == [], "(V)")
-check_true("live policy is a DRAFT, not approved, broker not chosen, no live account",
-           LIVE["status"] == "DRAFT_NOT_ACTIVE" and LIVE["human_approved"] is False
+check_true("live policy is SUSPENDED (owner, no broker), not approved, broker not chosen, no live account",
+           LIVE["status"] == "SUSPENDED_NO_BROKER" and LIVE["human_approved"] is False
            and LIVE["broker"] is None and LIVE["account_allowlist"] == [], "(V)")
 check_true("every live limit is at least as strict as paper",
            all(LIVE["limits"][k] <= PAPER["limits"][k] for k in LR._SMALLER_IS_STRICTER), "(V)")
@@ -132,10 +134,11 @@ for n in ("LLM cannot disengage", "AUTOMATION cannot disengage", "WEBHOOK cannot
     check_true("drill step present: %s" % n, n in names, "(V)")
 
 # ===========================================================================
-section("Phase 11 readiness: BLOCKED for the right reasons; cannot enable anything")
+section("Phase 11 readiness: SUSPENDED by the owner; still reports what is missing; cannot enable anything")
 # ===========================================================================
 R = LR.readiness(drill=D)
-check_true("verdict BLOCKED", R["verdict"] == "BLOCKED", "(V)")
+check_true("verdict SUSPENDED (owner, 2026-10-27: no broker)", R["verdict"] == "SUSPENDED"
+           and R["suspended"] is True and "no broker" in R["suspended_reason"], "(V)")
 check_true("ready is False and live_trading_enabled is False",
            R["ready"] is False and R["live_trading_enabled"] is False, "(V)")
 check("8 SYSTEM_PROMPT section 24 prerequisites", R["n_total"], 8, method="(V)")
@@ -155,6 +158,11 @@ json.dump(dict(LIVE, human_approved=True), open(p_ok, "w"))
 R2 = LR.readiness(live_path=p_ok, drill=D)
 check_true("an APPROVED live policy alone does not make it ready (broker, data, SS.6.1 still unmet)",
            R2["ready"] is False and R2["n_met"] == 4, "(A) n_met=%s" % R2["n_met"])
+p_act = os.path.join(TMP, "live_active.json")
+json.dump(dict(LIVE, human_approved=True, status="DRAFT_NOT_ACTIVE"), open(p_act, "w"))
+R4 = LR.readiness(live_path=p_act, drill=D)
+check_true("not suspended: the verdict falls back to BLOCKED (prerequisites unmet), never READY",
+           R4["verdict"] == "BLOCKED" and R4["suspended"] is False and R4["ready"] is False, "(A)")
 conf("mode = LIVE_TRADING\ni_have_approved_live_trading = yes\n")
 R3 = LR.readiness(live_path=p_ok, drill=D)
 check_true("even mode = LIVE_TRADING with the ack line: still BLOCKED, live_trading_enabled False",
@@ -180,8 +188,11 @@ check_true("every page is right-to-left Persian", 'dir="rtl"' in A.handle("GET",
 check_true("security headers: CSP default-src 'none', frames denied",
            "default-src 'none'" in A.handle("GET", "/").headers["Content-Security-Policy"]
            and A.handle("GET", "/").headers["X-Frame-Options"] == "DENY", "(V)")
-check_true("no <script> anywhere in the UI's own markup", all(
-    "<script" not in A.handle("GET", p).body for p, _ in U.NAV), "(V)")
+check_true("D-0141: exactly one script, the static file; no inline script and no inline style anywhere", all(
+    re.findall(r"<script[^>]*>", A.handle("GET", p).body) == ['<script src="/static/app.js" defer>']
+    and "</script>" in A.handle("GET", p).body and "<style" not in A.handle("GET", p).body
+    and ' style="' not in A.handle("GET", p).body and " onclick=" not in A.handle("GET", p).body.lower()
+    for p, _ in U.NAV), "(V)")
 check_true("dashboard says the model is not loaded", "بارگذاری نشده" in A.handle("GET", "/").body, "(V)")
 check_true("dashboard says live trading is disabled with 10 of 12 unmet",
            "(10 از 12" in A.handle("GET", "/").body, "(V)")
@@ -287,7 +298,8 @@ r = A.handle("POST", "/ask", form={"csrf": A.csrf, "question": "x"})
 check_true("no model: refused with the start command", "بدون مدل" in r.body and "--model" in r.body, "(A)")
 B.handle("POST", "/ask", form={"csrf": B.csrf, "question": "second"})
 r = B.handle("GET", "/ask")
-check_true("history newest first", r.body.index("second") < r.body.index("چند سهم"), "(V)")
+_turns = r.body[r.body.index('<div class="turn"'):]
+check_true("history newest first", _turns.index("second") < _turns.index("چند سهم"), "(V)")
 
 
 class Boom(object):
@@ -425,9 +437,168 @@ b = A.handle("GET", "/providers").body
 check_true("providers page never shows a key", "sk-THIS-IS-A-FAKE" not in b and "OPENAI_API_KEY" in b, "(A)")
 del os.environ["OPENAI_API_KEY"]
 b = app(readiness=lambda: R).handle("GET", "/phase11").body
-check_true("phase 11 page: BLOCKED, 3 of 8, 10 of 12, drill steps", "BLOCKED" in b and "3 از 8" in b
+check_true("phase 11 page: SUSPENDED, 3 of 8, 10 of 12, drill steps", "SUSPENDED" in b and "3 از 8" in b
            and "10 از 12" in b and "WEBHOOK cannot disengage" in b, "(V)")
 check_true("phase 11 page has no form at all (nothing to press)", "<form" not in strip(b), "(V)")
+
+# ===========================================================================
+section("D-0141: static assets, strict CSP, responsive shell")
+# ===========================================================================
+G = app()
+csp = G.handle("GET", "/").headers["Content-Security-Policy"]
+check_true("CSP forbids inline style and inline script (self only), no framing, no base override",
+           "style-src 'self'" in csp and "script-src 'self'" in csp and "'unsafe-inline'" not in csp
+           and "frame-ancestors 'none'" in csp and "base-uri 'none'" in csp, "(V) %s" % csp)
+rc, rj = G.handle("GET", "/static/app.css"), G.handle("GET", "/static/app.js")
+check_true("app.css served as text/css, app.js as text/javascript, both nosniff",
+           rc.status == 200 and rc.ctype.startswith("text/css") and rj.status == 200
+           and rj.ctype.startswith("text/javascript") and rc.headers.get("X-Content-Type-Options") == "nosniff"
+           and rj.headers.get("X-Content-Type-Options") == "nosniff", "(V)")
+check_true("app.css carries the responsive breakpoint and the dark theme",
+           "@media (max-width:900px)" in rc.body and '[data-theme="dark"]' in rc.body
+           and "prefers-color-scheme: dark" in rc.body, "(V)")
+check_true("app.js builds no markup from data (no innerHTML, no eval, no document.write)",
+           all(x not in rj.body for x in ("innerHTML", "outerHTML", "eval(", "document.write", "new Function")), "(V)")
+for bad in ("/static/../ui.py", "/static/app.py", "/static/", "/static/APP.CSS", "/static/app.css/../../VERSION"):
+    check("static path %r is not served (fixed whitelist)" % bad, G.handle("GET", bad).status, 404, method="(A)")
+check("POST to a static file needs the form token like any POST", G.handle("POST", "/static/app.css").status, 403,
+      method="(A)")
+b = G.handle("GET", "/").body
+check_true("page links the stylesheet and the deferred script, nothing inline",
+           '<link rel="stylesheet" href="/static/app.css">' in b and '<script src="/static/app.js" defer></script>' in b,
+           "(V)")
+check_true("mobile layout: a <details> menu duplicates the sidebar navigation",
+           '<details class="menu">' in b and b.count('href="/markets"') >= 2, "(V)")
+check_true("viewport meta and colour-scheme meta present", 'name="viewport"' in b and 'name="color-scheme"' in b, "(V)")
+check_true("theme toggle is a type=button (never submits a form)", 'type="button" data-theme-toggle' in b, "(V)")
+check_true("every NAV page title appears in the sidebar", all(esc_t in b for _, esc_t in U.NAV), "(V)")
+check_true("version shown from the VERSION file", "نسخهٔ %s" % U.VERSION in b and U.VERSION != "?", "(V)")
+check_true("footer says live trading is off and Phase 11 suspended", "فاز ۱۱ معلق" in b, "(V)")
+
+# ===========================================================================
+section("D-0141: calculator index -- 7 categories, every card has a usage line")
+# ===========================================================================
+idx = G.handle("GET", "/calc").body
+from tools import catalog_fa as CAT                                 # noqa: E402
+check("7 category sections", idx.count('<section class="cat"'), 7, method="(V)")
+check("85 cards", idx.count('class="tool-card"'), 85, method="(V)")
+missing_usage = [n for n, t in CAT.TOOLS.items()
+                 if '<span class="tool-usage">%s</span>' % U.esc(t[2]) not in idx]
+check_true("every card shows its one-line Persian usage under a rule line",
+           missing_usage == [] and idx.count('<span class="rule"></span>') == 85, "(V) %s" % missing_usage[:3])
+check_true("cards carry their category for the filter chips and a search text",
+           all('data-cat="%s"' % k in idx for k, _ in CAT.CATEGORIES) and idx.count("data-search=") == 85, "(V)")
+check_true("search box and chips are hidden until app.js reveals them (works without JS)",
+           'id="tool-search" class="search is-hidden"' in idx and idx.count('data-cat-chip="') == 8, "(V)")
+check_true("cards are grouped: P/E sits under valuation, RSI under technical",
+           idx.index('href="/calc?tool=pe_ratio"') > idx.index('id="cat-valuation"')
+           and idx.index('href="/calc?tool=rsi"') > idx.index('id="cat-technical"'), "(V)")
+
+# ===========================================================================
+section("D-0141: calculator page -- Persian labels, example fill, pretty result")
+# ===========================================================================
+b = G.handle("GET", "/calc", {"tool": "position_size"}).body
+check_true("Persian title, usage line and category badge shown",
+           CAT.TOOLS["position_size"][1] in b and CAT.TOOLS["position_size"][2] in b
+           and CAT.category_title("trade") in b, "(V)")
+check_true("every field labelled in Persian with its hint; required marked",
+           all(U.esc(CAT.PARAMS[p][0]) in b for p in ("account_equity", "risk_pct", "entry", "stop"))
+           and b.count('<span class="req">*</span>') >= 4, "(V)")
+check_true("without ?example the form is empty", 'name="entry" value=""' in b, "(V)")
+b = G.handle("GET", "/calc", {"tool": "position_size", "example": "1"}).body
+check_true("?example=1 pre-fills the worked example", 'name="account_equity" value="50000"' in b
+           and 'name="risk_pct" value="0.02"' in b, "(V)")
+b = G.handle("GET", "/calc", {"tool": "sma", "example": "1"}).body
+check_true("an array example is pre-filled comma-separated in a textarea",
+           '<textarea name="prices" rows="2" dir="ltr"' in b and "100, 102, 101, 105" in b, "(V)")
+b = G.handle("GET", "/calc", {"tool": "black_scholes"}).body
+check_true("enum options show Persian labels but submit the English value",
+           '<option value="call">خرید (call)</option>' in b and '<option value="put">فروش (put)</option>' in b, "(V)")
+ex_fail = [n for n in CAT.TOOLS if G.handle("GET", "/calc", {"tool": n, "example": "1"}).status != 200]
+check_true("all 85 example pages render", ex_fail == [], "(V) %s" % ex_fail)
+
+
+def calc_g(tool, **f):
+    return G.handle("POST", "/calc", form=dict(f, csrf=G.csrf, tool=tool)).body
+
+
+b = calc_g("pe_ratio", price="150", eps="8.4")
+check_true("scalar result shown large and grouped (17.8571); exact value kept in details",
+           '<div class="big" id="calc-value">17.8571</div>' in b and "<code>17.857142857142858</code>" in b, "(V)")
+b = calc_g("macd", **{k: CAT.example_text(v) for k, v in CAT.TOOLS["macd"][3].items()})
+check_true("a dict result (MACD) is a table of its parts", '<th class="ltr">macd</th>' in b
+           and '<th class="ltr">signal</th>' in b and '<th class="ltr">histogram</th>' in b, "(V)")
+b = calc_g("cash_flow_schedule", face_value="1000", coupon_rate="0.05", years_to_maturity="1")
+check_true("a list result (coupon schedule) is a table with one row per payment",
+           '<th class="ltr">coupon</th>' in b and b.count("<tr>") >= 3, "(V)")
+b = calc_g("position_size", account_equity="50000", risk_pct="0.02", entry="50", stop="50")
+check_true("a refusal is a red card, never a number", 'class="card refusal"' in b and 'id="calc-value"' not in b, "(A)")
+b = calc_g("pe_ratio", price="<b>1</b>", eps="1")
+check_true("hostile input re-shown escaped in the field", "&lt;b&gt;1&lt;/b&gt;" in b and "<b>1</b>" not in b, "(A)")
+
+# ===========================================================================
+section("D-0141: markets page -- every tab, offline, escaped, labelled")
+# ===========================================================================
+for tab, _t in U.App.MARKET_TABS:
+    r = G.handle("GET", "/markets", {"tab": tab})
+    check_true("markets tab %s renders 200 without internal error" % tab,
+               r.status == 200 and "INTERNAL ERROR" not in r.body, "(V)")
+check_true("an unknown tab falls back to the overview (no getattr on user input)",
+           'class="on">نمای کلی' in G.handle("GET", "/markets", {"tab": "__class__"}).body, "(A)")
+b = G.handle("GET", "/markets", {"tab": "overview"}).body
+check_true("overview shows the dollar fix, a policy-rate table, and SVG spark charts",
+           "1.1188" in b and "ترکیه" in b and b.count('<svg class="chart') >= 3, "(V)")
+check_true("every chart is attribute-only SVG (no style attribute, no script in SVG)",
+           ' style="' not in b and "<script" not in b.split("</head>", 1)[1], "(V)")
+check_true("source notices shown (ECB, BIS, FRED)", "European Central Bank" in b and "FRED" in b, "(V)")
+b = G.handle("GET", "/markets", {"tab": "fx", "amount": "۱۰۰", "from": "USD", "to": "JPY"}).body
+check_true("FX converter: Persian digits accepted; 100 USD = 15,744.55 JPY (COMPUTED)",
+           '<div class="big" id="fx-result">15,744.55 JPY</div>' in b and "COMPUTED" in b, "(B)")
+b = G.handle("GET", "/markets", {"tab": "fx", "amount": "1", "from": "CHF", "to": "USD"}).body
+check_true("FX converter refuses a cross from two different days", "تبدیل انجام نشد" in b
+           and 'id="fx-result"' not in b, "(A)")
+b = G.handle("GET", "/markets", {"tab": "fx", "amount": "abc", "from": "USD", "to": "JPY"}).body
+check_true("FX converter refuses a non-number amount", "تبدیل انجام نشد" in b, "(A)")
+b = G.handle("GET", "/markets", {"tab": "fx", "ccy": "<x>"}).body
+check_true("an unknown chart currency is a refusal, escaped", "&lt;x&gt;" in b and "<x>" not in b, "(A)")
+b = G.handle("GET", "/markets", {"tab": "rates"}).body
+check_true("rates tab: current banks with bars; discontinued ones folded away",
+           '<svg class="bar"' in b and "<details" in b and "آلمان" in b, "(V)")
+b = G.handle("GET", "/markets", {"tab": "us", "series": "DGS10"}).body
+check_true("US series detail: Persian title, unit, min/max/mean stats, chart",
+           "بازده اوراق ۱۰سالهٔ خزانهٔ آمریکا" in b and "Percent" in b and "میانگین" in b and '<svg class="chart' in b, "(V)")
+b = G.handle("GET", "/markets", {"tab": "us", "series": "SP500"}).body
+check_true("a series outside the catalogue is refused, not fetched", "دریافت نشد" in b, "(A)")
+b = G.handle("GET", "/markets", {"tab": "world", "c": "IR,TR,US", "ind": "FP.CPI.TOTL.ZG"}).body
+check_true("world tab: one line per country with a legend; years as columns",
+           b.count('<polyline class="m s') == 3 and 'class="legend"' in b and "2025" in b and "ایران" in b, "(V)")
+b = G.handle("GET", "/markets", {"tab": "world", "c": "ZZ,<b>", "ind": "nope"}).body
+check_true("world tab: unknown codes and an unknown indicator fall back to safe defaults (IR,US; inflation)",
+           'name="c" dir="ltr" value="IR,US"' in b and '<option value="FP.CPI.TOTL.ZG" selected>' in b, "(A)")
+b = G.handle("GET", "/markets", {"tab": "stocks", "symbol": "ibm"}).body
+check_true("stocks tab: EOD price and the END_OF_DAY label", "123.00" in b and "END_OF_DAY" in b, "(V)")
+b = G.handle("GET", "/markets", {"tab": "stocks", "symbol": "BAD"}).body
+check_true("stocks tab: a provider refusal shown, no price", "دریافت نشد" in b and 'class="big"' not in b, "(A)")
+b = G.handle("GET", "/markets", {"tab": "sources"}).body
+check_true("sources tab lists all 5 sources and why the others were excluded",
+           b.count("<tr>") >= 6 and "TradingView" in b and "Twelve Data" in b, "(V)")
+import _fake_data as _FD                                            # noqa: E402
+_n = len(_FD.CALLS)
+H2 = app()
+for tab, _t in U.App.MARKET_TABS:
+    H2.handle("GET", "/markets", {"tab": tab})
+_n2 = len(_FD.CALLS)
+for tab, _t in U.App.MARKET_TABS:
+    H2.handle("GET", "/markets", {"tab": tab})
+check("a second pass over every tab is served from the hub's memory cache", len(_FD.CALLS) - _n2, 0, method="(V)")
+
+# ===========================================================================
+section("D-0141: ask page -- example chips, busy state")
+# ===========================================================================
+b = app(assistant=FakeBot(), model_label="m").handle("GET", "/ask").body
+check_true("4 example chips fill the textarea (hidden until app.js loads)",
+           b.count('data-target="#q" data-fill=') == 4 and 'class="chip is-hidden"' in b, "(V)")
+check_true("the ask form shows a busy state and blocks double submit", 'data-busy="' in b, "(V)")
 
 # ===========================================================================
 section("UI: real loopback HTTP round-trip and CLI refusals")

@@ -320,8 +320,8 @@
   "next_phase": null,
   "next_phase_name": "Phase 11 STARTED on request (D-0140), BLOCKED: 3/8 prerequisites; waits on owner (broker, licensed real-time data, live-policy approval)",
   "next_phase_viable_in_sandbox": false,
-  "next_phase_note": "D-0140: web UI scripts/ui.py; Phase 11 readiness gate BLOCKED; ECB cancelled; benchmark 2026-10-25 is the baseline.",
-  "last_updated": "2026-10-26",
+  "next_phase_note": "D-0141: Phase 11 SUSPENDED (no broker); multi-source data hub; redesigned UI; Persian formula catalogue; release 0.13.0.",
+  "last_updated": "2026-10-27",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -818,8 +818,9 @@
   },
   "awaiting_user_action": [
     "benchmark refresh by 2026-12-24 (PHASE8_CONFIRM_RUN_FA.md)",
-    "Phase 11: choose a broker (sanctions eligibility UNVERIFIED) and a licensed real-time data source; review/approve configs/live-policy.json",
-    "try the web UI on the i5-12400: python scripts\\ui.py --model ... (docs/guides/ui-fa.md)",
+    "try release 0.13.0 on the i5-12400: python scripts\\ui.py --model ... ; markets and formulas pages (docs/guides/ui-fa.md)",
+    "optional: set ALPHAVANTAGE_API_KEY for the stocks tab (free tier, end of day, 25 requests/day)",
+    "Phase 11 SUSPENDED (owner, 2026-10-27: no broker); resume only on the owner's request after choosing a broker",
     "ECB paper permission CANCELLED (owner, 2026-10-26); IMF closed (CCC unavailable under sanctions)"
   ],
   "phase_4": {
@@ -3204,8 +3205,45 @@
   },
   "phase_11": {
     "name": "Live-Trading Enablement",
-    "status": "STARTED_ON_OWNER_REQUEST_2026_10_26_BLOCKED",
+    "status": "SUSPENDED_NO_BROKER_2026_10_27",
     "live_trading_enabled": false,
-    "report": "docs/phase-reports/phase-11.md"
+    "report": "docs/phase-reports/phase-11.md",
+    "suspended_on": "2026-10-27",
+    "suspended_reason": "owner: no broker for now"
+  },
+  "D-0141_suspend_phase11_datahub_ui_catalogue_2026_10_27": {
+    "phase_11": "SUSPENDED_NO_BROKER (configs/live-policy.json; readiness verdict SUSPENDED)",
+    "data_sources": {
+      "ecb_exr": "29 currencies, daily reference rates per EUR (MEASURED 2026-10-27)",
+      "bis_ws_cbpol": "49 areas in one call, 37 current; stale (>400 days) flagged",
+      "fred": [
+        "DGS2",
+        "DGS10",
+        "DGS30",
+        "T10Y2Y",
+        "DCOILWTICO",
+        "DCOILBRENTEU",
+        "DHHNGSP",
+        "DTWEXBGS"
+      ],
+      "fred_excluded": "SP500 (copyright notice in series notes)",
+      "world_bank": "10 indicators, 58 catalogue countries",
+      "alpha_vantage": "free tier, END_OF_DAY, 25 requests/day, ALPHAVANTAGE_API_KEY",
+      "excluded": [
+        "Twelve Data (paid, declined)",
+        "TradingView (prohibited)",
+        "Stooq (terms unreadable)"
+      ],
+      "rules": "cross rates only from same-day fixes; in-memory cache 600 s; one retry for transient errors; missing values skipped"
+    },
+    "ui": "responsive sidebar + mobile menu, dark mode, strict CSP with static app.css/app.js, SVG charts, markets page (7 tabs)",
+    "catalogue": "src/tools/catalog_fa.py: 85 tools in 7 categories, Persian title + usage line + runnable example; 115 parameter labels",
+    "tests": {
+      "test_datahub": 91,
+      "mutate_datahub": "47/47",
+      "mutate_ui": "38/38",
+      "run_all_suites": 29
+    },
+    "release": "0.13.0"
   }
 }

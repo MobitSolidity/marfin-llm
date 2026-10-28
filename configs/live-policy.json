@@ -2,7 +2,7 @@
   "version": 1,
   "decision": "D-0140",
   "environment": "LIVE",
-  "status": "DRAFT_NOT_ACTIVE",
+  "status": "SUSPENDED_NO_BROKER",
   "human_approved": false,
   "requested_by_owner_on": "2026-10-26",
   "drafted_by": "assistant (D-0140); every number below is an ESTIMATED proposal for the owner to change or approve",
@@ -10,7 +10,10 @@
   "broker_note": "Not chosen. The owner must name a broker; whether it accepts the owner's jurisdiction under sanctions is UNVERIFIED until the broker itself confirms it in writing.",
   "account_allowlist": [],
   "limits": {
-    "instrument_allowlist": ["AAPL", "MSFT"],
+    "instrument_allowlist": [
+      "AAPL",
+      "MSFT"
+    ],
     "max_order_notional": 1000.0,
     "max_daily_notional": 3000.0,
     "max_position_qty": 50.0,
@@ -25,5 +28,7 @@
   },
   "per_order_confirmation": "ALWAYS",
   "automation_policy": null,
-  "rollback_plan": "docs/phase-reports/phase-11.md#rollback"
+  "rollback_plan": "docs/phase-reports/phase-11.md#rollback",
+  "suspended_on": "2026-10-27",
+  "suspended_reason": "Owner (2026-10-27): no broker for now; Phase 11 is suspended. Nothing here is active; resuming needs an explicit owner request plus a chosen broker."
 }

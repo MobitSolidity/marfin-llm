@@ -384,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.12.0 (D-0140: web UI and the Phase 11 readiness gate; a MINOR bump for a new feature)", REL.read_version() == "0.12.0", "(V)")
+check_true("VERSION file is 0.13.0 (D-0141: multi-source market data, redesigned UI, Persian formula catalogue; a MINOR bump for new features)", REL.read_version() == "0.13.0", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -547,6 +547,10 @@ _m120 = {r["version"]: r for r in _chain}.get("0.12.0", {})
 check_true("0.12.0 pins ui.py, live_readiness.py and live-policy.json (D-0140)",
            {"scripts/ui.py", "src/execution/live_readiness.py", "configs/live-policy.json"}
            <= set(_m120.get("files", {})), "(V)")
+_m130 = {r["version"]: r for r in _chain}.get("0.13.0", {})
+check_true("0.13.0 pins the data hub, its ECB/World Bank clients, the formula catalogue and the UI assets (D-0141)",
+           {"src/rag/datahub.py", "src/rag/ecb_stats.py", "src/rag/worldbank.py", "src/tools/catalog_fa.py",
+            "scripts/ui_assets/app.css", "scripts/ui_assets/app.js"} <= set(_m130.get("files", {})), "(V)")
 check_true("release history is 0.10.0, 0.10.1, 0.10.2, ... with no gaps or reuse",
            [r["version"] for r in _chain][:3] == ["0.10.0", "0.10.1", "0.10.2"]
            and len({r["version"] for r in _chain}) == len(_chain), "(V)")
