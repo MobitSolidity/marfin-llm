@@ -384,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.13.0 (D-0141: multi-source market data, redesigned UI, Persian formula catalogue; a MINOR bump for new features)", REL.read_version() == "0.13.0", "(V)")
+check_true("VERSION file is 0.14.0 (D-0142: providers manager with online/offline engine, crypto/forex/US-stock data, brand assets; a MINOR bump for new features)", REL.read_version() == "0.14.0", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -551,6 +551,11 @@ _m130 = {r["version"]: r for r in _chain}.get("0.13.0", {})
 check_true("0.13.0 pins the data hub, its ECB/World Bank clients, the formula catalogue and the UI assets (D-0141)",
            {"src/rag/datahub.py", "src/rag/ecb_stats.py", "src/rag/worldbank.py", "src/tools/catalog_fa.py",
             "scripts/ui_assets/app.css", "scripts/ui_assets/app.js"} <= set(_m130.get("files", {})), "(V)")
+_m140 = {r["version"]: r for r in _chain}.get("0.14.0", {})
+check_true("0.14.0 pins the provider settings store, the no-redirect client, the CoinGecko/AV/SEC clients and the logo (D-0142)",
+           {"src/llm/providers.py", "src/llm/clients.py", "src/llm/settings.py", "src/market/coingecko.py",
+            "src/market/av_markets.py", "src/rag/sec_facts.py", "assets/brand/logo.svg", "assets/brand/favicon.svg"}
+           <= set(_m140.get("files", {})), "(V)")
 check_true("release history is 0.10.0, 0.10.1, 0.10.2, ... with no gaps or reuse",
            [r["version"] for r in _chain][:3] == ["0.10.0", "0.10.1", "0.10.2"]
            and len({r["version"] for r in _chain}) == len(_chain), "(V)")

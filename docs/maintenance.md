@@ -33,7 +33,7 @@ Each limit is inclusive: exactly 90 days is still OK.
 | Regression tests | before every release; after any dependency change; after any edit to a pinned file | `bash tests/run_all.sh --mutate` (must be ALL GREEN with 0 skipped, 0 survivors; run it from a committed tree) |
 | Source refresh | every 90 days per source | re-run the probe recorded in each source's `verified_status` (TradingView: `tools/verify_tradingview_terms.py`); then update `verified_on` in `src/rag/sources.py` |
 | Index update | whenever the corpus changes | RAG suite and battery green, then `--record-index` |
-| Benchmark refresh | every 60 days; after a model, prompt or runtime change | on the i5-12400: `PHASE8_CONFIRM_RUN_FA.md`, then `--record-baseline` from the new verdict |
+| Benchmark refresh | every 60 days; after a model, prompt or runtime change | on the i5-12400: `docs/runbooks/PHASE8_CONFIRM_RUN_FA.md`, then `--record-baseline` from the new verdict |
 | Stale-data alerts | on every quote used | `monitor.check_quotes` (limit `max_quote_age_s` = 5 s; END_OF_DAY/DELAYED always flagged) |
 | Dependency monitoring | every 90 days | `pip show` on the target; update `releases/dependencies.lock.json` (llama-cpp-python's version is recorded only there) |
 | Licence monitoring | every 120 days; on any registry change | `python3 tools/build_licenses.py > LICENSES.md`; re-review `docs/legal/*` |

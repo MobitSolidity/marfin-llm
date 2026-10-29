@@ -61,6 +61,7 @@ import json
 import os
 import secrets
 import sys
+import re
 import urllib.parse
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -78,6 +79,9 @@ from tools import registry as REG                              # noqa: E402
 from calc.persian_num import parse_number                      # noqa: E402
 from rag import datahub as DH                                  # noqa: E402
 from tools import catalog_fa as CAT                            # noqa: E402
+from llm import settings as PS                                 # noqa: E402
+from llm import providers as LP                                # noqa: E402
+from llm import clients as LC                                  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -98,8 +102,12 @@ NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"
 #: taken from the request), so the Content-Security-Policy can forbid inline styles and
 #: inline scripts entirely.
 ASSET_DIR = os.path.join(_HERE, "ui_assets")
+BRAND_DIR = os.path.join(_ROOT, "assets", "brand")
 STATIC = {"/static/app.css": ("app.css", "text/css; charset=utf-8"),
-          "/static/app.js": ("app.js", "text/javascript; charset=utf-8")}
+          "/static/app.js": ("app.js", "text/javascript; charset=utf-8"),
+          # D-0142: the logo has ONE source (assets/brand/), shared with the README.
+          "/static/logo.svg": (os.path.join(BRAND_DIR, "logo.svg"), "image/svg+xml; charset=utf-8"),
+          "/static/favicon.svg": (os.path.join(BRAND_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8")}
 CSP = ("default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; "
        "form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 try:
@@ -277,8 +285,23 @@ class App(object):
     """
 
     def __init__(self, assistant=None, paper_dir=PAPER_DIR, ask_audit_path=ASK.DEFAULT_AUDIT,
-                 macro_fetch=None, clock=_now, model_label=None, readiness=None, maintain=None, hub=None):
+                 macro_fetch=None, clock=_now, model_label=None, readiness=None, maintain=None, hub=None,
+                 settings_path=PS.DEFAULT_PATH, remote_factory=None, lister=None):
         self.assistant = assistant
+        # D-0142: provider settings (~/.marfin/providers.json; never a key). A bad file is
+        # REPORTED on the providers page and the defaults (local engine) are used -- the
+        # file itself is left untouched so nothing the owner entered is thrown away.
+        self.settings_path = settings_path
+        self.settings_error = None
+        try:
+            self.settings = PS.load(settings_path)
+            PS.apply(self.settings)
+        except (PS.SettingsError, LP.ProviderError) as exc:
+            self.settings, self.settings_error = PS.defaults(), str(exc)
+        self._remote_factory = remote_factory or (lambda app: app._build_remote())
+        self._lister = lister or LC.list_models
+        self._remote = None                     # (settings fingerprint, assistant, label)
+        self._audit = None
         self.hub = hub or DH.DataHub()
         self.csrf = secrets.token_urlsafe(24)
         self.paper_dir = paper_dir
@@ -292,6 +315,50 @@ class App(object):
         self.history = []                       # answered turns this session, newest last
 
     # -- infrastructure ------------------------------------------------------
+    def audit(self):
+        """
+        ONE AuditLog for every engine. MEASURED 2026-10-28: two AuditLog objects on the same
+        file break the hash chain ("line 2 does not chain to line 1"), so the online engine
+        shares the local assistant's log instead of opening its own.
+        """
+        if self.assistant is not None and getattr(self.assistant, "audit", None) is not None:
+            return self.assistant.audit
+        if self._audit is None:
+            self._audit = ASK.open_audit(self.ask_audit_path)
+        return self._audit
+
+    def remote_label(self):
+        act = self.settings["active"]
+        if not act.get("provider"):
+            return None
+        eff = PS.effective(self.settings, act["provider"])
+        return "%s: %s" % (act["provider"], eff["model_id"] or "?")
+
+    def _build_remote(self):
+        """The online Assistant from the saved settings. Raises ProviderError/ValueError as refusals."""
+        act = self.settings["active"]
+        prov = act.get("provider")
+        if not prov:
+            raise LP.ProviderError("no online provider is selected; choose one on the providers page")
+        eff = PS.effective(self.settings, prov)
+        if not eff["model_id"]:
+            raise LP.ProviderError("no model id for %s; enter one on the providers page" % prov)
+        runner = ASK.RP.RemoteRunner(prov, eff["model_id"], max_tokens=ASK.RP.DEFAULT_MAX_TOKENS,
+                                     base_url=eff["base_url"], allow_paid=bool(act.get("allow_paid")))
+        local = self.assistant
+        index = local.index if local is not None else ASK.build_index_from(ASK.DEFAULT_CORPUS)
+        use_macro = local.use_macro if local is not None else True
+        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro),
+                "%s: %s" % (prov, eff["model_id"]))
+
+    def remote_assistant(self):
+        key = json.dumps([self.settings["active"], self.settings["overrides"], self.settings["custom"]],
+                         sort_keys=True)
+        if self._remote is None or self._remote[0] != key:
+            bot, label = self._remote_factory(self)
+            self._remote = (key, bot, label)
+        return self._remote[1], self._remote[2]
+
     def engine(self):
         if self._engine is None:
             rp = json.load(open(LR.PAPER_POLICY, encoding="utf-8"))
@@ -306,9 +373,10 @@ class App(object):
         doc = ('<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
                '<meta name="viewport" content="width=device-width,initial-scale=1">'
                '<meta name="color-scheme" content="light dark">'
-               '<title>%s - marfin-llm</title><link rel="stylesheet" href="/static/app.css">'
+               '<title>%s - marfin-llm</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
+               '<link rel="stylesheet" href="/static/app.css">'
                '<script src="/static/app.js" defer></script></head><body><div class="shell">'
-               '<aside class="side"><a class="brand" href="/"><span class="logo">m</span><span>marfin<b>llm</b></span></a>'
+               '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/logo.svg" alt="" width="36" height="36"><span>marfin<b>llm</b></span></a>'
                '<nav class="nav">%s</nav><div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
                '<div class="main"><header class="top"><details class="menu"><summary>منو</summary>'
                '<nav class="nav nav-m">%s</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
@@ -324,7 +392,7 @@ class App(object):
 
     def static(self, path):
         name, ctype = STATIC[path]
-        with open(os.path.join(ASSET_DIR, name), encoding="utf-8") as fh:
+        with open(name if os.path.isabs(name) else os.path.join(ASSET_DIR, name), encoding="utf-8") as fh:
             return Response(200, fh.read(), ctype, headers={"X-Content-Type-Options": "nosniff",
                                                             "Content-Security-Policy": CSP})
 
@@ -369,7 +437,7 @@ class App(object):
              % (unmet, total)),
             ("مدل زبانی", model, "صفحهٔ «پرسش» به مدل نیاز دارد" if not self.assistant else "محلی، بدون اینترنت"),
             ("فرمول‌ها", "%d" % len(REG.tool_names()), "%d دسته، هر کدام با آموزش کوتاه" % len(CAT.CATEGORIES)),
-            ("منابع داده", "%d" % len(DH.SOURCES_FA), "ECB، BIS، FRED، بانک جهانی، Alpha Vantage"),
+            ("منابع داده", "%d" % len(DH.SOURCES_FA), "ECB، BIS، FRED، بانک جهانی، Alpha Vantage، CoinGecko، SEC"),
             ("کلید FRED", '<span class="ok">تنظیم شده</span>' if os.environ.get("FRED_API_KEY")
              else '<span class="due">تنظیم نشده</span>', "اوراق، نفت، گاز و شاخص دلار به آن نیاز دارند"),
         ]
@@ -390,8 +458,9 @@ class App(object):
         return self.page("/", "داشبورد", body, subtitle="همه چیز روی همین رایانه اجرا می‌شود؛ هیچ پرسشی بیرون نمی‌رود.")
 
     # -- markets (D-0141) ------------------------------------------------------------------
-    MARKET_TABS = (("overview", "نمای کلی"), ("fx", "ارزها"), ("rates", "نرخ بهرهٔ بانک‌های مرکزی"),
-                   ("us", "اوراق و کالا"), ("world", "اقتصاد کشورها"), ("stocks", "سهام"), ("sources", "منابع"))
+    MARKET_TABS = (("overview", "نمای کلی"), ("crypto", "رمزارزها"), ("forex", "فارکس"), ("stocks", "سهام آمریکا"),
+                   ("fx", "نرخ مرجع ارزها"), ("rates", "نرخ بهرهٔ بانک‌های مرکزی"), ("us", "اوراق و کالا"),
+                   ("world", "اقتصاد کشورها"), ("sources", "منابع"))
 
     def _try(self, fn):
         try:
@@ -451,6 +520,9 @@ class App(object):
         pr, err = self._try(self.hub.policy_rates)
         out.append('<div class="card"><h2>بالاترین نرخ‌های بهرهٔ سیاستی</h2>%s%s<a href="/markets?tab=rates">همهٔ بانک‌های '
                    'مرکزی &larr;</a></div>' % (err or self._rates_table(pr, limit=8), notices_html(pr["notices"]) if pr else ""))
+        cr, err = self._try(lambda: self.hub.crypto("usd", 50))
+        out.append('<div class="card"><h2>رمزارزهای بزرگ</h2>%s%s<a href="/markets?tab=crypto">۵۰ رمزارز بزرگ و نمودار &larr;</a>'
+                   '</div>' % (err or self._crypto_table(cr, limit=6, compact=True), self._attrib(cr) if cr else ""))
         out.append("</div>")
         board = self.hub.fred_board(30)
         out.append('<h2>اوراق خزانه، نفت، گاز و دلار آمریکا</h2><div class="grid g3">%s</div>' % "".join(
@@ -553,22 +625,159 @@ class App(object):
                        % (esc(w["title_fa"]), esc(ind), esc(w["unit"]), chart, legend, table, esc(w["note"]),
                           notices_html(w["notices"])))
 
-    def _mk_stocks(self, q):
-        sym = (q.get("symbol") or "").strip()
-        form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="stocks">'
-                '<div class="form-row"><label>نماد سهم (مثلاً IBM یا AAPL)<input name="symbol" dir="ltr" value="%s"></label>'
-                '<button>دریافت قیمت پایانی</button></div><p class="note">Alpha Vantage رایگان: فقط قیمت پایانی روز، ۲۵ درخواست در روز، '
-                'به کلید <code>ALPHAVANTAGE_API_KEY</code> نیاز دارد. قیمت لحظه‌ای در نسخهٔ رایگان از نظر مقررات مجاز نیست.</p></form>'
-                ) % esc(sym)
-        if not sym:
+    # -- D-0142: crypto, forex pairs, US stocks ------------------------------------------
+    @staticmethod
+    def _chg(v):
+        if v is None:
+            return '<span class="muted">\u2014</span>'
+        return '<span class="chg %s">%s%s%%</span>' % ("up" if v > 0 else ("down" if v < 0 else ""),
+                                                      "+" if v > 0 else "", esc("%.2f" % v))
+
+    @staticmethod
+    def _attrib(data):
+        """CoinGecko API terms §4: 'Powered by CoinGecko', prominent and legible (CSS keeps it >= 10pt)."""
+        return '<p class="attrib ltr">%s</p>' % " &middot; ".join(esc(n) for n in (data or {}).get("notices") or ())
+
+    def _crypto_table(self, cr, limit=None, compact=False):
+        rows = cr["rows"][:limit] if limit else cr["rows"]
+        vs = cr["vs"].upper()
+        head = ('<tr><th class="num">#</th><th>نام</th><th class="num">قیمت (%s)</th><th class="num">۲۴ ساعت</th>%s</tr>'
+                % (esc(vs), "" if compact else '<th class="num">۷ روز</th><th class="num">ارزش بازار</th>'
+                                                '<th class="num">حجم ۲۴ ساعت</th>'))
+        body = "".join(
+            '<tr><td class="num">%s</td><td><a href="/markets?tab=crypto&amp;coin=%s&amp;vs=%s"><b class="ltr">%s</b></a> '
+            '<span class="muted">%s</span></td><td class="num">%s</td><td class="num">%s</td>%s</tr>' % (
+                esc(r["rank"] or "\u2014"), esc(urllib.parse.quote(r["id"])), esc(cr["vs"]), esc(r["symbol"]), esc(r["name"]),
+                esc(fmtn(r["price"])), self._chg(r["change_24h"]),
+                "" if compact else '<td class="num">%s</td><td class="num">%s</td><td class="num">%s</td>' % (
+                    self._chg(r["change_7d"]), esc(fmtn(r["market_cap"])), esc(fmtn(r["volume"]))))
+            for r in rows)
+        return '<div class="tbl"><table>%s%s</table></div>' % (head, body)
+
+    def _mk_crypto(self, q):
+        from market import coingecko as _cg
+        vs = (q.get("vs") or "usd").strip().lower()
+        if vs not in _cg.VS_CURRENCIES:
+            vs = "usd"
+        coin = (q.get("coin") or "").strip().lower()
+        out = []
+        g, err = self._try(self.hub.crypto_global)
+        if err:
+            out.append(err)
+        else:
+            out.append('<div class="stats">%s</div>' % "".join(
+                '<div class="stat"><div class="k">%s</div><div class="v ltr">%s</div><div class="d">%s</div></div>' % (k, v, d)
+                for k, v, d in (
+                    ("ارزش کل بازار", esc(fmtn(g["total_market_cap_usd"])) + " $", "تغییر ۲۴ ساعت: " + self._chg(g["change_24h"])),
+                    ("حجم معاملات ۲۴ ساعت", esc(fmtn(g["total_volume_usd"])) + " $", "همهٔ صرافی‌های پوشش‌داده‌شده"),
+                    ("سهم بیت‌کوین", esc("%.2f%%" % g["btc_dominance"]) if g["btc_dominance"] is not None else "\u2014",
+                     "اتریوم: " + (esc("%.2f%%" % g["eth_dominance"]) if g["eth_dominance"] is not None else "\u2014")),
+                    ("رمزارزهای فعال", esc(fmtn(g["active"])), "به‌روزرسانی: " + esc(g["updated"] or "\u2014")))))
+        if coin:
+            ch, err = self._try(lambda: self.hub.crypto_chart(coin, vs, 90))
+            if err:
+                out.append(err)
+            else:
+                pts = ch["points"]
+                first, last = pts[0]["value"], pts[-1]["value"]
+                out.append('<div class="card"><h2 class="ltr">%s / %s</h2><div class="big">%s</div><p class="note">%s &middot; '
+                           'تغییر در ۹۰ روز (COMPUTED): %s</p>%s<p class="note ltr">%s</p></div>' % (
+                               esc(coin), esc(vs.upper()), esc(fmtn(last)), esc(pts[-1]["date"]),
+                               self._chg((last / first - 1.0) * 100.0 if first else None),
+                               svg_line([(p["date"], p["value"]) for p in pts], h=240, label=coin), esc(ch["label"])))
+        chips = "".join('<a class="chip%s" href="/markets?tab=crypto&amp;vs=%s">%s</a>' % (
+            " on" if v == vs else "", v, v.upper()) for v in _cg.VS_CURRENCIES)
+        cr, err = self._try(lambda: self.hub.crypto(vs, 50))
+        out.append('<div class="card"><h2>۵۰ رمزارز بزرگ بر اساس ارزش بازار</h2><div class="chips">%s</div>%s%s%s</div>' % (
+            chips, err or self._crypto_table(cr), ('<p class="note">%s</p>' % esc(cr["note"])) if cr else "",
+            self._attrib(cr) if cr else self._attrib({"notices": DH.required_notices(["coingecko"])})))
+        return "".join(out)
+
+    def _mk_forex(self, q):
+        from market import av_markets as _avm
+        frm, to = (q.get("from") or "").strip().upper(), (q.get("to") or "").strip().upper()
+        chips = "".join('<a class="chip%s" href="/markets?tab=forex&amp;from=%s&amp;to=%s">%s/%s</a>' % (
+            " on" if (a, b) == (frm, to) else "", a, b, a, b) for a, b in _avm.MAJOR_PAIRS)
+        form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="forex">'
+                '<h2>جفت‌ارز</h2><div class="chips">%s</div><div class="form-row"><label>ارز پایه<input name="from" dir="ltr" '
+                'maxlength="3" value="%s" placeholder="EUR"></label><label>ارز مظنه<input name="to" dir="ltr" maxlength="3" '
+                'value="%s" placeholder="USD"></label><button>نمایش</button></div><p class="note">Alpha Vantage رایگان '
+                '(FX_DAILY): نرخ روزانه؛ هر جفت یک درخواست از سهمیهٔ ۲۵تایی روزانه. تا جفتی را انتخاب نکنید چیزی دریافت '
+                'نمی‌شود. برای ۲۹ نرخ مرجع رسمی بدون سهمیه، زبانهٔ <a href="/markets?tab=fx">نرخ مرجع ارزها</a> را ببینید.'
+                '</p></form>') % (chips, esc(frm), esc(to))
+        if not (frm or to):
             return form
-        s, err = self._try(lambda: self.hub.stock(sym))
+        p, err = self._try(lambda: self.hub.fx_pair(frm, to))
         if err:
             return form + err
-        return form + ('<div class="card"><h2 class="ltr">%s</h2><div class="big">%s</div><p class="note">%s &middot; %s</p>%s'
-                       '<p class="note ltr">%s</p></div>') % (
-            esc(s["symbol"]), esc(fmtn(s["last"]["value"])), esc(s["last"]["date"]), esc(s["note"]),
-            svg_line([(p["date"], p["value"]) for p in s["points"]], h=240, label=s["symbol"]), esc(s["label"]))
+        last, rows = p["last"], p["rows"]
+        table = "".join('<tr><td class="num">%s</td><td class="num">%s</td><td class="num">%s</td><td class="num">%s</td>'
+                        '<td class="num">%s</td></tr>' % (esc(r["date"]), esc(fmtn(r["open"], 5)), esc(fmtn(r["high"], 5)),
+                                                          esc(fmtn(r["low"], 5)), esc(fmtn(r["close"], 5)))
+                        for r in reversed(rows[-10:]))
+        return form + ('<div class="card"><h2 class="ltr">%s/%s</h2><div class="big">%s</div><p class="note">بسته شدن %s '
+                       '&middot; تغییر روزانه: %s &middot; %s</p>%s<div class="tbl"><table><tr><th class="num">تاریخ</th>'
+                       '<th class="num">باز شدن</th><th class="num">بیشترین</th><th class="num">کمترین</th>'
+                       '<th class="num">بسته شدن</th></tr>%s</table></div><p class="note ltr">%s</p></div>') % (
+            esc(p["from"]), esc(p["to"]), esc(fmtn(last["close"], 5)), esc(last["date"]), self._chg(p["change_pct"]),
+            esc(p["note"]), svg_line([(r["date"], r["close"]) for r in rows], h=240, label="%s/%s" % (p["from"], p["to"])),
+            table, esc(p["label"]))
+
+    def _fundamentals_card(self, t):
+        fu, err = self._try(lambda: self.hub.fundamentals(t))
+        if err:
+            return ('<div class="card"><h2>صورت‌های مالی سالانه (SEC)</h2>%s<p class="note">برای این بخش ایمیل تماس را در '
+                    '<code>SEC_CONTACT_EMAIL</code> بگذارید؛ SEC بدون آن درخواست را رد می‌کند.</p></div>') % err
+        years = sorted({p["fy_end"] for m in fu["metrics"] for p in m["points"]})[-5:]
+        head = "".join('<th class="num">%s</th>' % esc(y[:4] + "/" + y[5:7]) for y in years)
+        rows = []
+        for m in fu["metrics"]:
+            by = {p["fy_end"]: p["value"] for p in m["points"]}
+            if not by:
+                continue
+            rows.append('<tr><th>%s <span class="muted ltr">%s</span></th>%s</tr>' % (
+                esc(m["title_fa"]), esc(m["unit"]),
+                "".join('<td class="num">%s</td>' % esc(fmtn(by.get(y))) for y in years)))
+        return ('<div class="card"><h2>صورت‌های مالی سالانه: <span class="ltr">%s</span></h2><p class="muted">پایان سال مالی '
+                '(سال/ماه)</p><div class="tbl"><table><tr><th>شاخص</th>%s</tr>%s</table></div><p class="note">%s</p>'
+                '<p class="note ltr">%s &middot; CIK %s</p></div>') % (
+            esc(fu["name"]), head, "".join(rows), esc(fu["note"]), esc(fu["label"]), esc(fu["cik"]))
+
+    def _mk_stocks(self, q):
+        sym = (q.get("symbol") or "").strip()
+        kw = (q.get("q") or "").strip()
+        form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="stocks">'
+                '<div class="form-row"><label>نماد سهم (مثلاً IBM یا AAPL)<input name="symbol" dir="ltr" value="%s"></label>'
+                '<button>نمایش</button></div><p class="note">قیمت: Alpha Vantage رایگان، فقط قیمت پایانی روز، ۲۵ درخواست در '
+                'روز، با کلید <code>ALPHAVANTAGE_API_KEY</code> (قیمت لحظه‌ای در نسخهٔ رایگان از نظر مقررات مجاز نیست). '
+                'صورت‌های مالی: SEC EDGAR، رسمی و رایگان.</p></form>'
+                '<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="stocks">'
+                '<div class="form-row"><label>جست‌وجوی نماد با نام شرکت<input name="q" dir="ltr" value="%s" '
+                'placeholder="microsoft"></label><button class="ghost">جست‌وجو</button></div></form>') % (esc(sym), esc(kw))
+        out = [form]
+        if kw:
+            res, err = self._try(lambda: self.hub.search(kw))
+            out.append(err or ('<div class="card"><h2>نتیجهٔ جست‌وجو</h2><div class="tbl"><table><tr><th>نماد</th><th>نام</th>'
+                               '<th>نوع</th><th>منطقه</th><th>ارز</th></tr>%s</table></div></div>') % ("".join(
+                '<tr><td class="ltr"><a href="/markets?tab=stocks&amp;symbol=%s">%s</a></td><td class="ltr">%s</td><td>%s</td>'
+                '<td>%s</td><td class="ltr">%s</td></tr>' % (esc(urllib.parse.quote(r["symbol"])), esc(r["symbol"]),
+                                                            esc(r["name"]), esc(r["type"]), esc(r["region"]), esc(r["currency"]))
+                for r in res) or '<tr><td colspan="5" class="muted">نتیجه‌ای پیدا نشد.</td></tr>'))
+        if not sym:
+            return "".join(out)
+        s, err = self._try(lambda: self.hub.stock(sym))
+        if err:
+            out.append(err)
+        else:
+            pts = s["points"]
+            chg = ((pts[-1]["value"] / pts[-2]["value"] - 1.0) * 100.0) if len(pts) > 1 and pts[-2]["value"] else None
+            out.append(('<div class="card"><h2 class="ltr">%s</h2><div class="big">%s</div><p class="note">%s &middot; تغییر '
+                        'روزانه (COMPUTED): %s &middot; %s</p>%s<p class="note ltr">%s</p></div>') % (
+                esc(s["symbol"]), esc(fmtn(s["last"]["value"])), esc(s["last"]["date"]), self._chg(chg), esc(s["note"]),
+                svg_line([(p["date"], p["value"]) for p in pts], h=240, label=s["symbol"]), esc(s["label"])))
+        if re.match(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$", sym):
+            out.append(self._fundamentals_card(sym))
+        return "".join(out)
 
     def _mk_sources(self, q):
         rows = "".join('<tr><td>%s</td><td>%s</td><td>%s</td><td class="ltr">%s</td></tr>' % (
@@ -577,32 +786,62 @@ class App(object):
                 'استفادهٔ ماشینی هم داشته باشد؛ پس برای هر نوع دارایی قوی‌ترین منبع مجاز انتخاب شده و همه کنار هم کار می‌کنند.</p>'
                 '<div class="tbl"><table><tr><th>منبع</th><th>چه می‌دهد</th><th>نیاز</th><th>کلید ثبت</th></tr>%s</table></div>'
                 '<p class="note">کنار گذاشته‌شده‌ها: Twelve Data (پولی)، TradingView (شرایطش استفادهٔ ماشینی را منع می‌کند)، '
-                'Stooq (شرایطش خوانا نبود)، بازار ایران (به تصمیم مالک خارج از محدوده). داده‌ها روی دیسک ذخیره نمی‌شوند و '
-                'فقط %d دقیقه در حافظه می‌مانند.</p></div>') % (rows, int(DH.CACHE_TTL_S // 60))
+                'Stooq (شرایطش خوانا نبود)، Kraken (شرایطش ساکنان ایران را مستثنا می‌کند)، Binance (صفحهٔ شرایطش بررسی‌پذیر '
+                'نبود)، بازار ایران (به تصمیم مالک خارج از محدوده). داده‌ها روی دیسک ذخیره نمی‌شوند و فقط %d دقیقه در حافظه '
+                'می‌مانند.</p>%s</div>') % (rows, int(DH.CACHE_TTL_S // 60),
+                                            self._attrib({"notices": DH.required_notices(["coingecko"])}))
 
     def p_ask(self, method, q, f):
         body = ""
-        if self.assistant is None:
-            body += ('<div class="warn">مدل بارگذاری نشده است. سرور را این‌طور اجرا کنید:<pre>python scripts\\ui.py '
-                     '--model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf</pre>بقیهٔ صفحه‌ها بدون مدل کار می‌کنند.</div>')
+        saved_engine = self.settings["active"]["engine"]
+        engine = (f.get("engine") if method == "POST" else None) or saved_engine
+        rlabel = self.remote_label()
+        if self.assistant is None and engine == "local":
+            body += ('<div class="warn">مدل محلی بارگذاری نشده است. سرور را این‌طور اجرا کنید:<pre>python scripts\\ui.py '
+                     '--model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf</pre>یا موتور «آنلاین» را انتخاب کنید '
+                     '(<a href="/providers">ارائه‌دهنده‌ها</a>). بقیهٔ صفحه‌ها بدون مدل کار می‌کنند.</div>')
         if method == "POST":
             question = (f.get("question") or "").strip()
-            if not question:
+            if engine not in PS.ENGINES:
+                body += '<div class="err">موتور ناشناخته: <code>%s</code></div>' % esc(engine)
+            elif not question:
                 body += '<div class="err">سؤال خالی است.</div>'
+            elif engine == "remote":
+                try:
+                    bot, label = self.remote_assistant()
+                    out = bot.answer(question)
+                except (LP.ProviderError, ValueError) as exc:
+                    body += ('<div class="err">موتور آنلاین در دسترس نیست: %s<br>'
+                             '<a href="/providers">تنظیم ارائه‌دهنده</a></div>') % esc(LP.redact(exc))
+                else:
+                    out["engine_label"] = "آنلاین · " + label
+                    self.history.append(out)
             elif self.assistant is None:
                 body += '<div class="err">بدون مدل نمی‌توان پاسخ داد.</div>'
             else:
-                self.history.append(self.assistant.answer(question))
+                out = self.assistant.answer(question)
+                out["engine_label"] = "آفلاین · " + (self.model_label or "مدل محلی")
+                self.history.append(out)
         examples = ("نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟", "سهمی با قیمت ۱۵۰ دلار و سود هر سهم ۸٫۴۰ دلار؛ P/E چقدر است؟",
                     "موجودی ۵۰٬۰۰۰ دلار، ریسک ۲٪، ورود ۸۰ و حد ضرر ۷۶؛ چند سهم بخرم؟", "What was Apple's net income in fiscal 2023?")
-        body += ('<form method="post" class="card" data-busy="در حال فکر کردن...">%s<textarea id="q" name="question" rows="3" '
+        seg = ('<fieldset class="seg"><legend>موتور پاسخ‌گویی</legend>'
+               '<label><input type="radio" name="engine" value="local"%s> آفلاین <span class="muted">(%s، بدون اینترنت)</span></label>'
+               '<label><input type="radio" name="engine" value="remote"%s%s> آنلاین <span class="muted ltr">(%s)</span></label>'
+               '</fieldset>') % (
+            ' checked' if engine != "remote" else "", esc(self.model_label or "مدل محلی"),
+            ' checked' if engine == "remote" else "", "" if rlabel else " disabled",
+            esc(rlabel or "تنظیم نشده"))
+        body += ('<form method="post" class="card" data-busy="در حال فکر کردن...">%s%s<textarea id="q" name="question" rows="3" '
                  'dir="auto" placeholder="مثلاً: نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟"></textarea>'
                  '<div class="chips">%s</div><div class="form-row"><button>بپرس</button>'
-                 '<span class="note">Ctrl+Enter هم ارسال می‌کند. روی i5-12400 هر پاسخ حدود ۳۰ تا ۹۰ ثانیه طول می‌کشد '
-                 '(MEASURED در بنچمارک).</span></div></form>') % (self.hidden(), "".join(
+                 '<span class="note">Ctrl+Enter هم ارسال می‌کند. آفلاین روی i5-12400 هر پاسخ حدود ۳۰ تا ۹۰ ثانیه '
+                 '(MEASURED در بنچمارک). آنلاین: سؤال و داده‌های بازیابی‌شده به ارائه‌دهندهٔ انتخابی فرستاده می‌شود.'
+                 '</span></div></form>') % (self.hidden(), seg, "".join(
                      '<button type="button" class="chip is-hidden" data-target="#q" data-fill="%s">%s</button>'
                      % (esc(e), esc(e)) for e in examples))
         for out in reversed(self.history):
+            if out.get("engine_label"):
+                body += '<div class="engine-tag">%s</div>' % esc(out["engine_label"])
             body += ASK.turn_html(out)
         return self.page("/ask", "پرسش از مدل", body,
                          subtitle="مسیر خودکار: محاسبه، داده‌های کلان، اسناد یا پاسخ ساده؛ اعداد پاسخ با شواهد کنترل می‌شوند.")
@@ -861,15 +1100,173 @@ class App(object):
                 '<th>موضوع</th><th>پیام</th></tr>%s</table></div>') % (cls, esc(rep["status"]), esc(rep["counts"]), rows)
         return self.page("/maintenance", "نگهداری (فاز ۱۰)", body)
 
+    # -- D-0142: providers manager ---------------------------------------------------
+    def _save_settings(self, new):
+        """Validate, write atomically, then register. Returns None, or the refusal text."""
+        try:
+            clean = PS.validate(new)
+            PS.save(clean, self.settings_path)
+            PS.apply(clean)
+        except (PS.SettingsError, LP.ProviderError) as exc:
+            return str(exc)
+        except OSError as exc:
+            return "could not write %s: %s" % (self.settings_path, type(exc).__name__)
+        self.settings, self.settings_error, self._remote = clean, None, None
+        return None
+
+    def _provider_action(self, f):
+        """(ok_html, err_text) for one POST on the providers page."""
+        import copy
+        act = (f.get("action") or "").strip()
+        new = copy.deepcopy(self.settings)
+        name = (f.get("name") or "").strip()
+        if act == "set_engine":
+            new["active"] = {"engine": (f.get("engine") or "local").strip(),
+                             "provider": (f.get("provider") or "").strip() or None,
+                             "model_id": (f.get("model_id") or "").strip() or None,
+                             "allow_paid": f.get("allow_paid") == "on"}
+            if new["active"]["engine"] == "local" and not new["active"]["provider"]:
+                new["active"]["provider"] = None
+            err = self._save_settings(new)
+            return (None, err) if err else ("موتور ذخیره شد: <b>%s</b>" % (
+                "آفلاین (مدل محلی)" if new["active"]["engine"] == "local" else esc(self.remote_label())), None)
+        if act == "save_override":
+            if name not in LP.PROVIDERS or name == "local":
+                return None, "only a built-in remote provider takes an override"
+            entry = {k: (f.get(k) or "").strip() for k in ("base_url", "model_id") if (f.get(k) or "").strip()}
+            if entry:
+                new["overrides"][name] = entry
+            else:
+                new["overrides"].pop(name, None)
+            err = self._save_settings(new)
+            return (None, err) if err else ("تنظیمات <code>%s</code> ذخیره شد." % esc(name), None)
+        if act == "clear_override":
+            new["overrides"].pop(name, None)
+            err = self._save_settings(new)
+            return (None, err) if err else ("آدرس و مدل <code>%s</code> به پیش‌فرض برگشت." % esc(name), None)
+        if act == "save_custom":
+            new["custom"][name] = {"label": (f.get("label") or "").strip() or name,
+                                   "wire": (f.get("wire") or "").strip(),
+                                   "base_url": (f.get("base_url") or "").strip(),
+                                   "env_key": (f.get("env_key") or "").strip() or None,
+                                   "model_id": (f.get("model_id") or "").strip() or None}
+            err = self._save_settings(new)
+            return (None, err) if err else ("ارائه‌دهندهٔ <code>%s</code> ذخیره شد." % esc(name), None)
+        if act == "delete_custom":
+            if name not in new["custom"]:
+                return None, "no user-defined provider named %r" % name
+            del new["custom"][name]
+            note = ""
+            if new["active"].get("provider") == name:
+                new["active"] = {"engine": "local", "provider": None, "model_id": None, "allow_paid": False}
+                note = " موتور به «آفلاین» برگشت، چون همین ارائه‌دهنده انتخاب شده بود."
+            err = self._save_settings(new)
+            return (None, err) if err else ("<code>%s</code> حذف شد.%s" % (esc(name), note), None)
+        if act == "test":
+            try:
+                LP.get_provider(name)
+                if name == "local":
+                    raise LP.ProviderError("the local model has no network endpoint to test")
+                eff = PS.effective(self.settings, name)
+                res = self._lister(name, base_url=eff["base_url"])
+            except LP.ProviderError as exc:
+                return None, "connection test failed: %s" % LP.redact(exc)
+            ids = res.get("models") or []
+            return ('اتصال به <code>%s</code> برقرار است (HTTP %s، %d مدل؛ MEASURED). نمونه: %s' % (
+                esc(name), esc(res.get("http_status")), int(res.get("count") or 0),
+                " ".join('<code>%s</code>' % esc(m) for m in ids[:12]) or "—"), None)
+        return None, "unknown action %r" % act
+
     def p_providers(self, method, q, f):
-        from llm.providers import credential_status
-        rows = "".join('<tr><td class="ltr">%s</td><td>%s</td><td class="ltr">%s</td><td>%s</td></tr>' % (
-            esc(r["provider"]), esc(r["label"]), esc(r["env_key"] or "-"),
-            '<span class="ok">آماده</span>' if r["configured"] else '<span class="due">کلید ندارد</span>')
-            for r in credential_status())
-        body = ('<div class="card"><p>فقط وجود کلید نشان داده می‌شود، هرگز خود کلید. صفحهٔ «پرسش» فقط مدل محلی را به کار می‌برد.</p>'
-                '<table><tr><th>ارائه‌دهنده</th><th>نام</th><th>متغیر محیطی</th><th>وضعیت</th></tr>%s</table></div>') % rows
-        return self.page("/providers", "ارائه‌دهنده‌ها", body)
+        msg = ""
+        if method == "POST":
+            ok, err = self._provider_action(f)
+            msg = ('<div class="err">انجام نشد: %s</div>' % esc(err)) if err else '<div class="okbox">%s</div>' % ok
+        if self.settings_error:
+            msg = ('<div class="err">فایل تنظیمات خوانده نشد و به آن دست زده نشد: %s<br>تا اصلاح آن، تنظیمات '
+                   'پیش‌فرض (موتور آفلاین) به کار می‌رود.</div>' % esc(self.settings_error)) + msg
+        rows = PS.provider_rows(self.settings)
+        act = self.settings["active"]
+        opts = "".join('<option value="%s"%s>%s — %s</option>' % (
+            esc(r["provider"]), " selected" if r["provider"] == act.get("provider") else "",
+            esc(r["provider"]), esc(r["label"])) for r in rows)
+        engine_card = (
+            '<form method="post" class="card"><h2>موتور پاسخ‌گویی صفحهٔ «پرسش»</h2>%s'
+            '<input type="hidden" name="action" value="set_engine">'
+            '<fieldset class="seg"><legend>پیش‌فرض</legend>'
+            '<label><input type="radio" name="engine" value="local"%s> آفلاین (مدل محلی؛ هیچ داده‌ای از رایانه خارج نمی‌شود)</label>'
+            '<label><input type="radio" name="engine" value="remote"%s> آنلاین (ارائه‌دهندهٔ زیر)</label></fieldset>'
+            '<div class="fields"><div class="field"><label>ارائه‌دهنده<select name="provider"><option value="">—</option>%s'
+            '</select></label></div><div class="field"><label>شناسهٔ مدل<input name="model_id" class="ltr" value="%s" '
+            'placeholder="مثلاً llama-3.3-70b-versatile"></label><span class="hint">خالی = مدلِ ذخیره‌شده برای همان '
+            'ارائه‌دهنده</span></div><div class="field"><label class="check"><input type="checkbox" name="allow_paid"%s> '
+            'اجازهٔ ارائه‌دهندهٔ پولی یا نامعلوم</label><span class="hint">بدون این، فقط ارائه‌دهنده‌های رایگانِ مستند '
+            'یا سرورهای روی همین رایانه اجرا می‌شوند.</span></div></div><div class="form-row"><button>ذخیره</button>'
+            '<span class="note">انتخاب در صفحهٔ «پرسش» برای هر سؤال قابل تغییر است.</span></div></form>') % (
+            self.hidden(), " checked" if act["engine"] == "local" else "", " checked" if act["engine"] == "remote" else "",
+            opts, esc(act.get("model_id") or ""), " checked" if act.get("allow_paid") else "")
+
+        def key_cell(r):
+            if not r["key_needed"]:
+                return '<span class="muted">نیاز ندارد</span>'
+            return '<code>%s</code> %s' % (esc(r["env_key"]), '<span class="badge okb">تنظیم شده</span>' if r["key_set"]
+                                           else '<span class="badge dueb">تنظیم نشده</span>')
+
+        def actions(r):
+            out = ('<form method="post" class="inline">%s<input type="hidden" name="action" value="test">'
+                   '<input type="hidden" name="name" value="%s"><button class="ghost" data-busy="...">آزمون اتصال</button>'
+                   '</form>') % (self.hidden(), esc(r["provider"]))
+            if r["user_defined"]:
+                out += ('<form method="post" class="inline" data-confirm="ارائه‌دهندهٔ %s حذف شود؟">%s'
+                        '<input type="hidden" name="action" value="delete_custom"><input type="hidden" name="name" '
+                        'value="%s"><button class="ghost danger">حذف</button></form>') % (
+                    esc(r["provider"]), self.hidden(), esc(r["provider"]))
+            return out
+        free = {True: '<span class="badge okb">رایگان مستند</span>', False: '<span class="badge badb">پولی</span>',
+                None: '<span class="badge dueb">نامعلوم</span>'}
+        trs = "".join(
+            '<tr><td class="ltr"><b>%s</b>%s<div class="muted">%s</div></td><td class="ltr">%s</td><td>%s</td>'
+            '<td class="ltr"><code>%s</code><div class="muted">%s</div></td><td class="ltr">%s</td><td>%s</td><td>%s</td></tr>' % (
+                esc(r["provider"]), ' <span class="badge">شما</span>' if r["user_defined"] else "", esc(r["label"]),
+                esc(r["wire"]), key_cell(r), esc(r["base_url"] or "—"),
+                {"override": "تغییر داده‌اید", "user": "ارائه‌دهندهٔ شما", "built-in": "پیش‌فرض"}[r["base_url_origin"]],
+                esc(r["model_id"] or "—"), free[r["free_tier"]], actions(r)) for r in rows)
+        table = ('<div class="card"><h2>ارائه‌دهنده‌ها <span class="badge">%d</span></h2><div class="tbl"><table>'
+                 '<tr><th>نام</th><th>گویش API</th><th>کلید</th><th>آدرس پایه (base URL)</th><th>مدل</th><th>هزینه</th>'
+                 '<th></th></tr>%s</table></div><p class="note">کلیدها هرگز نمایش یا ذخیره نمی‌شوند؛ فقط وجودشان در متغیر '
+                 'محیطی بررسی می‌شود. «آزمون اتصال» فهرست مدل‌ها را می‌گیرد (بدون مصرف توکن) و ریدایرکت را دنبال '
+                 'نمی‌کند.</p></div>') % (len(rows), trs)
+        builtin = "".join('<option value="%s">%s</option>' % (esc(n), esc(n)) for n in LP.provider_names() if n != "local")
+        override = (
+            '<form method="post" class="card"><h2>تغییر آدرس پایه یا مدل یک ارائه‌دهندهٔ داخلی</h2>%s'
+            '<input type="hidden" name="action" value="save_override"><div class="fields">'
+            '<div class="field"><label>ارائه‌دهنده<select name="name">%s</select></label></div>'
+            '<div class="field"><label>آدرس پایهٔ دلخواه<input name="base_url" class="ltr" placeholder="https://.../v1"></label>'
+            '<span class="hint">خالی = آدرس پیش‌فرض. فقط https، یا http برای localhost.</span></div>'
+            '<div class="field"><label>شناسهٔ مدل<input name="model_id" class="ltr"></label></div></div>'
+            '<div class="form-row"><button>ذخیره</button><button name="action" value="clear_override" class="ghost">'
+            'بازگشت به پیش‌فرض</button></div></form>') % (self.hidden(), builtin)
+        wires = "".join('<option value="%s">%s</option>' % (w, t) for w, t in (
+            ("openai", "سازگار با OpenAI (Groq، OpenRouter، vLLM، LM Studio، Ollama، ...)"),
+            ("anthropic", "Anthropic"), ("google", "Google Gemini")))
+        add = (
+            '<form method="post" class="card"><h2>افزودن یا ویرایش ارائه‌دهندهٔ شخصی</h2>%s'
+            '<input type="hidden" name="action" value="save_custom"><div class="fields">'
+            '<div class="field"><label>نام کوتاه *<input name="name" class="ltr" required pattern="[a-z][a-z0-9-]{1,31}" '
+            'placeholder="mylab"></label><span class="hint">حروف کوچک انگلیسی، رقم و «-». نام تکراری = ویرایش.</span></div>'
+            '<div class="field"><label>عنوان<input name="label" placeholder="My Lab"></label></div>'
+            '<div class="field"><label>گویش API *<select name="wire">%s</select></label></div>'
+            '<div class="field"><label>آدرس پایه *<input name="base_url" class="ltr" required placeholder="https://api.example.com/v1">'
+            '</label><span class="hint">https، یا http://localhost:PORT/v1 برای سرور محلی.</span></div>'
+            '<div class="field"><label>نام متغیر محیطی کلید<input name="env_key" class="ltr" placeholder="MYLAB_API_KEY">'
+            '</label><span class="hint">فقط «نام» متغیر، نه خود کلید. برای localhost می‌تواند خالی بماند.</span></div>'
+            '<div class="field"><label>شناسهٔ مدل<input name="model_id" class="ltr"></label></div></div>'
+            '<div class="form-row"><button>ذخیره</button></div></form>') % (self.hidden(), wires)
+        howto = ('<div class="card"><h2>کلید را کجا بگذارم؟</h2><p>در PowerShell یک بار اجرا کنید و برنامه را دوباره باز کنید:</p>'
+                 '<pre>setx MYLAB_API_KEY "کلید شما"</pre><p class="note">تنظیمات (بدون کلید) در <code class="ltr">%s</code> '
+                 'ذخیره می‌شود، بیرون از مخزن.</p></div>') % esc(self.settings_path)
+        return self.page("/providers", "ارائه‌دهنده‌ها و موتور پاسخ‌گویی", msg + engine_card + table + add + override + howto,
+                         subtitle="افزودن API، آدرس پایهٔ دلخواه، مدل، و جابه‌جایی بین آفلاین و آنلاین.")
 
     def p_phase11(self, method, q, f):
         r = self._readiness()

@@ -3,7 +3,7 @@
 Project: marfin-llm · Date: 2026-10-17 · Governing prompt: SYSTEM_PROMPT.md v2.0 (SS.24 Phase 8)
 Mode: `ANALYSIS_ONLY` · Live trading: `DISABLED` · Label key: (V) VERIFIED · (M) MEASURED · (C) COMPUTED · (E) ESTIMATED
 
-## Status: **IN PROGRESS** — first run graded 2026-10-18 (D-0124); defects found and fixed; rerun pending (`PHASE8_RERUN_FA.md`)
+## Status: **IN PROGRESS** — first run graded 2026-10-18 (D-0124); defects found and fixed; rerun pending (`docs/runbooks/PHASE8_RERUN_FA.md`)
 
 Approved 2026-10-17 on condition that items 1 and 2 are corrected first ("I approve Phase 8, provided that items
 #1 and #2 are corrected"). Both are corrected below.
@@ -118,7 +118,7 @@ step after the Phase 8 run. I am not claiming the benefit before it is measured.
 
 ## Next step
 
-Run `PHASE8_RUN_FA.md` on the i5-12400:
+Run `docs/runbooks/PHASE8_RUN_FA.md` on the i5-12400:
 - (a) Q4_K_M in-process with `--style`, which isolates the style effect;
 - (b) the same through Ollama, which isolates the runtime;
 - LM Studio, plain arm only.
@@ -227,7 +227,7 @@ raw `ollama run` text can still contain LaTeX.
 | Persian and English valid | Persian defects fixed. 3 EN→FA language swaps, now fixed in the rule |
 | Tool integration works through orchestrator | Schema validity 100 %, but tool use collapsed under `--style`; fix applied |
 
-**Next step:** `PHASE8_RERUN_FA.md`, about 2 h (ESTIMATED).
+**Next step:** `docs/runbooks/PHASE8_RERUN_FA.md`, about 2 h (ESTIMATED).
 
 ---
 

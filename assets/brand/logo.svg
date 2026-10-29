@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t">
+  <title id="t">marfin-llm</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1B36"/>
+      <stop offset="0.55" stop-color="#0D3B5C"/>
+      <stop offset="1" stop-color="#0E7C7B"/>
+    </linearGradient>
+    <linearGradient id="up" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FF5DF"/>
+      <stop offset="1" stop-color="#2BC4B0"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#F2A93B"/>
+      <stop offset="1" stop-color="#FFD978"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.78" cy="0.2" r="0.6">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <rect width="256" height="256" rx="58" fill="url(#glow)"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="2">
+    <line x1="34" y1="96" x2="222" y2="96"/><line x1="34" y1="150" x2="222" y2="150"/><line x1="34" y1="204" x2="222" y2="204"/>
+  </g>
+  <g stroke="#BFF8EE" stroke-width="5" stroke-linecap="round">
+    <line x1="64" y1="92" x2="64" y2="212"/>
+    <line x1="108" y1="126" x2="108" y2="196"/>
+    <line x1="152" y1="104" x2="152" y2="190"/>
+    <line x1="196" y1="54" x2="196" y2="212"/>
+  </g>
+  <g fill="url(#up)">
+    <rect x="50" y="112" width="28" height="88" rx="7"/>
+    <rect x="94" y="140" width="28" height="44" rx="7" fill-opacity="0.82"/>
+    <rect x="138" y="120" width="28" height="58" rx="7" fill-opacity="0.92"/>
+    <rect x="182" y="70" width="28" height="130" rx="7"/>
+  </g>
+  <polyline points="40,128 108,166 152,138 214,58" fill="none" stroke="url(#gold)" stroke-width="10"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M190 52 L222 48 L216 80 Z" fill="#FFD978"/>
+  <circle cx="40" cy="128" r="8" fill="#FFD978"/>
+</svg>

@@ -54,7 +54,7 @@ LIVE_TRADING cannot be reached by configuration (SS.6.1).
 
 **5. Verify the installation**
 ```bash
-bash tests/run_all.sh          # 29 suites; no model needed
+bash tests/run_all.sh          # 31 suites; no model needed
 ```
 
 **Secrets:** API keys go in environment variables (see `.env.example`), never in files under version control.

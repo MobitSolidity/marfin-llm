@@ -320,8 +320,8 @@
   "next_phase": null,
   "next_phase_name": "Phase 11 STARTED on request (D-0140), BLOCKED: 3/8 prerequisites; waits on owner (broker, licensed real-time data, live-policy approval)",
   "next_phase_viable_in_sandbox": false,
-  "next_phase_note": "D-0141: Phase 11 SUSPENDED (no broker); multi-source data hub; redesigned UI; Persian formula catalogue; release 0.13.0.",
-  "last_updated": "2026-10-27",
+  "next_phase_note": "D-0142: providers manager (user-defined providers, base-URL/model overrides, online/offline engine, no-cost connection test, redirects refused); crypto (CoinGecko), forex pairs and US stocks (Alpha Vantage), SEC fundamentals; logo; repository cleanup; bilingual README; release 0.14.0. Phase 11 still SUSPENDED.",
+  "last_updated": "2026-10-29",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -385,7 +385,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0139",
+  "decisions_logged": "D-0001..D-0142",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -510,7 +510,7 @@
       },
       "excluded_and_why": "tok/s, TTFT, model size and peak RSS are continuous quantities with no denominator; fabricated_count and paper_live_confusion are counts of 0 with no percentage to resolve. Neither group was force-fitted into the analysis.",
       "does_not_change_the_verdict": "The 2026-09-05 FAIL stands at any n: 42.86% fails against 95 whether the denominator is 7 or 20. Resolution is about whether a FUTURE good-but-imperfect result could be distinguished from a bad one.",
-      "options_document": "R49_EVAL_SIZE_OPTIONS.md",
+      "options_document": "docs/runbooks/R49_EVAL_SIZE_OPTIONS.md",
       "decision": "OPTION B TAKEN 2026-09-07 (D-0096) -- eval set enlarged, no threshold relaxed",
       "remaining": "4 of the 6 low-resolution thresholds are addressed. deterministic_calc (100% floor) is zero-tolerance at any n; tool_call_schema_validity needs n>=50 attempted tool calls, which is a property of the TOOLS arm, not the rag eval set, and is NOT fixed by v2."
     }
@@ -817,8 +817,10 @@
     ]
   },
   "awaiting_user_action": [
-    "benchmark refresh by 2026-12-24 (PHASE8_CONFIRM_RUN_FA.md)",
-    "try release 0.13.0 on the i5-12400: python scripts\\ui.py --model ... ; markets and formulas pages (docs/guides/ui-fa.md)",
+    "benchmark refresh by 2026-12-24 (docs/runbooks/PHASE8_CONFIRM_RUN_FA.md)",
+    "try release 0.14.0 on the i5-12400: python scripts\\ui.py --model ... ; pages: providers (online/offline), markets > crypto / forex / US stocks (docs/guides/ui-fa.md)",
+    "optional: set SEC_CONTACT_EMAIL (SEC fundamentals) and COINGECKO_DEMO_API_KEY (higher CoinGecko limit; works without it)",
+    "open: permission to set the GitHub About description and topics (asked 2026-10-28, not yet answered)",
     "optional: set ALPHAVANTAGE_API_KEY for the stocks tab (free tier, end of day, 25 requests/day)",
     "Phase 11 SUSPENDED (owner, 2026-10-27: no broker); resume only on the owner's request after choosing a broker",
     "ECB paper permission CANCELLED (owner, 2026-10-26); IMF closed (CCC unavailable under sanctions)"
@@ -1936,7 +1938,7 @@
   },
   "r10_readiness_2026_09_07": {
     "tool": "tools/grade_persian.py (D-0072), verified working on the new run",
-    "guide": "R10_GRADING_GUIDE_FA.md",
+    "guide": "docs/runbooks/R10_GRADING_GUIDE_FA.md",
     "measured_state": {
       "cases_total": 52,
       "graded_by_human": 0,
@@ -2050,7 +2052,7 @@
     ]
   },
   "r10_handover": {
-    "document": "START_R10_GRADING.md",
+    "document": "docs/runbooks/START_R10_GRADING.md",
     "language": "Persian",
     "answers": [
       "which folder: the repository root (the folder holding PROJECT_STATE.json)",
@@ -2433,7 +2435,7 @@
     "defaults": "both OFF; prompts byte-identical to 2026-09-27 without them",
     "provenance": "model.prompt_options in the run file and in merge_phase4.py's signature",
     "template_check": "second turn byte-identical to Qwen3.5-4B's own chat_template (enable_thinking=False); first draft differed by the empty <think> block, fixed",
-    "run_commands": "Q14_RUN_COMMANDS.md (Persian); ~70-75 min ESTIMATED",
+    "run_commands": "docs/runbooks/Q14_RUN_COMMANDS.md (Persian); ~70-75 min ESTIMATED",
     "verification": "test_phase4_harness 1077 -> 1121; mutate_phase4 316 seeded/306 killed/1 survived/9 skipped (baseline); run_all.sh 3837 passed, 0 failed, 3 skipped"
   },
   "D-0114_q14_results_2026_10_09": {
@@ -2555,7 +2557,7 @@
     },
     "phase_6_model_half": {
       "status": "PENDING on i5-12400",
-      "instructions": "PHASE6_REDTEAM_RUN_FA.md",
+      "instructions": "docs/runbooks/PHASE6_REDTEAM_RUN_FA.md",
       "sets": [
         "evals/redteam_eval_v1.jsonl (9)",
         "evals/redteam_gold_v1.jsonl (4) over evals/redteam_corpus_v1.jsonl (21+4 adversarial)"
@@ -2581,7 +2583,7 @@
       "verification": "test_redteam 184 -> 231; mutate_redteam 22 -> 28, all killed"
     },
     "phase_6_open": [
-      "model red-team run + long-context run on the i5-12400 (PHASE6_REDTEAM_RUN_FA.md)",
+      "model red-team run + long-context run on the i5-12400 (docs/runbooks/PHASE6_REDTEAM_RUN_FA.md)",
       "partial fills / rejected orders / disconnected broker: no broker adapter exists"
     ]
   },
@@ -2641,7 +2643,7 @@
     ],
     "defaults": "all off; recorded runs reproduce exactly",
     "verification": "test_redteam 231->304; mutate_redteam 28->45, all killed (4 first-pass survivors tightened); run_all ALL GREEN",
-    "rerun": "PHASE6_RERUN_FA.md"
+    "rerun": "docs/runbooks/PHASE6_RERUN_FA.md"
   },
   "D-0120_phase6_rerun_graded_2026_10_14": {
     "evidence": [
@@ -2776,7 +2778,7 @@
         "src/llm/style.py",
         "src/llm/thinking.py",
         "scripts/compare_style.py",
-        "PHASE8_RUN_FA.md",
+        "docs/runbooks/PHASE8_RUN_FA.md",
         "docs/phase-reports/phase-8.md"
       ],
       "run": "PENDING on i5-12400"
@@ -2922,7 +2924,7 @@
     "phase8_decisions": {
       "style": "display layer (--display); prompt rules dropped",
       "runtime": "in-process llama.cpp; LM Studio alt; Ollama not recommended",
-      "cut_off": "option B --continue-budget 256 (effect unmeasured; PHASE8_CONFIRM_RUN_FA.md)",
+      "cut_off": "option B --continue-budget 256 (effect unmeasured; docs/runbooks/PHASE8_CONFIRM_RUN_FA.md)",
       "phase8": "CLOSED"
     },
     "phase8a": {
@@ -3245,5 +3247,49 @@
       "run_all_suites": 29
     },
     "release": "0.13.0"
+  },
+  "D-0142_providers_markets_brand_cleanup_readme_2026_10_29": {
+    "owner_decisions_2026_10_28": {
+      "settings_store": "~/.marfin/providers.json; API keys only in environment variables, never stored",
+      "ask_engine": "user picks online or offline per question; local stays the default; paid needs its own switch",
+      "coingecko": "accepted with the required attribution",
+      "cleanup": "delete 7 probes, move 14 docs, add a docs index; no code moves",
+      "logo": "hand-made SVG",
+      "readme": "one bilingual file"
+    },
+    "providers": {
+      "user_defined": "beside PROVIDERS (census stays 14); built-ins resolve first; free_tier None (billable unless loopback)",
+      "endpoint_rule": "https, or http to loopback only; anchored loopback match",
+      "key_variable": "^[A-Z][A-Z0-9_]{0,58}_(API_KEY|KEY|TOKEN)$; FRED/Alpha Vantage/CoinGecko keys refused",
+      "redirects": "refused in clients.py, coingecko.py, sec_facts.py (MEASURED: urllib re-sent Authorization/x-api-key on a 302)",
+      "connection_test": "list_models: GET {base}/models, no tokens; ids redacted"
+    },
+    "markets": {
+      "coingecko": "markets, global, 365-day daily chart; Powered by CoinGecko; keyless ~5/min or Demo key; 429 not retried",
+      "alpha_vantage": "FX_DAILY (9 pairs, no XAU), GLOBAL_QUOTE (end of day), SYMBOL_SEARCH; shared 25/day budget",
+      "sec_edgar": "company_tickers + companyfacts; 10-K, fp=FY, flow span 350-380 days, latest filing wins; contact UA (SEC_CONTACT_EMAIL)",
+      "excluded": [
+        "Kraken (terms exclude Iran)",
+        "Binance (terms unreadable, UNVERIFIED)"
+      ]
+    },
+    "ui": "providers page (add/edit/delete/override/switch/test); online/offline picker on ask; markets 9 tabs; logo + favicon",
+    "cleanup": {
+      "moved": "13 runbooks -> docs/runbooks/, LICENSE_EXPLAINED_FA.md -> docs/legal/",
+      "deleted": "tests/probe_{citations,conflicts,ingest,rerank,retrieval,sources}.py, tests/smoke_ingest.py",
+      "docs_index": "docs/README.md",
+      "old_readme": "docs/history/README_until_D-0141.md (verbatim)"
+    },
+    "readme": "one bilingual file (EN + FA), animated SVG banner, terminal SVG, ASCII art; measured table copied from MODEL_CARD",
+    "tests": {
+      "test_provider_manager": 101,
+      "test_market_data": 122,
+      "test_phase10": 217,
+      "mutate_d0142": "68/68 (first run 18 survivors, all test gaps, closed)",
+      "mutate_phase10": "53/53",
+      "mutate_phase9": "22/22",
+      "run_all_suites": 31
+    },
+    "release": "0.14.0"
   }
 }

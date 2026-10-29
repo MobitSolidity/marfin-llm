@@ -179,6 +179,24 @@ def spend_gate(provider: str, allow_paid: bool = False,
 # HTTP, once, for all three dialects.
 # ---------------------------------------------------------------------------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """
+    Refuse every redirect (D-0142).
+
+    MEASURED 2026-10-28 with two loopback servers: urllib's default handler
+    follows a 302 from a POST and RE-SENDS the Authorization and x-api-key
+    headers to the new host. With user-typed base URLs that is a credential
+    leak to wherever the redirect points. Returning None makes urllib raise
+    HTTPError(3xx), which is reported, never followed.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str],
                timeout: float, key: Optional[str]) -> Dict[str, Any]:
     """
@@ -193,11 +211,12 @@ def _post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str],
     for k, v in headers.items():
         req.add_header(k, v)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _OPENER.open(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", "replace")
             status = int(getattr(resp, "status", 200) or 200)
             retry_after = resp.headers.get("Retry-After")
-    except urllib.error.HTTPError as exc:               # 4xx / 5xx
+            location = None
+    except urllib.error.HTTPError as exc:               # 3xx (never followed) / 4xx / 5xx
         raw = ""
         try:
             raw = exc.read().decode("utf-8", "replace")
@@ -205,6 +224,7 @@ def _post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str],
             pass
         status = int(exc.code)
         retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        location = exc.headers.get("Location") if exc.headers else None
     except urllib.error.URLError as exc:
         # DNS failure, refused connection, TLS problem, timeout. The reason can
         # contain the URL, and for a badly built request the URL could contain a
@@ -224,7 +244,7 @@ def _post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str],
         except ValueError:
             parsed = None
     return {"status": status, "body_text": raw, "body_json": parsed,
-            "retry_after": retry_after}
+            "retry_after": retry_after, "location": location}
 
 
 def _sleep_for(attempt: int, retry_after: Optional[str]) -> float:
@@ -619,7 +639,12 @@ def chat(provider: str, prompt: str, max_tokens: int,
             continue
 
         hint = ""
-        if status in (401, 403):
+        if 300 <= status < 400:
+            hint = (" The endpoint answered with a redirect to %s. It was NOT followed: "
+                    "following it would re-send your API key to a host you did not "
+                    "choose. Put the final address in the base URL instead."
+                    % redact(resp.get("location") or "(no Location header)", key))
+        elif status in (401, 403):
             hint = (" The key in %s was rejected. Check it is the whole key "
                     "and for the right account."
                     % (spec.get("env_key") or "the environment"))
@@ -655,6 +680,109 @@ def chat(provider: str, prompt: str, max_tokens: int,
         "%s: retry loop ended without a result after %d attempt(s), which "
         "should be impossible. Last error: %s"
         % (spec["label"], attempts, last_err or "unknown"))
+
+
+def _get_json(url: str, headers: Dict[str, str], timeout: float,
+              key: Optional[str]) -> Dict[str, Any]:
+    """One GET through the no-redirect opener. Same return shape as _post_json."""
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Accept", "application/json")
+    for k, v in headers.items():
+        req.add_header(k, v)
+    location = None
+    try:
+        with _OPENER.open(req, timeout=timeout) as resp:
+            raw = resp.read(2_000_000).decode("utf-8", "replace")
+            status = int(getattr(resp, "status", 200) or 200)
+    except urllib.error.HTTPError as exc:
+        raw = ""
+        try:
+            raw = exc.read(20_000).decode("utf-8", "replace")
+        except Exception:                                # pragma: no cover
+            pass
+        status = int(exc.code)
+        location = exc.headers.get("Location") if exc.headers else None
+    except urllib.error.URLError as exc:
+        raise RemoteCallError("could not reach the provider: %s"
+                              % redact(getattr(exc, "reason", exc), key)) from None
+    except Exception as exc:                             # socket.timeout etc.
+        raise RemoteCallError("transport failure talking to the provider: %s"
+                              % redact(exc, key)) from None
+    parsed = None
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            parsed = None
+    return {"status": status, "body_text": raw, "body_json": parsed, "location": location}
+
+
+def list_models(provider: str, base_url: Optional[str] = None,
+                api_key: Optional[str] = None, timeout: float = 20.0,
+                getter: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    The provider's model list: a connection and key test that bills nothing (D-0142).
+
+    Each dialect's documented list endpoint, VERIFIED 2026-10-28 from the
+    providers' own references: OpenAI-compatible ``GET {base}/models`` (bearer
+    key), Anthropic ``GET {base}/models`` (x-api-key + anthropic-version),
+    Gemini ``GET {base}/models`` (x-goog-api-key). A listing generates no
+    tokens, so it is NOT routed through the spend gate -- but it does send the
+    key, so the endpoint is resolved and validated exactly as for chat().
+    Returns {ok, provider, endpoint, http_status, models (<=200 ids), count}.
+    """
+    spec = get_provider(provider)
+    if spec["wire"] == "local":
+        raise ProviderError("provider 'local' has no network endpoint to test")
+    url_base = resolve_base_url(provider, base_url)
+    key = get_api_key(provider, api_key)
+    wire = spec["wire"]
+    headers: Dict[str, str] = {}
+    if wire == "openai":
+        if key:
+            headers["Authorization"] = "Bearer " + key
+    elif wire == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        if key:
+            headers["x-api-key"] = key
+    elif wire == "google":
+        if key:
+            headers["x-goog-api-key"] = key
+    else:                                                # pragma: no cover
+        raise ProviderError("unsupported wire dialect %r" % wire)
+    resp = (getter or _get_json)(url_base + "/models", headers, timeout, key)
+    status = int(resp.get("status") or 0)
+    if not 200 <= status < 300:
+        if 300 <= status < 400:
+            detail = ("redirect to %s was NOT followed (it would re-send your key); put the "
+                      "final address in the base URL" % redact(resp.get("location") or "?", key))
+        elif status in (401, 403):
+            detail = "the key was rejected (HTTP %d). Check %s." % (status, spec.get("env_key") or "the key")
+        else:
+            detail = _error_text(resp, key)
+        raise RemoteCallError("%s: model list failed: %s" % (spec["label"], detail))
+    js = resp.get("body_json")
+    rows = None
+    if isinstance(js, dict):
+        rows = js.get("data") if wire != "google" else js.get("models")
+    if not isinstance(rows, list):
+        raise RemoteCallError("%s answered HTTP %d but not with a model list (keys: %s). The base "
+                              "URL may point at the wrong path."
+                              % (spec["label"], status,
+                                 sorted(js)[:8] if isinstance(js, dict) else type(js).__name__))
+    ids = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        mid = r.get("id") if wire != "google" else r.get("name")
+        if isinstance(mid, str) and mid.strip():
+            mid = mid.strip()
+            if wire == "google" and mid.startswith("models/"):
+                mid = mid[len("models/"):]
+            ids.append(redact(mid, key)[:128])
+    ids = sorted(set(ids))
+    return {"ok": True, "provider": provider, "endpoint": url_base, "http_status": status,
+            "count": len(ids), "models": ids[:200]}
 
 
 def wire_dialects() -> Dict[str, List[str]]:

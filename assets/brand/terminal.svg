@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" role="img" aria-labelledby="tt td">
+  <title id="tt">marfin-llm quick start</title>
+  <desc id="td">A terminal session: clone, run the tests, start the local web UI on 127.0.0.1:8765.</desc>
+  <style>
+    .m { font-family: "JetBrains Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 15px; }
+    .l { animation: show .01s linear both; }
+    .l1 { animation-delay: .4s } .l2 { animation-delay: 1.2s } .l3 { animation-delay: 2.0s }
+    .l4 { animation-delay: 2.8s } .l5 { animation-delay: 3.6s } .l6 { animation-delay: 4.4s }
+    .l7 { animation-delay: 5.2s } .l8 { animation-delay: 6.0s }
+    .cur { animation: blink 1s steps(1) infinite; }
+    @keyframes show  { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes blink { 50% { opacity: 0 } }
+    @media (prefers-reduced-motion: reduce) { .l { animation: none } .cur { animation: none } }
+  </style>
+  <rect width="860" height="300" rx="14" fill="#0B1220"/>
+  <rect width="860" height="36" rx="14" fill="#16213A"/>
+  <rect y="22" width="860" height="14" fill="#16213A"/>
+  <circle cx="22" cy="18" r="6" fill="#FF5F57"/><circle cx="42" cy="18" r="6" fill="#FEBC2E"/><circle cx="62" cy="18" r="6" fill="#28C840"/>
+  <text x="430" y="23" text-anchor="middle" class="m" font-size="13" fill="#8DA2C0">cmd — marfin-llm</text>
+
+  <g class="m">
+    <text x="22" y="70"  class="l l1" fill="#E6EDF7"><tspan fill="#7FF5DF">C:\&gt;</tspan> git clone https://github.com/MobitSolidity/marfin-llm.git</text>
+    <text x="22" y="96"  class="l l2" fill="#E6EDF7"><tspan fill="#7FF5DF">C:\&gt;</tspan> cd marfin-llm</text>
+    <text x="22" y="122" class="l l3" fill="#E6EDF7"><tspan fill="#7FF5DF">C:\marfin-llm&gt;</tspan> bash tests/run_all.sh</text>
+    <text x="22" y="148" class="l l4" fill="#8DA2C0">  ... 31 suites, no model and no network needed</text>
+    <text x="22" y="174" class="l l5" fill="#28C840">  ALL GREEN</text>
+    <text x="22" y="200" class="l l6" fill="#E6EDF7"><tspan fill="#7FF5DF">C:\marfin-llm&gt;</tspan> python scripts\ui.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf</text>
+    <text x="22" y="226" class="l l7" fill="#FFD978">  marfin-llm UI: http://127.0.0.1:8765/   (Ctrl+C to stop)</text>
+    <text x="22" y="252" class="l l8" fill="#E6EDF7"><tspan fill="#7FF5DF">C:\marfin-llm&gt;</tspan><tspan class="cur" fill="#7FF5DF"> ▌</tspan></text>
+  </g>
+</svg>

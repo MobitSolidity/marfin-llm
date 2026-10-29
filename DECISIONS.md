@@ -8131,3 +8131,40 @@ Rules (`src/rag/datahub.py`): cross rates are COMPUTED only from same-day fixes,
 - run_all: 29 suites.
 
 **Release.** 0.13.0 (minor: new features). Pins the data hub, the ECB and World Bank clients, the catalogue, and `app.css`/`app.js`.
+
+## D-0142 — Providers manager; crypto, forex and US-stock data; logo; repository cleanup; bilingual README (2026-10-29)
+
+Owner request, 2026-10-28: (1) the providers section must support adding APIs with their settings, a custom base URL and switching between them; (2) cover all financial markets: crypto, forex, the US stock market; (3) a principled logo; (4) review the repository read-only first, then delete unused files, bring everything onto main, and organise what remains; (5) rewrite the README in Persian and English with SVG, animation and CMD/ASCII art. No guessing, no false claims, test every scenario first.
+
+Owner answers to my seven questions (2026-10-28): settings in `~/.marfin/providers.json`, keys only in environment variables; «پرسش» may use an online provider, the user picks online or offline, local stays the default and paid needs its own switch; CoinGecko accepted with its attribution; cleanup as recommended (delete 7 probes, move 14 docs, docs index, no code moves); best-quality logo; one bilingual README. My question about setting the GitHub "About" description and topics was **not answered**, so it was not done.
+
+**(1) Providers.**
+- User-defined providers live beside the reviewed `PROVIDERS` (the census stays 14). `get_provider` resolves built-ins first, so a user entry can never shadow one, even if the user registry is polluted (tested).
+- A user provider's cost is UNKNOWN (`free_tier=None`), so the spend gate treats it as billable unless its endpoint is loopback.
+- Endpoints must be `https`, or `http` to loopback only; the loopback match is anchored (`http://localhost.evil.example` is remote). Key variable names must match `^[A-Z][A-Z0-9_]{0,58}_(API_KEY|KEY|TOKEN)$`; the FRED, Alpha Vantage and CoinGecko keys are refused as model keys.
+- **Redirects are refused** in `clients.py`, `coingecko.py` and `sec_facts.py`. MEASURED with two loopback servers: urllib's default handler follows a 302 from a POST and re-sends `Authorization`/`x-api-key` to the new host.
+- `src/llm/settings.py`: field whitelist, key-like values refused, validate before write, atomic save (mkstemp, fsync, chmod 600, `os.replace`); a corrupt file raises and is left untouched.
+- Connection test `list_models`: `GET {base}/models` per dialect, no tokens generated; model ids are redacted.
+- UI: providers page (add, edit, delete, override base URL/model, switch, test) and an online/offline picker on «پرسش»; the online and offline engines share one audit log (MEASURED: two `AuditLog` instances on one file break the hash chain).
+
+**(2) Markets.** Terms read on 2026-10-28.
+- CoinGecko (`src/market/coingecko.py`): markets, global totals, 365-day daily chart. Terms §4 require "Powered by CoinGecko" (shown); keyless use is about 5 calls/min, an optional Demo key goes in a header; a 429 is explained, not retried.
+- Alpha Vantage free functions (`src/market/av_markets.py`): `FX_DAILY` (9 major pairs; gold not offered, never verified), `GLOBAL_QUOTE` (end of day), `SYMBOL_SEARCH`. The 25/day budget is shared; HTTP-200 "Information"/"Note"/"Error Message" bodies are refused.
+- SEC EDGAR (`src/rag/sec_facts.py`): ticker list and companyfacts; only 10-K, `fp=FY`, flows spanning 350–380 days, latest filing wins; requires `SEC_CONTACT_EMAIL` in the User-Agent. Apple FY2025 revenue and EPS reproduced exactly.
+- Not used: Kraken (its terms exclude Iran); Binance (terms could not be read, UNVERIFIED).
+- DataHub `_guard` converts only `RuntimeError`/`ValueError`/`OSError` to `DataError`; a bug such as `KeyError` surfaces as an INTERNAL ERROR. Markets page now has 9 tabs.
+
+**(3) Brand.** `assets/brand/logo.svg` and `favicon.svg` (hand-made, checked at 512/32/16 px), served from the static whitelist; `banner.svg` and `terminal.svg` for the README (CSS animation only, respects `prefers-reduced-motion`).
+
+**(4) Cleanup.** 13 runbooks moved to `docs/runbooks/`, `LICENSE_EXPLAINED_FA.md` to `docs/legal/`; 7 throwaway probes deleted (`tests/probe_{citations,conflicts,ingest,rerank,retrieval,sources}.py`, `tests/smoke_ingest.py`); every reference rewritten and checked. New `docs/README.md` indexes every doc. The git-ignored graphify graph was rebuilt (its 17 extra edges all came from the deleted probes).
+
+**(5) README.** One bilingual file. The previous README, the full record up to D-0141, is kept verbatim at `docs/history/README_until_D-0141.md`. The measured table is copied row for row from `MODEL_CARD.md` (checked by script), including every FAIL.
+
+**Tests.**
+- `test_provider_manager` 101, `test_market_data` 122, `test_phase10` 217.
+- New battery `mutate_d0142`: 68 mutants. The first run let **18 survive a green suite**, all test gaps, for example an unanchored loopback regex, unredacted model ids, a 10-Q counted as annual, and the licence gate skipped. Each got a test, including real-socket redirect checks for CoinGecko and SEC. Now 68/68 killed, 0 skipped; wired into `run_all.sh --mutate`.
+- `mutate_phase10` 53/53, `mutate_phase9` 22/22. run_all: 31 suites.
+
+**Release.** 0.14.0 (minor: new features). Pins `providers.py`, `clients.py`, `settings.py`, the three new clients and the logo/favicon (39 files). Model, prompts and inference unchanged. Phase 11 stays SUSPENDED.
+
+**Full regression, 2026-10-29 (MEASURED).** `run_all.sh --mutate`: 5,610 assertions across 31 suites, 0 failed, 0 skipped, 0 timed out; every battery 0 survivors. One battery reported a SKIP, not a survivor: `mutate_ui` "empty question sent to the model" no longer found its anchor, because this decision placed the engine check first and the guard became an `elif`. Re-anchored, the mutant is killed by `test_ui` (checked by hand, then `mutate_ui` 38/38).

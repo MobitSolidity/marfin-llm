@@ -33,7 +33,8 @@ MUTATIONS = [
     (UI, "--model and --server both accepted", "    if a.model and a.server:", "    if False:"),
     (UI, "missing model file not refused", "    if a.model and not os.path.isfile(a.model):", "    if False:"),
     (UI, "main ignores a refusal", "    if why:\n        print(", "    if False:\n        print("),
-    (UI, "empty question sent to the model", "            if not question:", "            if False:"),
+    # D-0142 re-anchor: the engine check now comes first, so the guard is an elif.
+    (UI, "empty question sent to the model", "            elif not question:", "            elif False:"),
     (UI, "bad number crashes instead of refusing", "    except Exception:                                   # noqa: BLE001 -- converted, not swallowed",
      "    except ZeroDivisionError:"),
     (UI, "blank calc field sent as empty string", '        if raw == "":\n            continue', '        if False:\n            continue'),

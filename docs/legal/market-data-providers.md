@@ -431,3 +431,19 @@ change:
   the provider is used again.
 - The user decides to pay for data → Twelve Data's explicit non-display tier is the
   better ground and should be preferred over this accepted risk.
+
+## 8. Amendment, 2026-10-29 (D-0142): crypto, forex pairs, US fundamentals
+
+Terms read on 2026-10-28; quotations and the reasoning are in `DECISIONS.md` D-0142, and the
+registry entries are in `src/rag/sources.py` (rendered into `LICENSES.md`).
+
+| Provider | Use in this project | Status | Basis |
+|---|---|---|---|
+| **CoinGecko** (public API) | crypto markets, global totals, 365-day daily chart | **PERMITTED_RESEARCH**, with attribution | Terms §1.1.6 forbid resale (none here, personal tool); §4 requires "Powered by CoinGecko", shown on every crypto table. Keyless about 5 calls/min, optional free Demo key (`COINGECKO_DEMO_API_KEY`) in a header. A 429 is explained, never retried. |
+| **Alpha Vantage**, additional free functions | `FX_DAILY` (9 major pairs), `GLOBAL_QUOTE` (end of day), `SYMBOL_SEARCH` | same basis as §3 and §7 (accepted risk, personal, non-display) | Premium functions (`FX_INTRADAY`, `CRYPTO_INTRADAY`, `OVERVIEW`, `TIME_SERIES_DAILY_ADJUSTED`) are refused in code. The 25/day budget is shared with the existing stock functions. Gold (XAU) is not offered: never verified on `FX_DAILY`. |
+| **SEC EDGAR** (`company_tickers.json`, `companyfacts`) | annual 10-K fundamentals for US filers | **PERMITTED** (US government data) | SEC fair-access policy: a contact address in the User-Agent (`SEC_CONTACT_EMAIL`), MEASURED HTTP 403 without one. Only 10-K, `fp=FY`, flows spanning 350–380 days; the latest filing wins. |
+| **Kraken** | not used | **EXCLUDED** | Its terms exclude residents of Iran. |
+| **Binance** | not used | **UNVERIFIED → not used** | The terms page could not be read and checked; silence is not permission (§7.4). |
+
+All three clients refuse HTTP redirects (MEASURED: urllib's default handler re-sends credential
+headers to the redirect target), and none stores responses on disk (in-memory, 600 s).

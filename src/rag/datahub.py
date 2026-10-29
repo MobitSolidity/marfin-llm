@@ -40,6 +40,7 @@ from rag import bis_stats as _bis
 from rag import ecb_stats as _ecb
 from rag import fred as _fred
 from rag import worldbank as _wb
+from rag import sec_facts as _sec
 from rag.sources import required_notices
 
 CACHE_TTL_S = 600.0
@@ -108,8 +109,12 @@ SOURCES_FA = (
     ("fred", "فدرال رزرو سنت‌لوئیس (FRED)", "اوراق خزانه، نفت، گاز، شاخص دلار، تورم و بیکاری آمریکا",
      "کلید رایگان FRED_API_KEY"),
     ("world_bank_indicators", "بانک جهانی", "۱۰ شاخص اقتصادی برای ۲۱۷ کشور (سالانه)", "بدون کلید"),
-    ("alpha_vantage", "Alpha Vantage (رایگان)", "قیمت پایانی روزانهٔ سهام؛ ۲۵ درخواست در روز",
-     "کلید رایگان ALPHAVANTAGE_API_KEY"),
+    ("alpha_vantage", "Alpha Vantage (رایگان)", "سهام آمریکا (قیمت پایانی، جست‌وجوی نماد)، جفت‌ارزهای فارکس؛ "
+     "۲۵ درخواست در روز", "کلید رایگان ALPHAVANTAGE_API_KEY"),
+    ("coingecko", "CoinGecko", "بازار رمزارزها: قیمت، ارزش بازار، حجم، تغییرات، نمودار ۳۶۵ روزه",
+     "بدون کلید (حدود ۵ درخواست در دقیقه) یا کلید رایگان COINGECKO_DEMO_API_KEY"),
+    ("sec_edgar_xbrl", "کمیسیون بورس آمریکا (SEC EDGAR)", "صورت‌های مالی سالانهٔ شرکت‌های آمریکایی از گزارش 10-K",
+     "ایمیل تماس در SEC_CONTACT_EMAIL"),
 )
 
 _TRANSIENT = ("timed out", "timeout", "temporarily", "connection reset", "connection refused", "handshake",
@@ -134,9 +139,12 @@ class DataHub(object):
 
     def __init__(self, ecb_get=None, bis_get=None, fred_get=None, wb_get=None, av_fetch=None,
                  clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep,
-                 fred_key: Optional[str] = None, ttl: float = CACHE_TTL_S):
+                 fred_key: Optional[str] = None, ttl: float = CACHE_TTL_S,
+                 cg_get=None, av_get=None, sec_get=None, sec_contact: Optional[str] = None):
         self.ecb_get, self.bis_get, self.fred_get, self.wb_get = ecb_get, bis_get, fred_get, wb_get
         self.av_fetch = av_fetch
+        # D-0142: crypto (CoinGecko), forex pairs / quotes / search (Alpha Vantage), fundamentals (SEC)
+        self.cg_get, self.av_get, self.sec_get, self.sec_contact = cg_get, av_get, sec_get, sec_contact
         self.clock, self.sleep, self.fred_key, self.ttl = clock, sleep, fred_key, ttl
         self._cache: Dict[Any, Any] = {}
         self.calls = 0                      # network calls actually made (tests read it)
@@ -308,6 +316,82 @@ class DataHub(object):
         return {"symbol": sym, "points": pts[-90:], "last": pts[-1],
                 "label": "RETRIEVED (Alpha Vantage free tier, END_OF_DAY, trust UNVERIFIED)",
                 "note": "قیمت پایانی روز است، نه لحظه‌ای. نسخهٔ رایگان ۲۵ درخواست در روز اجازه می‌دهد."}
+
+    # -- D-0142: crypto (CoinGecko) ---------------------------------------------------------
+    def _guard(self, key, fn):
+        """
+        _cached, with the client errors as DataError: CoinGeckoError / SecError / AccessError are
+        RuntimeErrors, AlphaVantageError is a ValueError, network failures are OSErrors. Anything
+        else (TypeError, KeyError, ...) is a BUG and is deliberately NOT converted, so the UI shows
+        it as a labelled INTERNAL ERROR instead of a quiet "data unavailable".
+        """
+        try:
+            return self._cached(key, fn)
+        except DataError:
+            raise
+        except (RuntimeError, ValueError, OSError) as exc:
+            raise DataError(str(exc))
+
+    def crypto(self, vs: str = "usd", n: int = 50) -> Dict[str, Any]:
+        from market import coingecko as _cg
+        vs = str(vs or "usd").lower()
+        if vs not in _cg.VS_CURRENCIES:
+            raise DataError("quote currency %r is not offered; choose one of %s" % (vs, ", ".join(_cg.VS_CURRENCIES)))
+        rows = self._guard(("cg_markets", vs, n), lambda: _cg.fetch_markets(vs, n, http_get=self.cg_get))
+        return {"vs": vs, "rows": rows, "label": "RETRIEVED (CoinGecko, aggregated across exchanges; indicative)",
+                "notices": required_notices(["coingecko"]),
+                "note": "قیمت‌ها میانگین وزنی چند صرافی‌اند، نه قیمت قابل معاملهٔ یک صرافی مشخص؛ چند دقیقه تأخیر دارند."}
+
+    def crypto_global(self) -> Dict[str, Any]:
+        from market import coingecko as _cg
+        g = self._guard(("cg_global",), lambda: _cg.fetch_global(http_get=self.cg_get))
+        return dict(g, label="RETRIEVED (CoinGecko /global)", notices=required_notices(["coingecko"]))
+
+    def crypto_chart(self, coin_id: str, vs: str = "usd", days: int = 90) -> Dict[str, Any]:
+        from market import coingecko as _cg
+        pts = self._guard(("cg_chart", coin_id, vs, days), lambda: _cg.fetch_chart(coin_id, vs, days, http_get=self.cg_get))
+        return {"id": coin_id, "vs": vs, "points": pts, "label": "RETRIEVED (CoinGecko daily, 00:00 UTC)",
+                "notices": required_notices(["coingecko"])}
+
+    # -- D-0142: forex pairs, quotes and search (Alpha Vantage, shared 25/day budget) --------
+    def fx_pair(self, frm: str, to: str) -> Dict[str, Any]:
+        from market import av_markets as _avm
+        a, b = str(frm or "").strip().upper(), str(to or "").strip().upper()
+        r = self._guard(("av_fx", a, b), lambda: _avm.fetch_fx_daily(a, b, http_get=self.av_get))
+        rows = r["rows"]
+        last, prev = rows[-1], (rows[-2] if len(rows) > 1 else None)
+        chg = (last["close"] / prev["close"] - 1.0) * 100.0 if prev else None
+        return {"from": a, "to": b, "rows": rows[-120:], "last": last, "change_pct": chg,
+                "label": "RETRIEVED (Alpha Vantage FX_DAILY); change COMPUTED from the last two closes",
+                "note": "نرخ روزانه است، نه قیمت لحظه‌ای یا قابل معامله."}
+
+    def quote(self, symbol: str) -> Dict[str, Any]:
+        from market import av_markets as _avm
+        sym = str(symbol or "").strip().upper()
+        q = self._guard(("av_quote", sym), lambda: _avm.fetch_quote(sym, http_get=self.av_get))
+        return dict(q, label="RETRIEVED (Alpha Vantage GLOBAL_QUOTE, END_OF_DAY on the free tier)")
+
+    def search(self, keywords: str) -> List[Dict[str, Any]]:
+        from market import av_markets as _avm
+        k = str(keywords or "").strip()
+        return self._guard(("av_search", k.lower()), lambda: _avm.fetch_search(k, http_get=self.av_get))
+
+    # -- D-0142: US company fundamentals (SEC EDGAR, official) -------------------------------
+    def fundamentals(self, ticker: str) -> Dict[str, Any]:
+        t = str(ticker or "").strip().upper()
+        if not _sec._TICKER.match(t):
+            raise DataError("%r is not a ticker symbol" % (ticker,))
+        try:
+            ua = _sec.user_agent(self.sec_contact)
+        except _sec.SecError as exc:
+            raise DataError(str(exc))
+        tickers = self._guard(("sec_tickers",), lambda: _sec.fetch_tickers(ua, http_get=self.sec_get))
+        hit = tickers.get(t)
+        if hit is None:
+            raise DataError("%s is not in SEC's company ticker list (US-listed filers only)" % t)
+        f = self._guard(("sec_facts", hit["cik"]), lambda: _sec.fetch_fundamentals(hit["cik"], ua, http_get=self.sec_get))
+        return dict(f, ticker=t, label="RETRIEVED (SEC EDGAR XBRL companyfacts; annual 10-K figures, latest filing wins)",
+                    notices=[], note="ارقام سالانه و از گزارش 10-K شرکت‌اند؛ هر عدد با شمارهٔ ثبت گزارش قابل ردیابی است.")
 
 
 def today() -> datetime.date:

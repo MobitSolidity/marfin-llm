@@ -51,6 +51,7 @@ def app(**kw):
     kw.setdefault("ask_audit_path", os.path.join(d, "ask.jsonl"))
     kw.setdefault("clock", lambda: NOW)
     kw.setdefault("hub", FD.hub())          # D-0141: offline data sources, never the network
+    kw.setdefault("settings_path", os.path.join(d, "providers.json"))   # D-0142: never the owner's real file
     kw.setdefault("maintain", lambda: {"status": "OK", "counts": {"INFO": 1},
                                        "findings": [{"severity": "INFO", "check": "c", "subject": "s",
                                                      "message": "<b>m</b>"}]})
