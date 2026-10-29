@@ -231,6 +231,105 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# User-defined providers (D-0142)
+# ---------------------------------------------------------------------------
+# The owner asked (2026-10-28) to ADD providers and set a custom base URL from
+# the UI. They are registered here, beside PROVIDERS and never inside it, so the
+# built-in registry stays a reviewed constant and every census over it (14
+# entries) keeps meaning "what this project ships". get_provider() resolves
+# both, built-ins first, so a user entry can never shadow a reviewed one.
+#
+# Every user entry is validated HERE, not only by the settings store that
+# produces it: a second caller that registers specs directly must not be able to
+# skip the endpoint or key-variable rules. And `free_tier` is forced to None
+# (UNKNOWN): the spend gate then treats the entry as billable unless its
+# endpoint is on this machine, which is the same rule `custom` already follows.
+USER_WIRES = ("openai", "anthropic", "google")
+_USER_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+_ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,58}_(API_KEY|KEY|TOKEN)$")
+#: Keys that belong to this project's DATA sources. Sending one of them to an
+#: LLM endpoint the user typed would hand a data-provider credential to a third
+#: party, so a user provider may not name them.
+RESERVED_ENV_KEYS = ("FRED_API_KEY", "ALPHAVANTAGE_API_KEY", "COINGECKO_DEMO_API_KEY")
+_LOOPBACK_URL_RE = re.compile(r"^http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(/|$)")
+_USER_PROVIDERS: Dict[str, Dict[str, Any]] = {}
+
+
+def endpoint_problem(url: Any) -> Optional[str]:
+    """Why `url` is not an acceptable endpoint, or None. https, or http to loopback only."""
+    u = str(url or "").strip()
+    if not u:
+        return "no endpoint given"
+    if len(u) > 300 or any(c in u for c in " \t\r\n\"'<>\\"):
+        return "endpoint contains characters a URL cannot hold"
+    if not (u.startswith("https://") or u.startswith("http://")):
+        return "endpoint %r is not an http(s) URL" % u
+    if u.startswith("https://") and not re.match(r"^https://[A-Za-z0-9.\-\[\]:]+(/|$)", u):
+        return "endpoint %r has no valid host" % u
+    if u.startswith("http://") and not _LOOPBACK_URL_RE.match(u):
+        return ("plaintext http:// is only accepted for this machine (localhost); an API key "
+                "sent over http to another host is readable in transit")
+    return None
+
+
+def is_loopback_url(url: Any) -> bool:
+    return bool(_LOOPBACK_URL_RE.match(str(url or "").strip()))
+
+
+def validate_user_provider(name: Any, spec: Any) -> Dict[str, Any]:
+    """A clean registry entry for a user-defined provider, or ProviderError."""
+    if not isinstance(name, str) or not _USER_NAME_RE.match(name):
+        raise ProviderError("provider name %r must be 2-32 characters: lower-case letters, digits "
+                            "and '-', starting with a letter" % (name,))
+    if name in PROVIDERS:
+        raise ProviderError("%r is a built-in provider; choose another name (a user entry may "
+                            "never replace a reviewed one)" % name)
+    if not isinstance(spec, dict):
+        raise ProviderError("provider %r: settings must be an object" % name)
+    wire = spec.get("wire")
+    if wire not in USER_WIRES:
+        raise ProviderError("provider %r: dialect %r is not one of %s" % (name, wire, ", ".join(USER_WIRES)))
+    url = str(spec.get("base_url") or "").strip()
+    why = endpoint_problem(url)
+    if why:
+        raise ProviderError("provider %r: %s" % (name, why))
+    env = spec.get("env_key")
+    env = str(env).strip() if env not in (None, "") else None
+    if env is None and not is_loopback_url(url):
+        raise ProviderError("provider %r: a remote endpoint needs the NAME of the environment "
+                            "variable that holds its key (e.g. MYPROVIDER_API_KEY)" % name)
+    if env is not None:
+        if not _ENV_NAME_RE.match(env):
+            raise ProviderError("provider %r: %r is not a key variable name (upper case, ending "
+                                "in _API_KEY, _KEY or _TOKEN)" % (name, env))
+        if env in RESERVED_ENV_KEYS:
+            raise ProviderError("provider %r: %s belongs to a data source; it must never be sent "
+                                "to a model endpoint" % (name, env))
+    label = str(spec.get("label") or name).strip()
+    if not label or len(label) > 80 or any(ord(c) < 32 for c in label):
+        raise ProviderError("provider %r: label must be 1-80 printable characters" % name)
+    return {"label": label, "wire": wire, "env_key": env, "base_url": url.rstrip("/"),
+            "free_tier": None, "user_defined": True,
+            "cost": "UNKNOWN: a provider you added. Treated as billable unless its endpoint "
+                    "is on this machine.",
+            "docs": None}
+
+
+def register_user_providers(specs: Any) -> List[str]:
+    """Replace the user-defined providers with `specs` ({name: spec}); all or nothing."""
+    clean = {}
+    for name, spec in dict(specs or {}).items():
+        clean[name] = validate_user_provider(name, spec)
+    _USER_PROVIDERS.clear()
+    _USER_PROVIDERS.update(clean)
+    return sorted(clean)
+
+
+def user_provider_names() -> List[str]:
+    return sorted(_USER_PROVIDERS)
+
+
 # Providers that are free of charge with certainty, for the panel's default sort.
 # `openrouter` is deliberately absent: it can be free or paid depending on the
 # model id, and a list that implied otherwise would be a false claim.
@@ -256,12 +355,13 @@ def get_provider(name: str) -> Dict[str, Any]:
         raise ProviderError("no provider named. Choose one of: %s"
                             % ", ".join(provider_names()))
     key = name.strip().lower()
-    if key not in PROVIDERS:
+    spec = PROVIDERS.get(key) or _USER_PROVIDERS.get(key)
+    if spec is None:
         raise ProviderError(
             "unknown provider %r. Known providers: %s. Refusing to guess, "
             "because guessing could transmit your data to a service you did "
-            "not choose." % (name, ", ".join(provider_names())))
-    return dict(PROVIDERS[key])
+            "not choose." % (name, ", ".join(provider_names() + user_provider_names())))
+    return dict(spec)
 
 
 # ---------------------------------------------------------------------------

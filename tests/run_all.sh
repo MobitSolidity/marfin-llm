@@ -128,7 +128,9 @@ tests/test_phase10.py \
 tests/test_fred_bis.py \
 tests/test_ask.py \
 tests/test_ui.py \
-tests/test_datahub.py"
+tests/test_datahub.py \
+tests/test_provider_manager.py \
+tests/test_market_data.py"
 
 for t in $SUITES; do
   echo
@@ -654,6 +656,19 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: datahub/ecb/worldbank/bis/catalog source not restored, or its oracle is red"
     fail=1; }
   [ $dhm_status -ne 0 ] && fail=1
+  echo
+  echo "--- D-0142 providers manager, settings store, crypto/forex/SEC clients ---"
+  # The first run of this battery let 18 of 68 mutants survive a green suite
+  # (e.g. an unanchored loopback regex, an unredacted model id, SEC 10-Q rows
+  # counted as annual). Each gap got a test; 68/68 killed after that.
+  m142=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_d0142.py)
+  m142_status=$?
+  echo "$m142" | grep -E "seeded [0-9]+"
+  echo "$m142" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$m142" | grep -q "restored+green True" || {
+    echo "  ERROR: providers/settings/clients/coingecko/av_markets/sec_facts/datahub not restored, or its oracle is red"
+    fail=1; }
+  [ $m142_status -ne 0 ] && fail=1
 fi
 
 echo

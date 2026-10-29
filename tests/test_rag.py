@@ -811,8 +811,8 @@ section("source registry: terms are enforced, not merely declared")
 # asserted with tolerance 0 ON PURPOSE: a source appearing or disappearing
 # silently is exactly the change that must break a test, because it means
 # something entered or left the ingestible set without review.
-check("17 sources registered (NY Fed D-0132, BIS statistics D-0133)", len(SOURCES), 17, 0, "(C)")
-check("12 enabled (GDELT D-0131, NY Fed D-0132, BIS statistics D-0133)", len(enabled_sources()), 12, 0, "(C)")
+check("18 sources registered (NY Fed D-0132, BIS statistics D-0133, CoinGecko D-0142)", len(SOURCES), 18, 0, "(C)")
+check("13 enabled (GDELT D-0131, NY Fed D-0132, BIS statistics D-0133, CoinGecko D-0142)", len(enabled_sources()), 13, 0, "(C)")
 check("5 descoped (2x Q3 scope, 3x licence/reachability)",
       len(descoped_sources()), 5, 0, "(C)")
 check_true("registry key always matches source.key",

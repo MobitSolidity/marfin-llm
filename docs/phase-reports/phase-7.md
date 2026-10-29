@@ -61,11 +61,11 @@ within the 6.0 GiB threshold, with 1.27 GiB to spare.
 
 All 24 Persian replies changed, as did every reply across the board (Q4 vs Q5: plain 0/21 identical, tools
 1/21, rag 9/32). The mechanical check (`fa_not_in_persian`) is 0 on both. Fluency is a human judgement.
-`PHASE7_PERSIAN_REVIEW_FA.md` lays out all 24 side by side.
+`docs/runbooks/PHASE7_PERSIAN_REVIEW_FA.md` lays out all 24 side by side.
 
 ### Decisions for you
 
-1. **Persian:** read `PHASE7_PERSIAN_REVIEW_FA.md` (24 rows) and mark each Q5 better / Q4 better / same.
+1. **Persian:** read `docs/runbooks/PHASE7_PERSIAN_REVIEW_FA.md` (24 rows) and mark each Q5 better / Q4 better / same.
 2. **Quant:** keep Q5_K_M, or switch to Q4_K_M. On automatic measures Q4 wins: TTFT ~30 s vs ~48–71 s, CAGR correct, 4 PASS vs 3, 0.375 GiB smaller. Against it: one wording regression, and RSS +0.88 GiB. Neither quant gets near the 8 tok/s or 3 s thresholds. I recommend deciding after the Persian reading.
 3. **Phase 8** (Ollama / LM Studio): approve? Note the D-0121 finding: the embedded template does not think by default in those clients.
 
@@ -99,7 +99,7 @@ glossed over:
 | Produce Q4_K_M and Q5_K_M (optionally Q8_0) | **Done by sourcing**, not by quantising here: the upstream files from `unsloth/Qwen3.5-4B-GGUF` at revision `e87f1764`. Requantising from BF16 in the sandbox is impossible (an 8.4 GB source and 0.35 GiB of RAM) and would only reproduce them |
 | Validate template and tokens | **Done (M)**, below |
 | Generate checksums | **Done (M)**: full streamed sha256 of Q4_K_M and Q8_0; Q5_K_M was already VERIFIED (2026-08-17) |
-| Compare quality, speed, RAM, size | Size **done (M)**. Quality, speed and RAM are **pending** the i5-12400 run (`PHASE7_RUN_FA.md`) |
+| Compare quality, speed, RAM, size | Size **done (M)**. Quality, speed and RAM are **pending** the i5-12400 run (`docs/runbooks/PHASE7_RUN_FA.md`) |
 
 If fine-tuning is approved later, this phase reruns in full: convert, quantise, validate with the same tools.
 
@@ -181,7 +181,7 @@ which is fixed.
 
 ## Next step
 
-Run `PHASE7_RUN_FA.md` on the i5-12400 and send `phase7_q4km_merged.json` and `phase7_q5km_merged.json`.
+Run `docs/runbooks/PHASE7_RUN_FA.md` on the i5-12400 and send `phase7_q4km_merged.json` and `phase7_q5km_merged.json`.
 Q5_K_M is run again under the same flags in the same session, so only the weights differ.
 
 ## Closed (2026-10-17, D-0123)

@@ -86,7 +86,7 @@ Phase 7 will not start automatically. Please answer:
 
 ## First run (D-0118), kept as recorded
 
-> **Update 2026-10-14 (D-0119):** you approved F1–F4, and all four are applied. They are opt-in flags plus an additive tool and fixture, so recorded runs reproduce exactly. Tests: red team 304, battery 45/45 killed. The verdict below stands until the rerun in `PHASE6_RERUN_FA.md` is measured.
+> **Update 2026-10-14 (D-0119):** you approved F1–F4, and all four are applied. They are opt-in flags plus an additive tool and fixture, so recorded runs reproduce exactly. Tests: red team 304, battery 45/45 killed. The verdict below stands until the rerun in `docs/runbooks/PHASE6_RERUN_FA.md` is measured.
 
 ## Status: **FAIL** (two critical model failures; both have proposed deterministic fixes awaiting approval)
 

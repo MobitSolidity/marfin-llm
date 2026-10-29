@@ -6563,7 +6563,7 @@ check_true("...and reports 0 not-gradeable cases",
 # and a tool disagreeing about which file to use would reintroduce the whole
 # problem somewhere else.
 # ---------------------------------------------------------------------------
-for _doc97 in ("START_R10_GRADING.md", "R10_GRADING_GUIDE_FA.md"):
+for _doc97 in ("docs/runbooks/START_R10_GRADING.md", "docs/runbooks/R10_GRADING_GUIDE_FA.md"):
     _p97 = os.path.join(_ROOT, _doc97)
     check_true("%s exists" % _doc97, os.path.exists(_p97), "(A)")
     if os.path.exists(_p97):

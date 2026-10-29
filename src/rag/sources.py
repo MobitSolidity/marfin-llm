@@ -487,6 +487,35 @@ _register(Source(
     doc_url="https://data.bis.org/help/legal",
 ))
 
+# CoinGecko (D-0142) -- the owner chose it on 2026-10-28 for crypto coverage, with
+# the attribution its terms require. Read 2026-10-28: coingecko.com/en/api_terms
+# and docs.coingecko.com (Keyless Public API, Demo authentication). Kraken was
+# NOT chosen: its global terms (read the same day) exclude anyone located in
+# Iran. Binance's terms page did not load, so its position is UNVERIFIED and it
+# is not used either.
+_register(Source(
+    key="coingecko",
+    name="CoinGecko API (keyless public / free Demo key) -- aggregated crypto market data",
+    base_url="https://api.coingecko.com/api/v3",
+    trust_level="PERMITTED_RESEARCH",
+    rate_limit_qps=0.08,
+    licence="PERMITTED with attribution. coingecko.com/en/api_terms (read 2026-10-28) "
+            "§1.1.6: 'you are not permitted to sell, rent, lease, sub-license, "
+            "re-distribute or syndicate access to the CoinGecko API'; §4: 'you shall "
+            "duly attribute ownership ... by displaying prominently the message "
+            "Powered by CoinGecko in a legible font ... no smaller than font size 10'. "
+            "Keyless docs: 'Attribution Required'; ~5 calls/min per IP, shared and "
+            "dynamic; 'not recommended for production'. A free Demo key (header "
+            "x-cg-demo-api-key, read from COINGECKO_DEMO_API_KEY) raises the limit. "
+            "AGGREGATED data, not an exchange feed; prices are indicative.",
+    verified_on="2026-10-28",
+    verified_status="MEASURED 2026-10-28: /coins/markets HTTP 200 (bitcoin 81036 USD, "
+                    "rank 1, last_updated 2026-10-28T20:42:55Z); /global HTTP 200 "
+                    "(22563 active cryptocurrencies, BTC dominance 59.46%); a third "
+                    "call within a minute returned HTTP 429 -- the keyless limit is real.",
+    doc_url="https://www.coingecko.com/en/api_terms",
+))
+
 # -------- DISABLED: permitted by licence, but NOT REACHABLE from here --------
 #
 # GDELT has the MOST PERMISSIVE licence in the entire review and is still
@@ -682,6 +711,8 @@ REQUIRED_NOTICES: Mapping[str, str] = MappingProxyType({
     "nyfed_markets_data": "\u00a9 2026 Federal Reserve Bank of New York. Content "
                           "from the New York Fed subject to the Terms of Use at "
                           "newyorkfed.org.",
+    # CoinGecko API terms §4 prescribe this exact message (D-0142).
+    "coingecko": "Powered by CoinGecko",
 })
 
 

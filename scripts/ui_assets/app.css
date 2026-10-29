@@ -42,8 +42,7 @@ hr.rule{border:0;border-top:1px dashed var(--line);margin:.5em 0 .6em}
 .brand{display:flex;align-items:center;gap:.6rem;color:var(--ink);font-size:1.12rem;font-weight:700;padding:.2rem .4rem}
 .brand:hover{text-decoration:none}
 .brand b{color:var(--brand)}
-.logo{display:grid;place-items:center;width:36px;height:36px;border-radius:11px;color:#fff;font-weight:800;
-      background:linear-gradient(135deg,var(--brand),var(--brand2))}
+.logo{display:block;width:36px;height:36px;border-radius:10px;box-shadow:0 2px 8px rgba(11,27,54,.25)}
 .nav{display:flex;flex-direction:column;gap:.15rem}
 .nav a{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border-radius:10px;color:var(--muted);font-weight:500}
 .nav a:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
@@ -194,3 +193,19 @@ svg.bar .fill.pos{fill:var(--brand)}svg.bar .fill.neg{fill:var(--bad)}
 .reply ul,.reply ol{margin:.3em 0;padding-inline-start:1.6em}
 .ev,.calc{font-size:.88rem;border-top:1px dashed var(--line);margin-top:.8rem;padding-top:.5rem}
 .ev div,.calc div{margin:.2em 0}
+/* D-0142: providers manager + engine picker */
+.seg{border:1px solid var(--line);border-radius:12px;padding:.5rem .8rem;margin:.2rem 0 .7rem;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem}
+.seg legend{font-weight:700;font-size:.85rem;color:var(--muted);padding:0 .3rem}
+.seg label{display:inline-flex;align-items:center;gap:.35rem;cursor:pointer}
+.seg input[disabled]+*{opacity:.5}
+label.check{display:flex;align-items:center;gap:.4rem;font-weight:600}
+.okbox{background:var(--okbg);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent);padding:.6rem .9rem;border-radius:12px;margin:.6rem 0}
+form.inline{display:inline-block;margin:.1rem .15rem}
+button.ghost{background:transparent;color:var(--brand);border:1px solid var(--line);padding:.25rem .7rem;font-size:.82rem}
+button.ghost.danger{color:var(--bad)}
+.engine-tag{display:inline-block;margin:.9rem 0 -.4rem;font-size:.78rem;font-weight:700;color:var(--brand);background:var(--info);padding:.1rem .6rem;border-radius:999px}
+/* D-0142: market changes + CoinGecko attribution (terms: legible, >= 10pt) */
+.chg{font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+.chg.up{color:var(--ok)}.chg.down{color:var(--bad)}
+.attrib{font-size:.9rem;font-weight:600;color:var(--ink);margin:.6rem 0 0}
+a.chip{text-decoration:none}a.chip.on{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}

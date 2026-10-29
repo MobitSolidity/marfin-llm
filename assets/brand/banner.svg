@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="bt bd">
+  <title id="bt">marfin-llm</title>
+  <desc id="bd">Local, bilingual (Persian-English) financial assistant: crypto, forex, US stocks and macro data, 85 deterministic tools, local model by default.</desc>
+  <style>
+    .t  { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+    .fa { font-family: Vazirmatn, Tahoma, "Segoe UI", "Noto Sans Arabic", sans-serif; }
+    .mono { font-family: "JetBrains Mono", Consolas, "DejaVu Sans Mono", monospace; }
+    .line { stroke-dasharray: 1400; animation: draw 3.2s ease-out .3s both; }
+    .fade { animation: in .9s ease-out both; }
+    .d1 { animation-delay: .2s } .d2 { animation-delay: .7s } .d3 { animation-delay: 1.2s }
+    .d4 { animation-delay: 1.7s } .d5 { animation-delay: 2.2s } .d6 { animation-delay: 2.7s }
+    .pulse { animation: pulse 2.4s ease-in-out infinite; transform-origin: 1062px 112px; }
+    .cursor { animation: blink 1s steps(1) infinite; }
+    .bar { transform-box: fill-box; transform-origin: bottom; animation: grow 1.1s cubic-bezier(.2,.8,.2,1) both; }
+    .b1 { animation-delay: .3s } .b2 { animation-delay: .45s } .b3 { animation-delay: .6s } .b4 { animation-delay: .75s }
+    @keyframes draw  { from { stroke-dashoffset: 1400 } to { stroke-dashoffset: 0 } }
+    @keyframes in    { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+    @keyframes pulse { 0%,100% { opacity: .9; transform: scale(1) } 50% { opacity: .35; transform: scale(1.9) } }
+    @keyframes blink { 50% { opacity: 0 } }
+    @keyframes grow  { from { transform: scaleY(0) } to { transform: scaleY(1) } }
+    @media (prefers-reduced-motion: reduce) {
+      .line, .fade, .bar, .pulse, .cursor { animation: none; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1B36"/>
+      <stop offset="0.6" stop-color="#0D3B5C"/>
+      <stop offset="1" stop-color="#0E7C7B"/>
+    </linearGradient>
+    <linearGradient id="up" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FF5DF"/>
+      <stop offset="1" stop-color="#2BC4B0"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#F2A93B"/>
+      <stop offset="1" stop-color="#FFD978"/>
+    </linearGradient>
+    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD978" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFD978" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#FFFFFF" stroke-opacity="0.05"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="340" rx="26" fill="url(#bg)"/>
+  <rect width="1200" height="340" rx="26" fill="url(#grid)"/>
+
+  <!-- price line across the banner -->
+  <path d="M0 324 L120 316 L210 320 L300 310 L390 314 L480 306 L570 310 L660 296 L750 286 L850 266 L930 206 L1010 150 L1062 112 L1200 84 L1200 340 L0 340 Z"
+        fill="url(#area)" class="fade d3"/>
+  <path class="line" d="M0 324 L120 316 L210 320 L300 310 L390 314 L480 306 L570 310 L660 296 L750 286 L850 266 L930 206 L1010 150 L1062 112 L1200 84"
+        fill="none" stroke="url(#gold)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle class="pulse" cx="1062" cy="112" r="9" fill="#FFD978" fill-opacity="0.5"/>
+  <circle cx="1062" cy="112" r="5" fill="#FFD978" class="fade d4"/>
+
+  <!-- logo mark (same geometry as assets/brand/logo.svg, scaled) -->
+  <g transform="translate(56 58) scale(0.62)">
+    <rect width="256" height="256" rx="58" fill="#0B1B36" fill-opacity="0.55" stroke="#7FF5DF" stroke-opacity="0.25" stroke-width="3"/>
+    <g stroke="#BFF8EE" stroke-width="5" stroke-linecap="round">
+      <line x1="64" y1="92" x2="64" y2="212"/><line x1="108" y1="126" x2="108" y2="196"/>
+      <line x1="152" y1="104" x2="152" y2="190"/><line x1="196" y1="54" x2="196" y2="212"/>
+    </g>
+    <g fill="url(#up)">
+      <rect class="bar b1" x="50" y="112" width="28" height="88" rx="7"/>
+      <rect class="bar b2" x="94" y="140" width="28" height="44" rx="7" fill-opacity="0.82"/>
+      <rect class="bar b3" x="138" y="120" width="28" height="58" rx="7" fill-opacity="0.92"/>
+      <rect class="bar b4" x="182" y="70" width="28" height="130" rx="7"/>
+    </g>
+    <polyline points="40,128 108,166 152,138 214,58" fill="none" stroke="url(#gold)" stroke-width="10"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M190 52 L222 48 L216 80 Z" fill="#FFD978"/>
+    <circle cx="40" cy="128" r="8" fill="#FFD978"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="248" y="122" class="t fade d1" font-size="64" font-weight="800" fill="#FFFFFF" letter-spacing="-1">marfin<tspan fill="#7FF5DF">-llm</tspan></text>
+  <text x="250" y="160" class="t fade d2" font-size="22" fill="#CFE9F2">Local · bilingual · evidence-first financial assistant</text>
+  <text x="250" y="196" class="fa fade d3" font-size="22" fill="#FFD978" direction="rtl" unicode-bidi="embed" text-anchor="end">دستیار مالی محلی و دوزبانه · اول شاهد، بعد پاسخ</text>
+
+  <!-- market chips -->
+  <g class="t fade d5" font-size="15" font-weight="600">
+    <g transform="translate(250 224)"><rect width="96" height="30" rx="15" fill="#0B1B36" fill-opacity="0.85" stroke="#7FF5DF" stroke-opacity="0.35"/><text x="48" y="20" text-anchor="middle" fill="#BFF8EE">Crypto</text></g>
+    <g transform="translate(356 224)"><rect width="96" height="30" rx="15" fill="#0B1B36" fill-opacity="0.85" stroke="#7FF5DF" stroke-opacity="0.35"/><text x="48" y="20" text-anchor="middle" fill="#BFF8EE">Forex</text></g>
+    <g transform="translate(462 224)"><rect width="118" height="30" rx="15" fill="#0B1B36" fill-opacity="0.85" stroke="#7FF5DF" stroke-opacity="0.35"/><text x="59" y="20" text-anchor="middle" fill="#BFF8EE">US stocks</text></g>
+    <g transform="translate(590 224)"><rect width="96" height="30" rx="15" fill="#0B1B36" fill-opacity="0.85" stroke="#7FF5DF" stroke-opacity="0.35"/><text x="48" y="20" text-anchor="middle" fill="#BFF8EE">Macro</text></g>
+    <g transform="translate(696 224)"><rect width="126" height="30" rx="15" fill="#0B1B36" fill-opacity="0.85" stroke="#FFD978" stroke-opacity="0.45"/><text x="63" y="20" text-anchor="middle" fill="#FFE7A8">85 tools</text></g>
+  </g>
+
+  <!-- prompt line -->
+  <text x="250" y="292" class="mono fade d6" font-size="17" fill="#9FD8CF">$ python scripts/ui.py<tspan class="cursor" fill="#7FF5DF"> ▌</tspan></text>
+</svg>
