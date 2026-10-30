@@ -399,7 +399,7 @@ def build_url(symbol: str, function: str = "TIME_SERIES_DAILY",
 def _http_get(url: str, api_key: str, timeout: float = 20.0) -> Any:
     """One GET. Raises with the key redacted from every message."""
     req = urllib.request.Request(
-        url, headers={"User-Agent": "marfin-llm/0.1 (personal, non-commercial)",
+        url, headers={"User-Agent": "Andarz/0.15 (personal, non-commercial)",
                       "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

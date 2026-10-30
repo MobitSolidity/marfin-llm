@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ui.py -- marfin-llm in the browser: every capability on one local page (D-0140).
+ui.py -- Andarz (اندرز) in the browser: every capability on one local page (D-0140).
 
     python scripts\\ui.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf
     python scripts\\ui.py --server lmstudio --model-id qwen3.5-4b
@@ -107,7 +107,10 @@ STATIC = {"/static/app.css": ("app.css", "text/css; charset=utf-8"),
           "/static/app.js": ("app.js", "text/javascript; charset=utf-8"),
           # D-0142: the logo has ONE source (assets/brand/), shared with the README.
           "/static/logo.svg": (os.path.join(BRAND_DIR, "logo.svg"), "image/svg+xml; charset=utf-8"),
-          "/static/favicon.svg": (os.path.join(BRAND_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8")}
+          "/static/favicon.svg": (os.path.join(BRAND_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8"),
+          # D-0143: the standalone mark (sidebar) and the light-on-dark logo, same single source.
+          "/static/mark.svg": (os.path.join(BRAND_DIR, "mark.svg"), "image/svg+xml; charset=utf-8"),
+          "/static/logo-dark.svg": (os.path.join(BRAND_DIR, "logo-dark.svg"), "image/svg+xml; charset=utf-8")}
 CSP = ("default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; "
        "form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 try:
@@ -373,10 +376,10 @@ class App(object):
         doc = ('<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
                '<meta name="viewport" content="width=device-width,initial-scale=1">'
                '<meta name="color-scheme" content="light dark">'
-               '<title>%s - marfin-llm</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
+               '<title>%s - Andarz</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
                '<link rel="stylesheet" href="/static/app.css">'
                '<script src="/static/app.js" defer></script></head><body><div class="shell">'
-               '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/logo.svg" alt="" width="36" height="36"><span>marfin<b>llm</b></span></a>'
+               '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/mark.svg" alt="" width="36" height="36"><span class="wm">Andarz <b>اندرز</b></span></a>'
                '<nav class="nav">%s</nav><div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
                '<div class="main"><header class="top"><details class="menu"><summary>منو</summary>'
                '<nav class="nav nav-m">%s</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
@@ -1293,7 +1296,7 @@ def make_handler(app):
     from http.server import BaseHTTPRequestHandler
 
     class H(BaseHTTPRequestHandler):
-        server_version = "marfin-ui"
+        server_version = "andarz-ui"
 
         def _go(self, method):
             u = urllib.parse.urlsplit(self.path)
@@ -1343,7 +1346,7 @@ def refuse_args(a):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="marfin-llm local web UI (loopback only).")
+    ap = argparse.ArgumentParser(description="Andarz (اندرز) local web UI (loopback only).")
     ap.add_argument("--model", help="GGUF file (in-process llama.cpp); without it, 'ask' is unavailable")
     ap.add_argument("--server", choices=("ollama", "lmstudio"))
     ap.add_argument("--model-id")
@@ -1389,7 +1392,7 @@ def main(argv=None):
     from http.server import ThreadingHTTPServer
     srv = ThreadingHTTPServer((HOST, a.port), make_handler(app))
     url = "http://%s:%d/" % (HOST, a.port)
-    print("marfin-llm UI: %s   (Ctrl+C to stop)" % url)
+    print("Andarz UI: %s   (Ctrl+C to stop)" % url)
     if not a.no_open:
         import webbrowser
         try:

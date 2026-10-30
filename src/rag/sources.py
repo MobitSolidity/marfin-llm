@@ -800,7 +800,7 @@ def check_access(key: str, user_agent: Optional[str] = None,
     if src.requires_contact_ua and not _is_contact_ua(user_agent):
         raise AccessError(
             "source %r requires a User-Agent naming a reachable contact "
-            "address, e.g. 'marfin-llm/0.1 (you@example.com)' (MEASURED: "
+            "address, e.g. 'Andarz/0.15 (you@example.com)' (MEASURED: "
             "HTTP 403 without one). Got %r." % (key, user_agent))
     if src.requires_api_key and not (api_key or "").strip():
         # .strip(): a whitespace-only key passed the first version of this

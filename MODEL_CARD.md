@@ -1,11 +1,11 @@
-# Model Card — marfin-llm (local bilingual financial assistant)
+# Model Card — Andarz (اندرز; repository marfin-llm) — local bilingual financial assistant
 
 Labels: (V) VERIFIED · (M) MEASURED on the target machine · (C) COMPUTED from recorded output · (E) ESTIMATED.
 Every number below cites its evidence file. A number without a label is not a claim.
 
 | Field (SS.23) | Value |
 |---|---|
-| **Model name** | marfin-llm — an orchestrated system: base LLM + RAG + deterministic tools + execution safety layer. It is **not** a fine-tuned model. |
+| **Model name** | Andarz (اندرز; renamed from marfin-llm in D-0143, repository name unchanged) — an orchestrated system: base LLM + RAG + deterministic tools + execution safety layer. It is **not** a fine-tuned model. |
 | **Base model** | Qwen3.5-4B (Qwen team), GGUF conversion by Unsloth, `unsloth/Qwen3.5-4B-GGUF` |
 | **Revision** | `e87f176479d0855a907a41277aca2f8ee7a09523` (V) |
 | **Architecture** | `qwen35` decoder-only transformer, 4,205,751,296 parameters, vocab 248,320, GGUF v3 (V, `evidence/phase7_gguf_headers_2026-10-16.json`) |
@@ -100,4 +100,4 @@ shown to the model, scale included (the 10⁶ error class).
   (M, D-0122).
 - Every run file records the model sha256, all prompt options, sampling, ctx, threads and the tool registry size.
   `merge_phase4` and `compare_quants` refuse to combine runs that differ in any of them.
-- Test suite: `bash tests/run_all.sh` (31 suites; no model needed) and `--mutate` (mutation batteries).
+- Test suite: `bash tests/run_all.sh` (32 suites; no model needed) and `--mutate` (mutation batteries).

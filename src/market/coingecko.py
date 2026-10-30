@@ -110,7 +110,7 @@ def _demo_key() -> Optional[str]:
 
 
 def _http_get(url: str, timeout: float = 20.0) -> Any:
-    req = urllib.request.Request(url, headers={"User-Agent": "marfin-llm/0.14 (personal research)",
+    req = urllib.request.Request(url, headers={"User-Agent": "Andarz/0.15 (personal research)",
                                                "Accept": "application/json"})
     key = _demo_key()
     if key:

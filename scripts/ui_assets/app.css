@@ -1,4 +1,4 @@
-/* marfin-llm local UI (D-0141). Served from /static/app.css; no inline styles anywhere,
+/* Andarz local UI (D-0141, rebranded D-0143). Served from /static/app.css; no inline styles anywhere,
    so the Content-Security-Policy can forbid them. Light and dark themes, RTL first. */
 :root{
   --bg:#f3f5f9; --panel:#ffffff; --panel2:#f8fafc; --ink:#1b2333; --muted:#5d6b82; --line:#e3e8f0;

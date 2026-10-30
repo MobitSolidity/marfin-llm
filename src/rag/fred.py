@@ -76,7 +76,7 @@ def observations_url(series_id: str, api_key: str, limit: int = 10,
 
 
 def _http_get(url: str, api_key: str, timeout: float = 20.0) -> Any:
-    req = urllib.request.Request(url, headers={"User-Agent": "marfin-llm/0.10 (personal research)",
+    req = urllib.request.Request(url, headers={"User-Agent": "Andarz/0.15 (personal research)",
                                                "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

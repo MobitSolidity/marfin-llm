@@ -1009,7 +1009,7 @@ python scripts\panel.py
 پنل رسم می‌شود و بعد **راهنمای فرمان** ظاهر می‌شود:
 
 ```
-marfin>
+andarz>
 ```
 
 **فهرست دستورها.** هر دستور را می‌توانید با **شماره** یا با **واژه** بزنید:
@@ -1032,10 +1032,10 @@ marfin>
 **یک نشست نمونه:**
 
 ```
-marfin> 3
-marfin> engine google
-marfin> run
-marfin> 0
+andarz> 3
+andarz> engine google
+andarz> run
+andarz> 0
 ```
 
 **خروج:** `0` یا `quit` یا `exit`. در ویندوز `Ctrl+Z` و بعد `Enter` هم

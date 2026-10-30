@@ -130,7 +130,8 @@ tests/test_ask.py \
 tests/test_ui.py \
 tests/test_datahub.py \
 tests/test_provider_manager.py \
-tests/test_market_data.py"
+tests/test_market_data.py \
+tests/test_d0143.py"
 
 for t in $SUITES; do
   echo

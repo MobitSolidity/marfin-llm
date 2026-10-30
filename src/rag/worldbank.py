@@ -56,7 +56,7 @@ def data_url(countries: Sequence[str], indicator: str, mrv: int = 5) -> str:
 
 
 def _http_get(url: str, timeout: float = 20.0) -> Any:
-    req = urllib.request.Request(url, headers={"User-Agent": "marfin-llm/0.13 (personal research)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Andarz/0.15 (personal research)"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))

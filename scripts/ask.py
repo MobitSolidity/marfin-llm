@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ask.py -- ask marfin-llm a question, on the i5-12400 (D-0135).
+ask.py -- ask Andarz (اندرز) a question, on the i5-12400 (D-0135).
 
     python scripts\\ask.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf "What was Apple's net income in fiscal 2023?"
     python scripts\\ask.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf          (interactive; /quit to leave)
@@ -402,7 +402,7 @@ DEFAULT_HTML = os.path.join(os.path.expanduser("~"), ".marfin", "ask_answer.html
 
 _HTML_HEAD = """<!DOCTYPE html>
 <html lang="fa"><head><meta charset="utf-8">%s
-<title>marfin-llm</title>
+<title>Andarz</title>
 <style>
 body{font-family:Vazirmatn,"Segoe UI",Tahoma,Arial,sans-serif;font-size:17px;line-height:1.9;
      max-width:60em;margin:1.5em auto;padding:0 1em;background:#fafafa;color:#222}
@@ -544,7 +544,7 @@ def open_audit(path):
 
 
 def main(argv=None, runner=None, stdin=None):
-    ap = argparse.ArgumentParser(description="Ask marfin-llm (local model only).")
+    ap = argparse.ArgumentParser(description="Ask Andarz (local model only).")
     ap.add_argument("question", nargs="?", help="omit for an interactive session")
     ap.add_argument("--model", help="path to the GGUF file (in-process llama.cpp)")
     ap.add_argument("--server", choices=("ollama", "lmstudio"),
@@ -628,7 +628,7 @@ def main(argv=None, runner=None, stdin=None):
         one(a.question)
         return 0
     src = stdin or sys.stdin
-    print("marfin-llm -- ask in Persian or English. /quit to leave.")
+    print("Andarz -- ask in Persian or English. /quit to leave.")
     while True:
         try:
             sys.stdout.write("\n> ")

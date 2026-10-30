@@ -171,9 +171,9 @@ check_raises("no contact e-mail: refused before any request", SF.user_agent, SF.
 for e in ("me", "@example.com", "me@localhost", "a b@x.com", "me@example.com<script>"):
     check_raises("refused contact %r" % e, lambda e=e: SF.user_agent(e), SF.SecError)
 ua = SF.user_agent(FD.SEC_CONTACT)
-check_true("UA names the project and the contact", ua == "marfin-llm/0.14 (owner@example.com)", "(V)")
+check_true("UA names the project and the contact", ua == "Andarz/0.15 (owner@example.com)", "(V)")
 check_raises("the registry gate refuses a UA without a contact (MEASURED 403 otherwise)",
-             lambda: SF.fetch_fundamentals(320193, "marfin-llm/0.14", http_get=FD.sec_get), S.AccessError)
+             lambda: SF.fetch_fundamentals(320193, "Andarz/0.15", http_get=FD.sec_get), S.AccessError)
 for cik in (True, 0, 10 ** 10, "320193"):
     check_raises("refused CIK %r" % (cik,), lambda c=cik: SF.fetch_fundamentals(c, ua, http_get=FD.sec_get),
                  SF.SecError)

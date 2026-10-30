@@ -224,11 +224,11 @@ def pad(text: str, width: int, align: str = "left") -> str:
 # Hand-built rather than generated, so it renders identically everywhere and
 # needs no font, no figlet install and no network.
 _WORDMARK = [
-    "MMM   MMM   AAAAA   RRRRRR   FFFFFF  IIII  NNN   NN",
-    "MMMM MMMM  AAA AAA  RR   RR  FF       II   NNNN  NN",
-    "MM MMM MM AAAAAAAAA RRRRRR   FFFF     II   NN NN NN",
-    "MM  M  MM AAA   AAA RR  RR   FF       II   NN  NNNN",
-    "MM     MM AAA   AAA RR   RR  FF      IIII  NN   NNN",
+    "  AAAAA    NNN   NN  DDDDDD      AAAAA    RRRRRR    ZZZZZZZ",
+    "AAA   AAA  NNNN  NN  DD   DD   AAA   AAA  RR   RR       ZZ",
+    "AAAAAAAAA  NN NN NN  DD    DD  AAAAAAAAA  RRRRRR       ZZ",
+    "AAA   AAA  NN  NNNN  DD   DD   AAA   AAA  RR  RR      ZZ",
+    "AAA   AAA  NN   NNN  DDDDDD    AAA   AAA  RR   RR   ZZZZZZZ",
 ]
 
 
@@ -250,7 +250,7 @@ def wordmark(style: Style, width: int = 78) -> List[str]:
     art_w = max(len(r) for r in _WORDMARK)
     if art_w + 2 > width:
         g = style.g
-        label = " MARFIN "
+        label = " ANDARZ "
         fill = max(0, width - 2 - len(label))
         left = fill // 2
         return [style.c("title", g["h"] * left + label + g["h"] * (fill - left))]

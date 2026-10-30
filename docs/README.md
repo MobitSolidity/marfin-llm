@@ -18,7 +18,7 @@ Every file under `docs/`, grouped by purpose. Titles are copied from each file's
 ## User guides (Persian) / راهنماهای کاربر
 | File | Title |
 |---|---|
-| [guides/ui-fa.md](guides/ui-fa.md) | راهنمای رابط کاربری وب marfin-llm |
+| [guides/ui-fa.md](guides/ui-fa.md) | راهنمای رابط کاربری وب اندرز (Andarz) |
 | [guides/ask-fa.md](guides/ask-fa.md) | پرسیدن سؤال با `scripts/ask.py` |
 | [guides/step-1-google-ai-studio-fa.md](guides/step-1-google-ai-studio-fa.md) | گام ۱ — اتصال به Google AI Studio (Gemini) |
 | [guides/phase-4-windows-setup-fa.md](guides/phase-4-windows-setup-fa.md) | راهنمای اجرای فاز ۴ روی ویندوز ۱۱ |

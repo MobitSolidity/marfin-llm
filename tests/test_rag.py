@@ -48,7 +48,7 @@ from rag.sources import (AccessError, REQUIRED_NOTICES, SOURCES,     # noqa
 
 # A User-Agent that names a reachable contact, as SEC requires.
 # MEASURED 2026-08-10: contact UA -> HTTP 200, absent UA -> HTTP 403.
-CONTACT_UA = "marfin-llm/0.1 (contact@example.com)"
+CONTACT_UA = "Andarz/0.15 (contact@example.com)"
 
 PROV = Provenance(source="SEC EDGAR", trust_level="VERIFIED_PRIMARY",
                   filed="2026-07-31", accession="0000320193-26-000020")

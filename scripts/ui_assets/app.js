@@ -1,4 +1,4 @@
-/* marfin-llm local UI (D-0141). Served from /static/app.js under script-src 'self'.
+/* Andarz local UI (D-0141, rebranded D-0143). Served from /static/app.js under script-src 'self'.
    Progressive enhancement only: every page works without this file. It never builds
    markup from data and never evaluates strings; it only toggles classes, sets
    textContent and fills form fields (tests/test_ui.py asserts the forbidden APIs are
@@ -6,8 +6,9 @@
 (function () {
   "use strict";
   var root = document.documentElement;
+  /* D-0143: the theme key is "andarz-theme"; a choice saved under the old key still applies. */
   try {
-    var saved = window.localStorage.getItem("marfin-theme");
+    var saved = window.localStorage.getItem("andarz-theme") || window.localStorage.getItem("marfin-theme");
     if (saved === "dark" || saved === "light") { root.setAttribute("data-theme", saved); }
   } catch (e) { /* storage blocked: follow the system theme */ }
 
@@ -32,7 +33,7 @@
           (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
         var next = cur === "dark" ? "light" : "dark";
         root.setAttribute("data-theme", next);
-        try { window.localStorage.setItem("marfin-theme", next); } catch (e) { /* ignore */ }
+        try { window.localStorage.setItem("andarz-theme", next); } catch (e) { /* ignore */ }
       });
     });
 
