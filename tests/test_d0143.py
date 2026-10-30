@@ -178,6 +178,57 @@ _svg, _leg = U.svg_multi([("a", [("2020", 1.0), ("2021", 2.0)]), ("b", [("2020",
 check_true("the multi-line legend draws each series' own dash pattern (an SVG swatch, not a colour square)",
            _leg.count('<svg class="lg"') == 2 and 'class="m s1"' in _leg and "<i class" not in _leg, "(V)")
 
+# ===========================================================================
+section("2. responsive UI: rules asserted on app.css and the markup (browser audit is dev-only)")
+# ===========================================================================
+CSS = read("scripts/ui_assets/app.css")
+check_true("one 44 px touch-target token, used by buttons, nav links, tabs, chips, inputs, the menu and the theme toggle",
+           "--tap:44px" in CSS and all(r in CSS for r in (
+               "min-height:var(--tap);", ".theme{background:var(--panel);color:var(--ink);border:1px solid var(--line);"
+               "border-radius:10px;width:var(--tap);height:var(--tap)")) and CSS.count("min-height:var(--tap)") >= 10, "(V)")
+check_true("inputs use a 16 px minimum font (no iOS zoom on focus)", "font-size:max(1rem,16px)" in CSS, "(V)")
+check_true("a visible :focus-visible ring on every control, in the AA-checked --focus colour",
+           ":focus-visible{outline:3px solid var(--focus)" in CSS, "(V)")
+check_true("reduced motion stops animations and transitions globally",
+           "@media (prefers-reduced-motion:reduce)" in CSS and "animation-duration:.01ms !important" in CSS, "(V)")
+check_true("grid tracks never demand more than their column (min(...,100%)), so 320 px cannot overflow",
+           all("minmax(min(%dpx,100%%),1fr)" % w in CSS for w in (320, 240, 200, 230, 250))
+           and not re.search(r"minmax\(\d+px,1fr\)", CSS), "(V)")
+check_true("long addresses, symbols and hashes wrap (overflow-wrap:anywhere on code, .ltr and cells)",
+           "code,.ltr,td,th,.wrap{overflow-wrap:anywhere}" in CSS, "(V)")
+check_true("narrow screens: tabs scroll sideways, form rows stack, buttons go full width",
+           "@media (max-width:600px)" in CSS and ".tabs{flex-wrap:nowrap;overflow-x:auto" in CSS
+           and ".form-row{flex-direction:column;align-items:stretch}" in CSS, "(V)")
+check_true("a checkbox keeps its own size inside a full-width field (MEASURED overflow on /providers otherwise)",
+           ".field input[type=checkbox],.field input[type=radio],label.check input,.seg input{width:22px;height:22px}" in CSS, "(V)")
+check_true("every disclosure (<summary>) is a 44 px target", "details > summary{min-height:var(--tap)" in CSS, "(V)")
+check_true("empty, stale and disabled states have styles", all(x in CSS for x in (
+    ".empty{", ".stale{", 'button:disabled,button[aria-disabled="true"]{opacity:.6;cursor:not-allowed}')), "(V)")
+b = A.handle("GET", "/").body
+check_true("a skip link jumps to the main content (keyboard users)",
+           '<a class="skip" href="#main">' in b and '<main class="content" id="main" tabindex="-1">' in b, "(V)")
+check_true("the current page is marked aria-current=page in both the sidebar and the mobile menu",
+           b.count('class="on" aria-current="page"') == 2, "(V)")
+check_true("mobile menu is a <details> (works without JS) with a labelled summary",
+           '<details class="menu"><summary aria-label="منوی صفحه‌ها">' in b, "(V)")
+check_true("the theme toggle has an accessible name", 'aria-label="تغییر تم روشن و تیره"' in b, "(V)")
+check_true("wrap_tables puts a bare table in a scrolling, focusable region",
+           U.wrap_tables("<p><table><tr><td>x</td></tr></table></p>")
+           == '<p><div class="tbl" tabindex="0" role="region" aria-label="جدول"><table><tr><td>x</td></tr></table></div></p>', "(V)")
+check_true("... and leaves an already wrapped table alone",
+           U.wrap_tables('<div class="tbl"><table><tr><td>x</td></tr></table></div>')
+           == '<div class="tbl"><table><tr><td>x</td></tr></table></div>', "(V)")
+check_true("... and does not wrap a table inside an escaped model reply (escaped text is not markup)",
+           U.wrap_tables("&lt;table&gt;x&lt;/table&gt;") == "&lt;table&gt;x&lt;/table&gt;", "(A)")
+for pth in ("/maintenance", "/phase11", "/audit", "/paper"):
+    bb = A.handle("GET", pth).body
+    check_true("%s: no bare <table> left outside a .tbl box (the pages that overflowed at 320 px)" % pth,
+               not re.search(r'(?<!<div class="tbl" tabindex="0" role="region" aria-label="جدول">)(?<!<div class="tbl">)<table>', bb), "(V)")
+check_true("the strict CSP is unchanged by the redesign",
+           A.handle("GET", "/").headers["Content-Security-Policy"].startswith("default-src 'none'; style-src 'self'; script-src 'self'"), "(V)")
+check_true("still no inline style or event handler anywhere on the home page",
+           not re.search(r'\sstyle="|\son[a-z]+="', b), "(V)")
+
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
 print("")

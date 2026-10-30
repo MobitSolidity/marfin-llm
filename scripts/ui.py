@@ -277,6 +277,17 @@ def value_table(v):
     return "<code>%s</code>" % esc(v)
 
 
+#: D-0143: every data table scrolls inside its own box on narrow screens. A bare <table> (the
+#: paper, audit, maintenance, macro and Phase 11 pages build them directly) is wrapped here, in
+#: one place, rather than at each call site. Tables are never nested in this UI, and all text
+#: that reaches a page is escaped, so "<table>" in the document can only be our own markup.
+_BARE_TABLE = re.compile(r'(?<!<div class="tbl">)<table>(.*?)</table>', re.S)
+
+
+def wrap_tables(doc):
+    return _BARE_TABLE.sub(r'<div class="tbl" tabindex="0" role="region" aria-label="جدول"><table>\1</table></div>', doc)
+
+
 def notices_html(ns):
     return "".join('<p class="note ltr">%s</p>' % esc(n) for n in ns or ())
 
@@ -372,24 +383,26 @@ class App(object):
         return self._engine
 
     def page(self, path, title, body, status=200, subtitle=""):
-        nav = "".join('<a href="%s"%s><span class="dot"></span>%s</a>' % (h, ' class="on"' if h == path else "", esc(t))
+        nav = "".join('<a href="%s"%s><span class="dot"></span>%s</a>' % (h, ' class="on" aria-current="page"' if h == path else "", esc(t))
                       for h, t in NAV)
         doc = ('<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
                '<meta name="viewport" content="width=device-width,initial-scale=1">'
                '<meta name="color-scheme" content="light dark">'
                '<title>%s - Andarz</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
                '<link rel="stylesheet" href="/static/app.css">'
-               '<script src="/static/app.js" defer></script></head><body><div class="shell">'
+               '<script src="/static/app.js" defer></script></head><body>'
+               '<a class="skip" href="#main">\u067e\u0631\u0634 \u0628\u0647 \u0645\u062d\u062a\u0648\u0627</a><div class="shell">'
                '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/mark.svg" alt="" width="36" height="36"><span class="wm">Andarz <b>اندرز</b></span></a>'
                '<nav class="nav">%s</nav><div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
-               '<div class="main"><header class="top"><details class="menu"><summary>منو</summary>'
+               '<div class="main"><header class="top"><details class="menu"><summary aria-label="منوی صفحه‌ها">منو</summary>'
                '<nav class="nav nav-m">%s</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
-               '<button class="theme" type="button" data-theme-toggle title="روشن / تیره">&#9680;</button></header>'
-               '<main class="content">%s</main>'
+               '<button class="theme" type="button" data-theme-toggle title="روشن / تیره" aria-label="تغییر تم روشن و تیره">&#9680;</button></header>'
+               '<main class="content" id="main" tabindex="-1">%s</main>'
                '<footer class="foot">این خروجی تحلیلی است، نه توصیهٔ مالی شخصی. معاملهٔ واقعی در این برنامه غیرفعال است '
                '(فاز ۱۱ معلق).</footer></div></div></body></html>') % (
             esc(title), nav, esc(VERSION), nav, esc(title),
             ('<p class="sub">%s</p>' % esc(subtitle)) if subtitle else "", body)
+        doc = wrap_tables(doc)
         return Response(status, doc, headers={"Content-Security-Policy": CSP,
                                               "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
                                               "X-Content-Type-Options": "nosniff"})
