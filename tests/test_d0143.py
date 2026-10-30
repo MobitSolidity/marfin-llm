@@ -229,6 +229,98 @@ check_true("the strict CSP is unchanged by the redesign",
 check_true("still no inline style or event handler anywhere on the home page",
            not re.search(r'\sstyle="|\son[a-z]+="', b), "(V)")
 
+# ===========================================================================
+section("8. self-introduction: deterministic 'about' route built from live registries")
+# ===========================================================================
+import json                                                              # noqa: E402
+import ask as ASKM                                                       # noqa: E402
+from tools.registry import tool_schemas                                  # noqa: E402
+from rag import datahub as DH                                            # noqa: E402
+
+
+class _Boom(object):
+    """A runner that must never be called by the about route."""
+    calls = 0
+
+    def generate(self, prompt):
+        _Boom.calls += 1
+        raise AssertionError("the model was called for a self-introduction")
+
+
+EN_TRIG = ("who are you", "Who are you?", "introduce yourself", "please introduce yourself",
+           "what can you do", "Hello, what is Andarz?", "tell me about yourself", "help")
+FA_TRIG = ("خودت را معرفی کن", "خودتو معرفی کن", "تو کی هستی؟", "چه کارهایی بلدی",
+           "اندرز چیست", "از خودت بگو", "خودت\u200cرا معرفی کن")
+NEG = ("What was Apple's P/E in 2023?", "P/E with price 150 and EPS 6?",
+       "who are you going to recommend for my retirement portfolio given inflation and rates rising",
+       "نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟", "helpful ratios for banks", "")
+for q in EN_TRIG + FA_TRIG:
+    check_true("is_about(%r) is true" % q, ASKM.is_about(q), "(B)")
+for q in NEG:
+    check_true("is_about(%r) is false (not a self-introduction)" % q, not ASKM.is_about(q), "(A)")
+check_true("route ROUTES lists 'about' first", ASKM.ROUTES[0] == "about", "(V)")
+
+bot = ASKM.Assistant(_Boom(), use_macro=False)
+for q in EN_TRIG[:3] + FA_TRIG[:3]:
+    check_true("route(%r) == about" % q, bot.route(q)[0] == "about", "(B)")
+_Boom.calls = 0
+oe = bot.answer("who are you")
+of = bot.answer("خودت را معرفی کن")
+check("the model is never called for the about route", _Boom.calls, 0, method="(A)")
+check_true("English question -> English reply", oe["lang"] == "en" and "Pages (" in oe["reply"]
+           and "\u0635\u0641\u062d\u0647" not in oe["reply"].split("\n")[2], "(B)")
+check_true("Persian question -> Persian reply", of["lang"] == "fa" and "\u0635\u0641\u062d\u0647 \u0647\u0627" in of["reply"]
+           and "Pages (" not in of["reply"], "(B)")
+for o in (oe, of):
+    check_true("no 'Apple' or 'AAPL' anywhere in the %s about reply" % o["lang"],
+               not re.search(r"apple|aapl", o["reply"], re.I), "(A)")
+    check_true("%s reply carries the name, the version and the safety stance" % o["lang"],
+               "Andarz" in o["reply"] and read("VERSION").strip() in o["reply"] and "ANALYSIS_ONLY" in o["reply"], "(V)")
+f = ASKM.about_facts()
+check("pages in the facts == len(ui.NAV)", len(f["pages"]), len(U.NAV), method="(V)")
+check("n_tools == len(tool_schemas())", f["n_tools"], len(tool_schemas()), method="(V)")
+check("sources == len(DataHub SOURCES_FA)", len(f["sources"]), len(DH.SOURCES_FA), method="(V)")
+check_true("EN reply states the live counts", "**Pages (%d):**" % len(U.NAV) in oe["reply"]
+           and "%d deterministic tools" % len(tool_schemas()) in oe["reply"]
+           and "**Data sources (%d)**" % len(DH.SOURCES_FA) in oe["reply"], "(V)")
+check_true("every DataHub source key is listed in the EN reply", all("- %s" % r[0] in oe["reply"] for r in DH.SOURCES_FA), "(V)")
+check_true("keyed sources name their env var; CoinGecko's demo key is shown as optional",
+           "fred (needs FRED_API_KEY)" in oe["reply"] and "coingecko (no key; optional COINGECKO_DEMO_API_KEY)" in oe["reply"], "(V)")
+check_true("all five evidence labels are listed", all(k in oe["reply"] for k in
+           ("VERIFIED", "MEASURED", "COMPUTED", "ESTIMATED", "UNKNOWN")), "(V)")
+check_true("Persian counts use Persian digits", ("**\u0635\u0641\u062d\u0647 \u0647\u0627 (%s):**" % str(len(U.NAV)).translate(ASKM._FA_DIGITS)) in of["reply"], "(V)")
+alt = ASKM.Assistant(_Boom(), use_macro=False, pages=(("/", "Home"), ("/x", "Extra page"))).answer("who are you")
+check_true("content follows NAV: a different page list changes the reply", "**Pages (2):**" in alt["reply"]
+           and "/x  (Extra page)" in alt["reply"] and alt["reply"] != oe["reply"], "(B)")
+check_true("render() marks the turn as built without a model",
+           ASKM.render(oe).splitlines()[0] == "route: about   (no model: built from the registries)", "(V)")
+check_true("turn_html() meta marks the turn as built without a model",
+           '<div class="meta">route: about &middot; no model (registries)</div>' in ASKM.turn_html(oe), "(V)")
+check_true("a non-about turn has no 'no model' marker", "no model" not in ASKM.render(dict(oe, about=False, route="plain")).splitlines()[0], "(A)")
+
+check_true("ask.py never imports ui (no import cycle; the UI passes pages=NAV instead)",
+           not re.search(r"^\s*(?:import ui\b|from ui import)", read("scripts/ask.py"), re.M)
+           and read("scripts/ui.py").count("pages=NAV") == 3, method="(V)")
+apath = os.path.join(tempfile.mkdtemp(dir=TMP), "about.jsonl")
+ASKM.Assistant(_Boom(), use_macro=False, audit=ASKM.open_audit(apath)).answer("introduce yourself")
+recs = [json.loads(x) for x in io.open(apath, encoding="utf-8").read().splitlines() if x.strip()]
+check_true("the audit log records the turn with route 'about'", len(recs) == 1 and json.dumps(recs[0]).count('"about"') >= 1, "(V)")
+
+C = app()
+check_true("UI with no model loaded: /ask still answers the self-introduction",
+           C.assistant is None and "route: about" in C.handle("POST", "/ask", form={"csrf": C.csrf, "question": "خودت را معرفی کن"}).body, "(B)")
+cb = C.handle("GET", "/ask").body
+check_true("UI with no model: the about turn is labelled as model-free", "بدون مدل · از فهرست‌های برنامه" in cb, "(V)")
+check_true("UI with no model: other questions are still refused (no fabricated answer)",
+           "بدون مدل نمی‌توان پاسخ داد" in C.handle("POST", "/ask", form={"csrf": C.csrf, "question": "P/E with price 150 and EPS 6?"}).body, "(A)")
+chips = re.findall(r'data-fill="([^"]*)"', cb)
+check("the /ask page still has 4 example chips", len(chips), 4, method="(V)")
+check_true("no chip mentions Apple/AAPL", not any(re.search(r"apple|aapl", c, re.I) for c in chips), "(A)")
+check_true("the first chip is the self-introduction and it routes to 'about'", ASKM.is_about(chips[0].replace("&#x27;", "'")), "(B)")
+check_true("ask.py docstring no longer uses Apple/AAPL as the example",
+           not re.search(r"apple|aapl", ASKM.__doc__ or "", re.I), "(A)")
+check_true("docs/deployment.md no longer uses Apple/AAPL as the example", not re.search(r"\bapple\b|\baapl\b", read("docs/deployment.md"), re.I), "(A)")
+
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
 print("")

@@ -363,7 +363,7 @@ class App(object):
         local = self.assistant
         index = local.index if local is not None else ASK.build_index_from(ASK.DEFAULT_CORPUS)
         use_macro = local.use_macro if local is not None else True
-        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro),
+        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro, pages=NAV),
                 "%s: %s" % (prov, eff["model_id"]))
 
     def remote_assistant(self):
@@ -766,7 +766,7 @@ class App(object):
         sym = (q.get("symbol") or "").strip()
         kw = (q.get("q") or "").strip()
         form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="stocks">'
-                '<div class="form-row"><label>نماد سهم (مثلاً IBM یا AAPL)<input name="symbol" dir="ltr" value="%s"></label>'
+                '<div class="form-row"><label>نماد سهم (مثلاً IBM)<input name="symbol" dir="ltr" value="%s"></label>'
                 '<button>نمایش</button></div><p class="note">قیمت: Alpha Vantage رایگان، فقط قیمت پایانی روز، ۲۵ درخواست در '
                 'روز، با کلید <code>ALPHAVANTAGE_API_KEY</code> (قیمت لحظه‌ای در نسخهٔ رایگان از نظر مقررات مجاز نیست). '
                 'صورت‌های مالی: SEC EDGAR، رسمی و رایگان.</p></form>'
@@ -835,14 +835,26 @@ class App(object):
                 else:
                     out["engine_label"] = "آنلاین · " + label
                     self.history.append(out)
+            elif self.assistant is None and ASK.is_about(question):
+                # D-0143: the self-introduction is built from the registries, never by a model,
+                # so it works even when no model is loaded. Same audit log as every other turn.
+                out = ASK.Assistant(None, audit=self.audit(), use_macro=False, pages=NAV).answer(question)
+                out["engine_label"] = "بدون مدل · از فهرست‌های برنامه"
+                self.history.append(out)
             elif self.assistant is None:
                 body += '<div class="err">بدون مدل نمی‌توان پاسخ داد.</div>'
             else:
                 out = self.assistant.answer(question)
                 out["engine_label"] = "آفلاین · " + (self.model_label or "مدل محلی")
                 self.history.append(out)
-        examples = ("نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟", "سهمی با قیمت ۱۵۰ دلار و سود هر سهم ۸٫۴۰ دلار؛ P/E چقدر است؟",
-                    "موجودی ۵۰٬۰۰۰ دلار، ریسک ۲٪، ورود ۸۰ و حد ضرر ۷۶؛ چند سهم بخرم؟", "What was Apple's net income in fiscal 2023?")
+        # D-0143: neutral examples only (no company name: the Apple chip is what the model echoed
+        # when asked to introduce itself). The P/E and position-size chips use the catalogue's own
+        # worked examples, so they run as written.
+        pe, ps = CAT.TOOLS["pe_ratio"][3], CAT.TOOLS["position_size"][3]
+        examples = ("خودت را معرفی کن", "نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟",
+                    "سهمی با قیمت %s دلار و سود هر سهم %s دلار؛ P/E چقدر است؟" % (pe["price"], pe["eps"]),
+                    "موجودی %s دلار، ریسک %s٪، ورود %s و حد ضرر %s؛ چند سهم بخرم؟" % (
+                        "{:,}".format(ps["account_equity"]), int(ps["risk_pct"] * 100), ps["entry"], ps["stop"]))
         seg = ('<fieldset class="seg"><legend>موتور پاسخ‌گویی</legend>'
                '<label><input type="radio" name="engine" value="local"%s> آفلاین <span class="muted">(%s، بدون اینترنت)</span></label>'
                '<label><input type="radio" name="engine" value="remote"%s%s> آنلاین <span class="muted ltr">(%s)</span></label>'
@@ -1402,7 +1414,7 @@ def main(argv=None):
             runner = ASK.RP.ModelRunner(Llama(model_path=a.model, n_ctx=a.ctx, n_threads=a.threads, verbose=False),
                                         max_tokens=a.max_tokens)
             label = os.path.basename(a.model)
-        assistant = ASK.Assistant(runner, index=ASK.build_index_from(a.corpus), audit=ASK.open_audit(ASK.DEFAULT_AUDIT),
+        assistant = ASK.Assistant(runner, index=ASK.build_index_from(a.corpus), audit=ASK.open_audit(ASK.DEFAULT_AUDIT), pages=NAV,
                                   use_macro=not a.no_macro)
     app = App(assistant=assistant, model_label=label)
     from http.server import ThreadingHTTPServer
