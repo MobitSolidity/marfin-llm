@@ -99,6 +99,85 @@ check_true("README, MODEL_CARD and NOTICE carry the new name; the repository URL
 check_true("history is not rewritten: DECISIONS.md still records marfin-llm",
            "marfin-llm" in read("DECISIONS.md"), "(V)")
 
+# ===========================================================================
+section("3. palette: colorhunt 09251c-a55704-f3d2af-f8eadc, AA contrast computed from app.css")
+# ===========================================================================
+CSS = read("scripts/ui_assets/app.css")
+
+
+def _lum(h):
+    h = h.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    f = (lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+
+def contrast(a, b):
+    la, lb = sorted((_lum(a), _lum(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+check("contrast() reproduces the owner's measurement F8EADC/09251C = 13.76",
+      round(contrast("#F8EADC", "#09251C"), 2), 13.76, method="(V)")
+check("... and A55704/09251C = 3.07 (why a lighter amber is derived for dark-theme text)",
+      round(contrast("#A55704", "#09251C"), 2), 3.07, method="(V)")
+
+
+def _vars(block):
+    return dict(re.findall(r"--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6})", block))
+
+
+_light = _vars(CSS[CSS.index(":root{"):CSS.index("}", CSS.index(":root{"))])
+_d0 = CSS.index(':root[data-theme="dark"]{')
+_dark = _vars(CSS[_d0:CSS.index("}", _d0)])
+_m0 = CSS.index(":root:not([data-theme=\"light\"]){")
+_sys = _vars(CSS[_m0:CSS.index("}", _m0)])
+check_true("the prefers-color-scheme block equals the explicit dark theme", _sys == _dark and len(_dark) >= 20, "(V)")
+check_true("the four palette colours are the anchors of both themes",
+           _light["bg"].upper() == "#F8EADC" and _light["ink"].upper() == "#09251C" and _light["info"].upper() == "#F3D2AF"
+           and _dark["bg"].upper() == "#09251C" and _dark["ink"].upper() == "#F8EADC"
+           and _light["fill"].upper() == "#A55704" and _dark["fill"].upper() == "#A55704", "(V)")
+TEXT_PAIRS = [("ink", s) for s in ("bg", "panel", "panel2", "info", "okbg", "badbg", "duebg")] + \
+             [("muted", s) for s in ("bg", "panel", "panel2")] + \
+             [("brand", s) for s in ("bg", "panel", "panel2", "info")] + \
+             [("btn-ink", "btn"), ("brand-ink", "brand"), ("ok", "okbg"), ("bad", "badbg"), ("due", "duebg"),
+              ("ok", "panel"), ("bad", "panel"), ("due", "panel")]
+for name, T in (("light", _light), ("dark", _dark)):
+    worst = min((contrast(T[a], T[b]), a, b) for a, b in TEXT_PAIRS)
+    check_true("%s theme: every text pairing meets WCAG AA 4.5:1 (worst %s/%s = %.2f)" % (name, worst[1], worst[2], worst[0]),
+               worst[0] >= 4.5, "(V)")
+    sw = min(contrast(T["s%d" % i], T[b]) for i in range(8) for b in ("bg", "panel"))
+    check_true("%s theme: all 8 chart series reach 3:1 against the surfaces (graphics, WCAG 1.4.11): %.2f" % (name, sw),
+               sw >= 3.0, "(V)")
+    check_true("%s theme: the focus ring reaches 3:1 against the surfaces" % name,
+               min(contrast(T["focus"], T[b]) for b in ("bg", "panel")) >= 3.0, "(V)")
+check_true("dark theme never uses #A55704 for text or links (fails AA there: 3.07)",
+           _dark["brand"].upper() != "#A55704" and _dark["due"].upper() != "#A55704", "(V)")
+OLD_HEX = ("#0091FF #0B1220 #0B1B36 #0D1220 #0D3B5C #0E7C7B #0F2E25 #12805C #12A594 #151C2E #16213A #1B2333 #1B2337 "
+           "#1B2647 #26304A #28C840 #2BC4B0 #2F5BEA #3A1820 #3A2A10 #3CCF91 #5BE6CF #5D6B82 #6B7280 #6D8DFF #7C4DFF "
+           "#7FF5DF #8DA2C0 #8E4EC6 #9AA7BD #9FD8CF #A78BFA #B26B00 #BFF8EE #C6283B #CFE9F2 #D6409F #E0B400 #E3E8F0 "
+           "#E5484D #E6EDF7 #E6F6EF #E7ECF5 #E9F0FF #F2A93B #F3F5F9 #F59E0B #F8FAFC #FAFAFA #FDECEE #FEBC2E #FF5F57 "
+           "#FF6B7A #FFB547 #FFC857 #FFD978 #FFE7A8 #FFF3CD #FFF5E0 #B03A2E").split()
+_scan = {p: read(p).upper() for p in ["scripts/ui_assets/app.css", "scripts/ui.py", "scripts/ask.py", "README.md"]
+         + ["assets/brand/" + n for n in os.listdir(os.path.join(ROOT, "assets", "brand"))]}
+_left = sorted({(p, h) for p, s in _scan.items() for h in OLD_HEX if re.search(re.escape(h) + r"(?![0-9A-F])", s)})
+check_true("no colour of the old palette remains in the CSS, UI, ask page, README badges or brand SVGs",
+           not _left, "(V) %r" % _left[:6])
+check_true("old short hex colours (#fff, #222, #ddd ...) are gone from the ask page",
+           not re.search(r"#(fff|222|333|555|666|777|ccc|ddd)\b", read("scripts/ask.py"), re.I), "(V)")
+check_true("no gradient brand2 leftovers: buttons use the AA-checked --btn / --btn-ink pair",
+           "--brand2" not in CSS and "background:var(--btn);color:var(--btn-ink)" in CSS, "(V)")
+check_true("README badges use palette colours", all(c in read("README.md") for c in ("-09251C", "-A55704")), "(V)")
+check_true("chart series are distinguishable without colour: 7 of 8 carry a dash pattern",
+           len(re.findall(r"\.m\.s[1-7]\{stroke:var\(--s[1-7]\);stroke-dasharray:", CSS)) == 7, "(V)")
+check_true("a falling line is dashed as well as red", "svg.chart.down .line{stroke:var(--bad);stroke-dasharray" in CSS, "(V)")
+check_true("a rise shows ▲ and +, a fall shows ▼ and -, flat shows neither (not colour alone)",
+           U.App._chg(1.5).count("\u25b2 +1.50") == 1 and "\u25bc -2.00" in U.App._chg(-2.0)
+           and "\u25b2" not in U.App._chg(0.0) and "\u25bc" not in U.App._chg(0.0), "(V)")
+_svg, _leg = U.svg_multi([("a", [("2020", 1.0), ("2021", 2.0)]), ("b", [("2020", 2.0), ("2021", 1.0)])])
+check_true("the multi-line legend draws each series' own dash pattern (an SVG swatch, not a colour square)",
+           _leg.count('<svg class="lg"') == 2 and 'class="m s1"' in _leg and "<i class" not in _leg, "(V)")
+
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
 print("")

@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-0E7C7B"></a>
-  <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-0D3B5C">
-  <img alt="CPU only" src="https://img.shields.io/badge/runs%20on-CPU%20only-0B1B36">
-  <img alt="Live trading: disabled" src="https://img.shields.io/badge/live%20trading-disabled-B03A2E">
-  <img alt="Languages: فارسی + English" src="https://img.shields.io/badge/lang-%D9%81%D8%A7%D8%B1%D8%B3%DB%8C%20%2B%20English-F2A93B">
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-09251C"></a>
+  <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-A55704">
+  <img alt="CPU only" src="https://img.shields.io/badge/runs%20on-CPU%20only-09251C">
+  <img alt="Live trading: disabled" src="https://img.shields.io/badge/live%20trading-disabled-A0232D">
+  <img alt="Languages: فارسی + English" src="https://img.shields.io/badge/lang-%D9%81%D8%A7%D8%B1%D8%B3%DB%8C%20%2B%20English-A55704">
 </p>
 
 <p align="center">

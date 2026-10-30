@@ -1,22 +1,32 @@
 /* Andarz local UI (D-0141, rebranded D-0143). Served from /static/app.css; no inline styles anywhere,
    so the Content-Security-Policy can forbid them. Light and dark themes, RTL first. */
+/* D-0143 palette (colorhunt 09251c-a55704-f3d2af-f8eadc): deep green #09251C, amber #A55704,
+   sand #F3D2AF, cream #F8EADC. Text/link amber is DERIVED where #A55704 fails AA for text:
+   #8A4503 on light surfaces, #ECA865 on dark ones; #A55704 itself is kept for fills and large
+   marks (--fill). Success/danger and the 8 chart series are derived and never the only cue:
+   changes carry ▲/▼ and a sign, chart series carry dash patterns. Every pairing is checked for
+   WCAG AA by tests/test_d0143.py, computed from this file. */
 :root{
-  --bg:#f3f5f9; --panel:#ffffff; --panel2:#f8fafc; --ink:#1b2333; --muted:#5d6b82; --line:#e3e8f0;
-  --brand:#2f5bea; --brand2:#7c4dff; --brand-ink:#ffffff; --ok:#12805c; --bad:#c6283b; --due:#b26b00;
-  --okbg:#e6f6ef; --badbg:#fdecee; --duebg:#fff5e0; --info:#e9f0ff;
-  --shadow:0 1px 2px rgba(16,24,40,.05),0 6px 20px rgba(16,24,40,.06); --r:14px;
-  --s0:#2f5bea; --s1:#e5484d; --s2:#12a594; --s3:#f59e0b; --s4:#8e4ec6; --s5:#0091ff; --s6:#d6409f; --s7:#6b7280;
+  --bg:#F8EADC; --panel:#FDF6EE; --panel2:#F5E2CC; --ink:#09251C; --muted:#3E5A4E; --line:#E3C49E;
+  --brand:#8A4503; --brand-ink:#F8EADC; --btn:#8A4503; --btn-ink:#F8EADC; --fill:#A55704;
+  --ok:#1D6A44; --bad:#A0232D; --due:#8A4503; --okbg:#E3F0E4; --badbg:#F8DEDB; --duebg:#F6E0C4; --info:#F3D2AF;
+  --focus:#A55704; --shadow:0 1px 2px rgba(9,37,28,.06),0 6px 20px rgba(9,37,28,.07);
+  --s0:#A55704; --s1:#09251C; --s2:#2F7D5B; --s3:#7A3E2B; --s4:#4C6F8C; --s5:#8C6D1F; --s6:#7B4F7A; --s7:#5E6B64;
 }
 :root[data-theme="dark"]{
-  --bg:#0d1220; --panel:#151c2e; --panel2:#1b2337; --ink:#e7ecf5; --muted:#9aa7bd; --line:#26304a;
-  --brand:#6d8dff; --brand2:#a78bfa; --ok:#3ccf91; --bad:#ff6b7a; --due:#ffb547;
-  --okbg:#0f2e25; --badbg:#3a1820; --duebg:#3a2a10; --info:#1b2647; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --bg:#09251C; --panel:#0E3125; --panel2:#133B2D; --ink:#F8EADC; --muted:#D4BFA5; --line:#2A5242;
+  --brand:#ECA865; --brand-ink:#09251C; --btn:#ECA865; --btn-ink:#09251C; --fill:#A55704;
+  --ok:#8ED3AC; --bad:#F59C95; --due:#ECA865; --okbg:#123F2C; --badbg:#3C1E1C; --duebg:#3A2A14; --info:#1A4434;
+  --focus:#F3D2AF; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --s0:#ECA865; --s1:#F8EADC; --s2:#7FC8A0; --s3:#E59A86; --s4:#9DBBD6; --s5:#D8C06A; --s6:#D6A8D2; --s7:#B9C2BC;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0d1220; --panel:#151c2e; --panel2:#1b2337; --ink:#e7ecf5; --muted:#9aa7bd; --line:#26304a;
-    --brand:#6d8dff; --brand2:#a78bfa; --ok:#3ccf91; --bad:#ff6b7a; --due:#ffb547;
-    --okbg:#0f2e25; --badbg:#3a1820; --duebg:#3a2a10; --info:#1b2647; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    --bg:#09251C; --panel:#0E3125; --panel2:#133B2D; --ink:#F8EADC; --muted:#D4BFA5; --line:#2A5242;
+    --brand:#ECA865; --brand-ink:#09251C; --btn:#ECA865; --btn-ink:#09251C; --fill:#A55704;
+    --ok:#8ED3AC; --bad:#F59C95; --due:#ECA865; --okbg:#123F2C; --badbg:#3C1E1C; --duebg:#3A2A14; --info:#1A4434;
+    --focus:#F3D2AF; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    --s0:#ECA865; --s1:#F8EADC; --s2:#7FC8A0; --s3:#E59A86; --s4:#9DBBD6; --s5:#D8C06A; --s6:#D6A8D2; --s7:#B9C2BC;
   }
 }
 *{box-sizing:border-box}
@@ -42,7 +52,7 @@ hr.rule{border:0;border-top:1px dashed var(--line);margin:.5em 0 .6em}
 .brand{display:flex;align-items:center;gap:.6rem;color:var(--ink);font-size:1.12rem;font-weight:700;padding:.2rem .4rem}
 .brand:hover{text-decoration:none}
 .brand b{color:var(--brand)}
-.logo{display:block;width:36px;height:36px;border-radius:10px;box-shadow:0 2px 8px rgba(11,27,54,.25)}
+.logo{display:block;width:36px;height:36px;border-radius:10px;box-shadow:0 2px 8px rgba(9,37,28,.25)}
 .nav{display:flex;flex-direction:column;gap:.15rem}
 .nav a{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border-radius:10px;color:var(--muted);font-weight:500}
 .nav a:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
@@ -114,7 +124,7 @@ input,select,textarea{font:inherit;color:var(--ink);background:var(--panel2);bor
 input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(--brand) 45%,transparent);border-color:var(--brand)}
 textarea{width:100%;resize:vertical}
 button,.btn{font:inherit;display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1.15rem;border:0;border-radius:10px;
-            background:linear-gradient(135deg,var(--brand),var(--brand2));color:var(--brand-ink);cursor:pointer;font-weight:600}
+            background:var(--btn);color:var(--btn-ink);cursor:pointer;font-weight:600}
 button:hover,.btn:hover{filter:brightness(1.07);text-decoration:none}
 button:disabled{opacity:.6;cursor:progress}
 .btn.ghost,button.ghost{background:transparent;color:var(--brand);border:1px solid var(--line)}
@@ -164,24 +174,28 @@ label{display:inline-block;min-width:10em;color:var(--muted);font-size:.9rem}
 /* ---- charts (inline SVG, attributes only) -------------------------------------------------- */
 svg{direction:ltr}
 svg.chart{width:100%;height:auto;display:block;margin:.3rem 0}
-svg.chart .line{fill:none;stroke:var(--brand);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
-svg.chart.down .line{stroke:var(--bad)}
-svg.chart .area{fill:color-mix(in srgb,var(--brand) 14%,transparent);stroke:none}
+svg.chart .line{fill:none;stroke:var(--s0);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+svg.chart.down .line{stroke:var(--bad);stroke-dasharray:6 3}
+svg.chart .area{fill:color-mix(in srgb,var(--fill) 16%,transparent);stroke:none}
 svg.chart.down .area{fill:color-mix(in srgb,var(--bad) 12%,transparent)}
 svg.chart .pt{fill:transparent;stroke:none}
 svg.chart .pt:hover{fill:var(--ink)}
 svg.chart .ax{fill:var(--muted);font-size:10px;font-family:Consolas,monospace}
 svg.chart .grid{stroke:var(--line);stroke-width:1}
 svg.chart .m{fill:none;stroke-width:2.2;stroke-linejoin:round}
-svg.chart .m.s0{stroke:var(--s0)}svg.chart .m.s1{stroke:var(--s1)}svg.chart .m.s2{stroke:var(--s2)}svg.chart .m.s3{stroke:var(--s3)}
-svg.chart .m.s4{stroke:var(--s4)}svg.chart .m.s5{stroke:var(--s5)}svg.chart .m.s6{stroke:var(--s6)}svg.chart .m.s7{stroke:var(--s7)}
+/* series: colour AND a dash pattern, so a line is identifiable without colour (D-0143) */
+.m.s0{stroke:var(--s0)}.m.s1{stroke:var(--s1);stroke-dasharray:7 4}.m.s2{stroke:var(--s2);stroke-dasharray:2 3}
+.m.s3{stroke:var(--s3);stroke-dasharray:10 3 2 3}.m.s4{stroke:var(--s4);stroke-dasharray:4 4}
+.m.s5{stroke:var(--s5);stroke-dasharray:12 4}.m.s6{stroke:var(--s6);stroke-dasharray:1 4}
+.m.s7{stroke:var(--s7);stroke-dasharray:6 2 1 2}
+svg.lg{width:26px;height:10px;vertical-align:middle;margin-inline-end:.3rem}svg.lg .m{fill:none;stroke-width:2.6}
 .legend{display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:.85rem;color:var(--muted)}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-inline-end:.3rem;vertical-align:-1px}
 .legend .s0{background:var(--s0)}.legend .s1{background:var(--s1)}.legend .s2{background:var(--s2)}.legend .s3{background:var(--s3)}
 .legend .s4{background:var(--s4)}.legend .s5{background:var(--s5)}.legend .s6{background:var(--s6)}.legend .s7{background:var(--s7)}
 svg.bar{width:100%;min-width:90px;height:10px;display:block}
 svg.bar .track{fill:var(--panel2)}
-svg.bar .fill.pos{fill:var(--brand)}svg.bar .fill.neg{fill:var(--bad)}
+svg.bar .fill.pos{fill:var(--fill)}svg.bar .fill.neg{fill:var(--bad)}
 .spark-card .v{font-size:1.35rem;font-weight:800;direction:ltr;text-align:right}
 .spark-card .u{color:var(--muted);font-size:.78rem}
 

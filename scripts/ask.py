@@ -405,18 +405,18 @@ _HTML_HEAD = """<!DOCTYPE html>
 <title>Andarz</title>
 <style>
 body{font-family:Vazirmatn,"Segoe UI",Tahoma,Arial,sans-serif;font-size:17px;line-height:1.9;
-     max-width:60em;margin:1.5em auto;padding:0 1em;background:#fafafa;color:#222}
-.turn{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1em 1.4em;margin:1em 0}
+     max-width:60em;margin:1.5em auto;padding:0 1em;background:#F8EADC;color:#09251C}
+.turn{background:#FDF6EE;border:1px solid #E3C49E;border-radius:8px;padding:1em 1.4em;margin:1em 0}
 .q{font-weight:bold;font-size:1.1em}
-.meta{color:#666;font-size:.85em;direction:ltr;text-align:left}
-.warn{background:#fff3cd;border:1px solid #e0b400;padding:.5em .8em;border-radius:6px;margin:.6em 0}
+.meta{color:#3E5A4E;font-size:.85em;direction:ltr;text-align:left}
+.warn{background:#F6E0C4;border:1px solid #A55704;padding:.5em .8em;border-radius:6px;margin:.6em 0}
 .reply p{margin:.4em 0}
 .reply ul,.reply ol{margin:.3em 0;padding-inline-start:1.6em}
 .reply li{margin:.15em 0}
-.ev,.calc{font-size:.9em;color:#333;border-top:1px dashed #ccc;margin-top:.8em;padding-top:.5em}
+.ev,.calc{font-size:.9em;color:#09251C;border-top:1px dashed #E3C49E;margin-top:.8em;padding-top:.5em}
 .ev div,.calc div{margin:.25em 0}
-.cite{color:#777;font-size:.85em;direction:ltr;text-align:left}
-.note{color:#555;font-size:.85em;margin-top:.8em}
+.cite{color:#3E5A4E;font-size:.85em;direction:ltr;text-align:left}
+.note{color:#3E5A4E;font-size:.85em;margin-top:.8em}
 </style></head><body>
 """
 

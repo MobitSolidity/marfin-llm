@@ -247,7 +247,8 @@ def svg_multi(series, w=680, h=240, pad=34):
             out.append('<polyline class="m %s" points="%s"/>' % (cls, " ".join("%.1f,%.1f" % (X(x), Y(y)) for x, y in p)))
         out.extend('<circle class="pt" cx="%.1f" cy="%.1f" r="5"><title>%s %s: %s</title></circle>'
                    % (X(x), Y(y), esc(name), esc(x), esc(fmtn(y))) for x, y in p)
-        legend.append('<span><i class="%s"></i>%s</span>' % (cls, esc(name)))
+        legend.append('<span><svg class="lg" viewBox="0 0 26 10" aria-hidden="true"><line class="m %s" x1="1" y1="5" '
+                      'x2="25" y2="5"/></svg>%s</span>' % (cls, esc(name)))
     out.append('<text class="ax" x="%d" y="%d">%s</text><text class="ax" x="%d" y="%d" text-anchor="end">%s</text>'
                % (pad, h - 8, esc(xs[0]), w - pad, h - 8, esc(xs[-1])))
     return ('<svg class="chart" viewBox="0 0 %d %d" role="img">%s</svg>' % (w, h, "".join(out)),
@@ -633,8 +634,10 @@ class App(object):
     def _chg(v):
         if v is None:
             return '<span class="muted">\u2014</span>'
-        return '<span class="chg %s">%s%s%%</span>' % ("up" if v > 0 else ("down" if v < 0 else ""),
-                                                      "+" if v > 0 else "", esc("%.2f" % v))
+        # D-0143: never colour alone -- an arrow and a sign carry the direction too.
+        return '<span class="chg %s">%s%s%s%%</span>' % ("up" if v > 0 else ("down" if v < 0 else ""),
+                                                        "\u25b2 " if v > 0 else ("\u25bc " if v < 0 else ""),
+                                                        "+" if v > 0 else "", esc("%.2f" % v))
 
     @staticmethod
     def _attrib(data):
