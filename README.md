@@ -44,13 +44,21 @@ evidence is missing, the assistant says so instead of inventing a number.
 
 | Area | What you get | Source (terms checked) |
 |---|---|---|
-| **Crypto** | Prices, market cap, volume, 24 h / 7 d change, 365-day daily chart, global market totals | CoinGecko — *Powered by CoinGecko* (keyless, about 5 calls/min, or a free Demo key) |
+| **Crypto** | Prices, market cap, volume, 24 h / 7 d change, 365-day daily chart, global market totals; **token lookup** by name, symbol or contract address (Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum, Solana, Tron) — ambiguous names list ranked candidates, nothing is picked silently | CoinGecko — *Powered by CoinGecko* (keyless, about 5 calls/min, enforced before the network; or a free Demo key) |
 | **Forex** | 9 major pairs (daily OHLC), plus 29 ECB reference rates with a converter | Alpha Vantage (free key) · ECB |
 | **US stocks** | Symbol search, end-of-day quote, annual fundamentals from 10-K filings (revenue, net income, EPS, assets…) | Alpha Vantage · SEC EDGAR |
 | **Rates & macro** | 49 central-bank policy rates; US Treasuries, oil, gas, the dollar index, CPI, unemployment; 10 World Bank indicators | BIS · FRED · World Bank |
 | **Calculators** | 85 tools: returns and risk, valuation (DCF, DDM, multiples), technicals, bonds, options (Black-Scholes, Greeks) | Your inputs, no model needed |
 | **Ask** | Questions in Persian or English, routed to tools, data, documents or plain answers; figures are checked against the evidence | Local model (default) or an online provider you choose |
 | **Paper trading** | Preview → 17 risk checks → type `CONFIRM`; kill switch, reconciliation, hash-chained audit log | Simulated only |
+| **Monitor** (`/monitor`) | One asset per page: every sourced figure, contract addresses, 30/90/365-day chart with SMA, EMA, RSI and MACD (COMPUTED, server-side SVG), stock ratios from 10-K figures; holders, liquidity, news and sentiment shown as UNKNOWN | CoinGecko · Alpha Vantage · SEC EDGAR · `src/calc` |
+| **Learn** (`/learn`) | A Persian guide to every page, a first-steps checklist, a glossary, and a skippable first-run tour; every count is read from the program itself | Generated from the registries |
+
+Every Markets tab and the monitor page have a **↻ refresh** button (a form, works without JavaScript) that re-fetches
+only that page's sources, respects each source's minimum interval (CoinGecko ≥ 60 s), asks before spending the
+Alpha Vantage daily budget, and keeps the previous figures marked **stale** if the refresh fails. Nothing refreshes
+by itself. Ask «خودت را معرفی کن» or "who are you" and the answer is built from the program's own registries,
+without the model.
 
 None of the data is real-time or tradable. Kraken and Binance are **not** used: Kraken's terms exclude Iran, and
 Binance's terms could not be read and verified.
@@ -206,13 +214,20 @@ README, the full investigation record up to D-0141, is kept unchanged at
 
 | حوزه | چه چیزی | منبع (شرایط استفاده بررسی شده) |
 |---|---|---|
-| **رمزارز** | قیمت، ارزش بازار، حجم، تغییر ۲۴ ساعته و ۷ روزه، نمودار روزانهٔ ۳۶۵ روزه، آمار کل بازار | CoinGecko، با درج «Powered by CoinGecko» |
+| **رمزارز** | قیمت، ارزش بازار، حجم، تغییر ۲۴ ساعته و ۷ روزه، نمودار روزانهٔ ۳۶۵ روزه، آمار کل بازار؛ **جست‌وجوی توکن** با نام، نماد یا آدرس قرارداد روی ۷ زنجیره. نام مبهم فهرست گزینه‌ها را نشان می‌دهد و هیچ‌کدام بی‌صدا انتخاب نمی‌شود | CoinGecko، با درج «Powered by CoinGecko» |
 | **فارکس** | ۹ جفت‌ارز اصلی (OHLC روزانه) و ۲۹ نرخ مرجع بانک مرکزی اروپا با مبدل | Alpha Vantage · ECB |
 | **سهام آمریکا** | جست‌وجوی نماد، قیمت پایانی روز، صورت‌های مالی سالانه از گزارش 10-K | Alpha Vantage · SEC EDGAR |
 | **نرخ بهره و کلان** | نرخ سیاستی ۴۹ بانک مرکزی؛ اوراق خزانه، نفت، گاز، شاخص دلار، تورم و بیکاری آمریکا؛ ۱۰ شاخص بانک جهانی | BIS · FRED · بانک جهانی |
 | **ماشین‌حساب‌ها** | ۸۵ ابزار: بازده و ریسک، ارزش‌گذاری، تحلیل تکنیکال، اوراق قرضه، اختیار معامله | ورودی شما، بدون نیاز به مدل |
-| **پرسش** | سؤال به فارسی یا انگلیسی؛ اعداد پاسخ با شواهد کنترل می‌شوند | مدل محلی (پیش‌فرض) یا ارائه‌دهندهٔ آنلاین انتخابی شما |
+| **پرسش** | سؤال به فارسی یا انگلیسی؛ اعداد پاسخ با شواهد کنترل می‌شوند. «خودت را معرفی کن» و جست‌وجوی رمزارز بدون مدل پاسخ داده می‌شوند | مدل محلی (پیش‌فرض) یا ارائه‌دهندهٔ آنلاین انتخابی شما |
 | **معاملهٔ کاغذی** | پیش‌نمایش ← ۱۷ بررسی ریسک ← تایپ `CONFIRM`؛ کلید توقف، تطبیق، گزارش ممیزی با زنجیرهٔ هش | فقط شبیه‌سازی |
+| **پایش دارایی** (`/monitor`) | یک دارایی در هر صفحه: همهٔ ارقام منبع‌دار، آدرس قراردادها، نمودار ۳۰/۹۰/۳۶۵ روزه با SMA، EMA، RSI و MACD (محاسبه‌شده)، نسبت‌های سهام از گزارش 10-K؛ دارندگان، نقدشوندگی، اخبار و احساسات بازار UNKNOWN | CoinGecko · Alpha Vantage · SEC · `src/calc` |
+| **راهنما** (`/learn`) | توضیح فارسی هر صفحه، فهرست قدم‌های اول، واژه‌نامه و راهنمای شروع قابل رد کردن؛ همهٔ شمارش‌ها از خود برنامه | ساخته‌شده از فهرست‌های برنامه |
+
+هر زبانهٔ «بازارها» و صفحهٔ پایش یک دکمهٔ **↻ تازه‌سازی** دارد (فرم، بدون جاوااسکریپت هم کار می‌کند) که فقط منابع
+همان صفحه را دوباره می‌گیرد، حداقل فاصلهٔ هر منبع را رعایت می‌کند (CoinGecko دست‌کم ۶۰ ثانیه)، پیش از مصرف سهمیهٔ
+روزانهٔ Alpha Vantage تأیید می‌گیرد، و اگر ناموفق باشد دادهٔ قبلی را با برچسب **کهنه** نگه می‌دارد. هیچ چیز خودکار
+تازه نمی‌شود.
 
 هیچ‌کدام از داده‌ها لحظه‌ای یا قابل معامله نیست. از Kraken و Binance **استفاده نمی‌شود**: شرایط Kraken ایران را
 مستثنا کرده است، و شرایط Binance را نتوانستیم بخوانیم و تأیید کنیم.
