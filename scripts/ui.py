@@ -436,7 +436,7 @@ class App(object):
         routes = {"/": self.p_home, "/markets": self.p_markets, "/ask": self.p_ask, "/calc": self.p_calc,
                   "/macro": self.p_macro,
                   "/paper": self.p_paper, "/audit": self.p_audit, "/maintenance": self.p_maintenance,
-                  "/providers": self.p_providers, "/phase11": self.p_phase11}
+                  "/providers": self.p_providers, "/phase11": self.p_phase11, "/refresh": self.p_refresh}
         fn = routes.get(path)
         if fn is None:
             return self.page(path, "یافت نشد", '<p>این صفحه وجود ندارد.</p>', 404)
@@ -521,13 +521,100 @@ class App(object):
             svg_line([(p["date"], p["value"]) for p in pts], w=300, h=80, pad=6, label=s["series"]),
             len(pts), "ok" if chg >= 0 else "bad", esc(("+" if chg >= 0 else "") + fmtn(chg)))
 
-    def p_markets(self, method, q, f):
+    # -- D-0143(6): refresh controls --------------------------------------------------------
+    #: The sources each tab shows. A refresh re-fetches THESE only; the form names a tab, never a
+    #: source, so a request cannot ask for anything the page does not display.
+    TAB_SOURCES = {"overview": ("ecb_data_portal", "bis_statistics", "coingecko", "fred"),
+                   "crypto": ("coingecko",), "forex": ("alpha_vantage",),
+                   "stocks": ("alpha_vantage", "sec_edgar_xbrl"), "fx": ("ecb_data_portal", "bis_statistics"),
+                   "rates": ("bis_statistics",), "us": ("fred",), "world": ("world_bank_indicators",), "sources": ()}
+    BACK_KEYS = ("tab", "vs", "coin", "lookup", "from", "to", "amount", "ccy", "series", "ind", "c", "symbol", "q",
+                 "kind", "id", "days")
+    _ICON_REFRESH = ('<svg class="ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">'
+                     '<path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2.2" '
+                     'stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" '
+                     'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+    @staticmethod
+    def _ts(t):
+        if t is None:
+            return "\u2014"
+        return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    def _back(self, q):
+        return urllib.parse.urlencode([(k, str(q[k])[:120]) for k in self.BACK_KEYS if q.get(k)])
+
+    def _refresh_bar(self, tab, q, results=None):
+        """The refresh form (POST + CSRF, works without JS) and each source's status. No auto-refresh."""
+        srcs = self.TAB_SOURCES.get(tab, ())
+        if not srcs:
+            return ""
+        names = dict((r[0], r[1]) for r in DH.SOURCES_FA)
+        stats = [self.hub.source_status(s) for s in srcs]
+        res = dict((r["source"], r) for r in (results or ()))
+        items, flash = [], []
+        for st in stats:
+            s = st["source"]
+            line = '<li><b class="src">%s</b>: ' % esc(names.get(s, s))
+            if not st["n_items"]:
+                line += '<span class="muted">هنوز چیزی از این منبع دریافت نشده است.</span>'
+            else:
+                line += ('دریافت ما: <span class="ltr">%s</span> &middot; تاریخ خود داده (به گفتهٔ منبع): <span class="ltr">%s</span>'
+                         % (esc(self._ts(st["fetched_at"])), esc(st["source_stamp"] or "\u2014")))
+                if st["next_in_s"]:
+                    line += ' &middot; <span class="muted">تازه‌سازی بعدی تا %d ثانیهٔ دیگر (حداقل فاصله %d ثانیه)</span>' % (
+                        st["next_in_s"], st["min_interval_s"])
+            for bad in st["stale"]:
+                line += ('<div class="stale" role="status">کهنه: آخرین تازه‌سازی ناموفق بود و دادهٔ قبلی نگه داشته شد. '
+                         'خطا: <code>%s</code> &middot; برای تلاش دوباره، دکمهٔ تازه‌سازی را بزنید.</div>' % esc(bad["error"]))
+            items.append(line + "</li>")
+            r = res.get(s)
+            if r:
+                msg = {"queued": "تازه شد" if not st["stale"] else "ناموفق؛ دادهٔ قبلی نگه داشته شد",
+                       "too_soon": "خیلی زود است؛ %s ثانیهٔ دیگر" % r.get("wait_s"),
+                       "needs_confirm": "نیاز به تأیید سهمیه دارد؛ کادر تأیید را علامت بزنید",
+                       "budget": "سهمیهٔ دقیقه‌ای CoinGecko پر است؛ %s ثانیهٔ دیگر" % r.get("wait_s"),
+                       "nothing": "چیزی برای تازه‌سازی نیست"}.get(r["status"], r["status"])
+                flash.append("%s: %s" % (names.get(s, s), msg))
+        confirm = ""
+        if "alpha_vantage" in srcs:
+            from market import alpha_vantage as _av
+            b = _av.BUDGET.to_dict()
+            cost = self.hub.source_status("alpha_vantage")["n_items"]
+            confirm = ('<label class="chk"><input type="checkbox" name="confirm" value="yes"> تأیید می‌کنم: این تازه‌سازی '
+                       '<b class="ltr">%d</b> درخواست از سهمیهٔ روزانهٔ Alpha Vantage مصرف می‌کند (باقی‌مانده امروز: '
+                       '<b class="ltr">%d</b> از <b class="ltr">%d</b>، شمارش همین اجرای برنامه)</label>' % (
+                           cost, b["remaining"], b["limit"]))
+        form = ('<form method="post" action="/refresh" class="refresh-form" data-busy="در حال دریافت دوباره..."%s>%s'
+                '<input type="hidden" name="tab" value="%s"><input type="hidden" name="back" value="%s">%s'
+                '<button type="submit" class="refresh-btn" aria-label="تازه‌سازی داده‌های همین صفحه">%s<span>تازه‌سازی</span>'
+                '</button></form>') % (
+            ' data-confirm="این تازه‌سازی از سهمیهٔ روزانهٔ Alpha Vantage مصرف می‌کند. ادامه؟"' if confirm else "",
+            self.hidden(), esc(tab), esc(self._back(q)), confirm, self._ICON_REFRESH)
+        return ('<section class="card refresh" aria-label="تازه‌سازی داده">%s%s<ul class="src-status">%s</ul>'
+                '<p class="note">تازه‌سازی خودکار ندارد؛ فقط با همین دکمه، و فقط منابع همین صفحه دوباره دریافت می‌شوند. '
+                'اگر دریافت دوباره ناموفق باشد، دادهٔ قبلی با برچسب «کهنه» نگه داشته می‌شود.</p></section>') % (
+            ('<div class="flash" role="status">%s</div>' % esc(" · ".join(flash))) if flash else "", form, "".join(items))
+
+    def p_refresh(self, method, q, f):
+        if method != "POST":
+            return self.page("/refresh", "تازه‌سازی", '<p>تازه‌سازی فقط با دکمهٔ صفحه‌ها انجام می‌شود.</p>', 405)
+        tab = str(f.get("tab") or "")
+        if tab not in self.TAB_SOURCES:
+            return self.page("/refresh", "تازه‌سازی", '<div class="err">زبانهٔ ناشناخته.</div>', 400)
+        back = {k: v[-1] for k, v in urllib.parse.parse_qs(str(f.get("back") or "")[:1000]).items() if k in self.BACK_KEYS}
+        back["tab"] = tab
+        results = self.hub.refresh(self.TAB_SOURCES[tab], confirm=f.get("confirm") == "yes")
+        return self.p_markets("GET", back, {}, refresh_results=results)
+
+    def p_markets(self, method, q, f, refresh_results=None):
         tab = q.get("tab") or "overview"
         if tab not in dict(self.MARKET_TABS):
             tab = "overview"
         tabs = '<nav class="tabs">%s</nav>' % "".join(
             '<a href="/markets?tab=%s"%s>%s</a>' % (k, ' class="on"' if k == tab else "", esc(t)) for k, t in self.MARKET_TABS)
-        body = tabs + getattr(self, "_mk_" + tab)(q)
+        content = getattr(self, "_mk_" + tab)(q)              # fetches first, so the status below is current
+        body = tabs + self._refresh_bar(tab, q, refresh_results) + content
         return self.page("/markets", "بازارها و داده‌ها", body,
                          subtitle="داده‌های رسمی روزانه یا سالانه از چند منبع مجاز؛ هیچ‌کدام لحظه‌ای نیست.")
 

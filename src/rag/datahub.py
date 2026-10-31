@@ -49,6 +49,19 @@ CACHE_TTL_S = 600.0
 #: With the free Demo key: 30, deliberately below the plan's published limit (ESTIMATED headroom).
 CG_PER_MIN_KEYLESS = 5
 CG_PER_MIN_DEMO = 30
+
+#: D-0143(6): which source each cache key belongs to (first element of the key).
+KEY_SOURCE = {"fx": "ecb_data_portal", "fxh": "ecb_data_portal", "cbpol": "bis_statistics", "fred": "fred",
+              "wb": "world_bank_indicators", "av": "alpha_vantage", "av_fx": "alpha_vantage",
+              "av_quote": "alpha_vantage", "av_search": "alpha_vantage", "cg_markets": "coingecko",
+              "cg_global": "coingecko", "cg_chart": "coingecko", "cg_search": "coingecko", "cg_coin": "coingecko",
+              "cg_contract": "coingecko", "sec_tickers": "sec_edgar_xbrl", "sec_facts": "sec_edgar_xbrl"}
+#: Minimum seconds between two refreshes of one source. CoinGecko keyless: >= 60 (owner's rule;
+#: ~5 calls/min). Alpha Vantage: 300, because every refresh spends the 25/day budget (ESTIMATED choice).
+MIN_REFRESH_S = {"coingecko": 60, "alpha_vantage": 300}
+MIN_REFRESH_DEFAULT_S = 60
+#: Sources whose refresh spends a small daily budget: the owner confirms first.
+CONFIRM_SOURCES = ("alpha_vantage",)
 STALE_DAYS = 400            # a policy-rate series older than this is a discontinued one
 
 #: ISO-2 -> (ISO-3 for the World Bank, Persian name). XM/EMU is the euro area.
@@ -167,10 +180,28 @@ class DataHub(object):
         self.calls = 0                      # network calls actually made (tests read it)
         self.cg_per_min = cg_per_min        # None: decided from COINGECKO_DEMO_API_KEY at call time
         self._cg_times: List[float] = []    # D-0143: times of CoinGecko network calls (rolling minute)
+        self._forced: set = set()           # D-0143(6): keys a refresh asked to fetch again
+        self._stale: Dict[Any, Any] = {}    # key -> {"error", "at"}: the refresh failed, old value kept
+        self._refreshed: Dict[str, float] = {}   # source -> time of the last accepted refresh
 
     # -- plumbing ---------------------------------------------------------------------------
     def _cached(self, key, fn):
-        hit = self._cache.get(key)
+        # D-0143(6): a refresh asked for this key -> fetch now; on failure keep the old value and
+        # mark it stale (the page shows the error and a retry). Never a zero, never a blank table.
+        if key in self._forced:
+            self._forced.discard(key)
+            old = self._cache.get(key)
+            try:
+                return self._fetch(key, fn, force=True)
+            except (DataError, RuntimeError, ValueError, OSError) as exc:
+                if old is None:
+                    raise
+                self._mark_stale(key, exc)
+                return old[1]
+        return self._fetch(key, fn)
+
+    def _fetch(self, key, fn, force=False):
+        hit = None if force else self._cache.get(key)
         now = self.clock()
         if hit is not None and now - hit[0] < self.ttl:
             return hit[1]
@@ -187,7 +218,52 @@ class DataHub(object):
             except (ValueError, RuntimeError) as exc:      # AccessError, Fact validation
                 raise DataError(str(exc))
         self._cache[key] = (now, val)
+        self._stale.pop(key, None)
         return val
+
+    # -- D-0143(6): refresh controls ------------------------------------------------------------
+    def _mark_stale(self, key, exc):
+        self._stale[key] = {"error": str(exc)[:300], "at": self.clock()}
+
+    def _keys_of(self, source):
+        return [k for k in self._cache if KEY_SOURCE.get(k[0]) == source]
+
+    def source_status(self, source: str) -> Dict[str, Any]:
+        """Fetch time (ours), the data's own date (the source's), staleness and when a refresh is allowed."""
+        now = self.clock()
+        keys = self._keys_of(source)
+        fetched = max((self._cache[k][0] for k in keys), default=None)
+        stamps = [s for s in (_stamp(self._cache[k][1]) for k in keys) if s]
+        last = max([t for t in (fetched, self._refreshed.get(source)) if t is not None], default=None)
+        gap = MIN_REFRESH_S.get(source, MIN_REFRESH_DEFAULT_S)
+        stale = [dict(v, key=k) for k, v in self._stale.items() if KEY_SOURCE.get(k[0]) == source]
+        return {"source": source, "fetched_at": fetched, "source_stamp": max(stamps) if stamps else None,
+                "n_items": len(keys), "stale": stale, "min_interval_s": gap,
+                "next_in_s": max(0, int(gap - (now - last)) + 1) if last is not None and now - last < gap else 0}
+
+    def refresh(self, sources: Sequence[str], confirm: bool = False) -> List[Dict[str, Any]]:
+        """
+        Ask for a re-fetch of these sources only. Nothing is fetched here: the keys are marked, and the
+        page that is rendered next fetches the ones it shows. Refused per source when too soon, when an
+        Alpha Vantage refresh is not confirmed, or when the CoinGecko minute budget is spent.
+        """
+        out = []
+        for src in sources:
+            st = self.source_status(src)
+            keys = self._keys_of(src)
+            if not keys:
+                out.append({"source": src, "status": "nothing"})
+            elif st["next_in_s"]:
+                out.append({"source": src, "status": "too_soon", "wait_s": st["next_in_s"]})
+            elif src in CONFIRM_SOURCES and not confirm:
+                out.append({"source": src, "status": "needs_confirm", "cost": len(keys)})
+            elif src == "coingecko" and self.cg_budget()["left"] < 1:
+                out.append({"source": src, "status": "budget", "wait_s": self.cg_budget()["retry_after_s"]})
+            else:
+                self._forced.update(keys)
+                self._refreshed[src] = self.clock()
+                out.append({"source": src, "status": "queued", "n": len(keys)})
+        return out
 
     def clear(self):
         self._cache.clear()
@@ -391,9 +467,13 @@ class DataHub(object):
     def _cg(self, key, fn):
         """A CoinGecko request: cache first, then the per-minute budget, then the network. Never retried."""
         hit = self._cache.get(key)
-        if hit is not None and self.clock() - hit[0] < self.ttl:
+        if hit is not None and key not in self._forced and self.clock() - hit[0] < self.ttl:
             return hit[1]
         b = self.cg_budget()
+        if not b["left"] and key in self._forced and hit is not None:
+            self._forced.discard(key)
+            self._mark_stale(key, "CoinGecko budget spent; the previous figures are kept")
+            return hit[1]
         if not b["left"]:
             raise RateBudget("CoinGecko budget spent: %d calls a minute (%s). Try again in %d s; nothing was sent."
                              % (b["limit"], "free Demo key" if b["limit"] > CG_PER_MIN_KEYLESS else "keyless",
@@ -477,6 +557,35 @@ class DataHub(object):
 # D-0143: the resolver reads the error types from the hub it is given (no import back, no cycle).
 DataHub.DataError = DataError
 DataHub.RateBudget = RateBudget
+
+
+def _stamp(val: Any) -> Optional[str]:
+    """The newest date the DATA itself carries (the source's own timestamp), or None."""
+    found: List[str] = []
+
+    def one(x):
+        if isinstance(x, dict):
+            for f in ("as_of", "updated", "last_updated", "date"):
+                if isinstance(x.get(f), str) and x[f][:4].isdigit():
+                    found.append(x[f])
+            last = x.get("last")
+            if isinstance(last, dict) and isinstance(last.get("date"), str):
+                found.append(last["date"])
+            rows = x.get("rows")
+            if isinstance(rows, list):
+                for r in rows[-3:]:
+                    one(r)
+        else:
+            pe = getattr(x, "period_end", None)
+            if hasattr(pe, "isoformat"):
+                found.append(pe.isoformat())
+            ts = getattr(x, "timestamp", None)
+            if ts is not None and str(ts)[:4].isdigit():
+                found.append(str(ts)[:19])
+
+    for item in (val if isinstance(val, list) else [val])[:5000]:
+        one(item)
+    return max(found) if found else None
 
 
 def today() -> datetime.date:

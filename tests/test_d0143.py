@@ -602,6 +602,137 @@ check_true("DataHub source list mentions the token lookup",
 check_true("legal doc lists the new CoinGecko endpoints", all(e in read("docs/legal/market-data-providers.md") for e in
            ("/search", "/coins/{id}", "/coins/{platform}/contract/{address}")), method="(V)")
 
+# ===========================================================================
+section("6. refresh controls: CSRF POST per tab, own-source only, min interval, stale on failure")
+# ===========================================================================
+from rag import ecb_stats as ECB                                         # noqa: E402
+from market import alpha_vantage as AVM                                  # noqa: E402
+
+CLK = [5000.0]
+
+
+def rhub(**kw):
+    kw.setdefault("clock", lambda: CLK[0])
+    kw.setdefault("cg_per_min", 100)
+    return FD.hub(**kw)
+
+
+R6 = app(hub=rhub())
+TABS_WITH = [k for k, _t in U.App.MARKET_TABS if U.App.TAB_SOURCES.get(k)]
+check_true("every Markets tab except 'sources' declares the sources it shows",
+           set(TABS_WITH) == set(dict(U.App.MARKET_TABS)) - {"sources"}, method="(V)")
+for tab in TABS_WITH:
+    b6 = R6.handle("GET", "/markets", query={"tab": tab}).body
+    check_true("tab %s: a refresh form -- POST to /refresh, CSRF token, data-busy, works without JS" % tab,
+               '<form method="post" action="/refresh" class="refresh-form" data-busy=' in b6
+               and b6.count('name="csrf"') == b6.count('method="post"') and 'name="tab" value="%s"' % tab in b6, method="(V)")
+    check_true("tab %s: the button has an accessible name and an inline SVG icon (no image request)" % tab,
+               'class="refresh-btn" aria-label="تازه‌سازی داده‌های همین صفحه"><svg class="ico"' in b6
+               and 'aria-hidden="true"' in b6, method="(V)")
+check_true("the 'sources' tab (static text) has no refresh button",
+           'action="/refresh"' not in R6.handle("GET", "/markets", query={"tab": "sources"}).body, method="(V)")
+css6 = read("scripts/ui_assets/app.css")
+check_true("the refresh button is a 44 px target", ".refresh-btn{min-width:var(--tap);min-height:var(--tap)}" in css6
+           and "--tap:44px" in css6, method="(V)")
+check_true("no auto-refresh anywhere: no meta refresh in the UI, no timer reloading in app.js",
+           "http-equiv" not in read("scripts/ui.py") and "setInterval" not in read("scripts/ui_assets/app.js")
+           and "location.reload" not in read("scripts/ui_assets/app.js"), method="(A)")
+check("POST /refresh without the CSRF token -> 403", R6.handle("POST", "/refresh", form={"tab": "fx"}).status, 403, method="(A)")
+check("GET /refresh -> 405 (a link cannot trigger a re-fetch)", R6.handle("GET", "/refresh").status, 405, method="(A)")
+check("an unknown tab is refused (400), never mapped to a source", R6.handle(
+    "POST", "/refresh", form={"csrf": R6.csrf, "tab": "__class__"}).status, 400, method="(A)")
+
+# -- only the tab's own sources are fetched again --------------------------------------------
+R6.handle("GET", "/markets", query={"tab": "overview"})           # fills ECB, BIS, CoinGecko, FRED
+CLK[0] += 120
+del FD.CALLS[:]
+r6 = R6.handle("POST", "/refresh", form={"csrf": R6.csrf, "tab": "rates", "back": "tab=rates"})
+kinds = sorted({c[0] for c in FD.CALLS})
+check_true("refresh on 'rates' re-fetches BIS only (not ECB, CoinGecko or FRED)", kinds == ["bis"], method="(A)")
+check_true("... and renders the same tab with a confirmation", r6.status == 200 and 'class="on">نرخ بهرهٔ بانک' in r6.body
+           and '<div class="flash" role="status">' in r6.body and "تازه شد" in r6.body, method="(B)")
+check_true("each source shows our fetch time AND the data's own date from the source",
+           "دریافت ما:" in r6.body and "تاریخ خود داده (به گفتهٔ منبع)" in r6.body
+           and re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC", r6.body) is not None, method="(V)")
+st6 = R6.hub.source_status("bis_statistics")
+check_true("the source's own timestamp is read from the data (BIS period end), not invented",
+           re.match(r"^\d{4}-\d{2}-\d{2}$", st6["source_stamp"] or "") is not None, method="(V)")
+
+# -- minimum interval -------------------------------------------------------------------------
+del FD.CALLS[:]
+r6 = R6.handle("POST", "/refresh", form={"csrf": R6.csrf, "tab": "rates"})
+check_true("a second refresh within the minimum interval is refused, with the wait, and fetches nothing",
+           FD.CALLS == [] and "خیلی زود است" in r6.body, method="(A)")
+check("CoinGecko's minimum refresh interval is at least 60 s (keyless ~5/min)", DH.MIN_REFRESH_S["coingecko"] >= 60, 1,
+      method="(V)")
+F6 = rhub()
+F6.crypto("usd", 50)                                               # a CoinGecko fetch just now
+check_true("right after a CoinGecko fetch the crypto refresh waits (too_soon, >= 60 s)",
+           F6.refresh(("coingecko",))[0]["status"] == "too_soon"
+           and F6.refresh(("coingecko",))[0]["wait_s"] >= 60, method="(A)")
+CLK[0] += 61
+check_true("after 60 s the CoinGecko refresh is accepted", F6.refresh(("coingecko",))[0]["status"] == "queued", method="(B)")
+CLK[0] += 61
+B6 = rhub(cg_per_min=1)
+B6.crypto("usd", 50)
+CLK[0] += 61
+B6.crypto_global()                                                 # spends this minute's single call
+check_true("CoinGecko refresh refused when the minute budget is spent (nothing queued)",
+           B6.refresh(("coingecko",))[0]["status"] in ("budget", "too_soon"), method="(A)")
+
+# -- Alpha Vantage: budget shown, confirmation required ----------------------------------------
+R6.handle("GET", "/markets", query={"tab": "stocks", "symbol": "IBM"})
+bs = R6.handle("GET", "/markets", query={"tab": "stocks", "symbol": "IBM"}).body
+check_true("stocks tab: the refresh states its Alpha Vantage cost and today's remaining budget",
+           'name="confirm" value="yes"' in bs and "سهمیهٔ روزانهٔ Alpha Vantage" in bs
+           and "از <b class=\"ltr\">%d</b>" % AVM.BUDGET.limit in bs and "data-confirm=" in bs, method="(V)")
+CLK[0] += 400
+del FD.CALLS[:]
+r6 = R6.handle("POST", "/refresh", form={"csrf": R6.csrf, "tab": "stocks", "back": "tab=stocks&symbol=IBM"})
+check_true("without the confirmation box nothing from Alpha Vantage is fetched",
+           not any(c[0] in ("av", "av2") for c in FD.CALLS) and "نیاز به تأیید سهمیه" in r6.body, method="(A)")
+del FD.CALLS[:]
+r6 = R6.handle("POST", "/refresh", form={"csrf": R6.csrf, "tab": "stocks", "confirm": "yes", "back": "tab=stocks&symbol=IBM"})
+check_true("with the confirmation the Alpha Vantage quote is fetched again", any(c[0] == "av" for c in FD.CALLS)
+           and "IBM" in r6.body, method="(B)")
+
+# -- failure: old data kept, marked stale, error and retry shown --------------------------------
+FAILNOW = [False]
+
+
+def ecb_flaky(url, timeout=20.0):
+    if FAILNOW[0]:
+        raise ECB.EcbError("HTTP 404 from the ECB Data Portal")
+    return FD.ecb_get(url, timeout)
+
+
+S6 = app(hub=rhub(ecb_get=ecb_flaky))
+before = S6.handle("GET", "/markets", query={"tab": "fx"}).body
+usd_rate = re.search(r'<td class="ltr">USD</td><td class="num">([^<]+)</td>', before).group(1)
+FAILNOW[0] = True
+CLK[0] += 120
+after = S6.handle("POST", "/refresh", form={"csrf": S6.csrf, "tab": "fx", "back": "tab=fx"}).body
+check_true("a failed refresh keeps the previous figures on the page (never blank, never 0)",
+           '<td class="ltr">USD</td><td class="num">%s</td>' % usd_rate in after, method="(A)")
+check_true("... marks them stale and shows the error and how to retry",
+           '<div class="stale" role="status">کهنه:' in after and "HTTP 404 from the ECB Data Portal" in after
+           and "برای تلاش دوباره" in after and "ناموفق؛ دادهٔ قبلی نگه داشته شد" in after, method="(V)")
+FAILNOW[0] = False
+CLK[0] += 120
+again = S6.handle("POST", "/refresh", form={"csrf": S6.csrf, "tab": "fx", "back": "tab=fx"}).body
+check_true("a successful retry clears the stale mark", "کهنه:" not in again and "تازه شد" in again, method="(B)")
+N6 = rhub(ecb_get=lambda url, timeout=20.0: (_ for _ in ()).throw(ECB.EcbError("HTTP 404 from the ECB Data Portal")))
+check_true("with no previous value a failure is still an error (nothing fabricated to mark stale)",
+           err_type(N6.fx) == "DataError", method="(A)")
+
+# -- the 'back' parameter is whitelisted and escaped ---------------------------------------------
+CLK[0] += 120
+hb = R6.handle("POST", "/refresh", form={"csrf": R6.csrf, "tab": "world",
+                                         "back": "c=<script>&ind=x&evil=1&tab=crypto"}).body
+check_true("refresh 'back' keeps only known keys, the tab comes from the form, hostile text escaped",
+           "<script>" not in hb and 'class="on">اقتصاد کشورها' in hb and "evil" not in hb, method="(A)")
+check_true("refresh pages carry no inline style or handler", not re.search(r'\sstyle="|\son[a-z]+="', after + bs), method="(V)")
+
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
 print("")

@@ -278,6 +278,16 @@ a.chip{text-decoration:none}a.chip.on{background:var(--brand);color:var(--brand-
 /* every disclosure is a 44 px target (the Markets 'stale series' summary measured 28 px) */
 details > summary{min-height:var(--tap);display:flex;align-items:center;gap:var(--sp2);cursor:pointer}
 
+/* D-0143(6): refresh controls -- 44 px target, icon + text, status list wraps */
+.refresh{display:grid;gap:var(--sp2)}
+.refresh-form{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp3)}
+.refresh-btn{min-width:var(--tap);min-height:var(--tap)}
+.ico{width:20px;height:20px;flex:none}
+.src-status{margin:0;padding-inline-start:1.1rem;display:grid;gap:var(--sp1);overflow-wrap:anywhere}
+.flash{background:var(--info);color:var(--ink);border-radius:10px;padding:.5rem .8rem}
+.chk{display:flex;align-items:center;gap:var(--sp2);min-height:var(--tap)}
+.chk input{width:22px;height:22px;flex:none}
+@media (prefers-reduced-motion:reduce){.refresh-btn .ico{animation:none}}
 /* D-0143(4): token lookup -- candidate list and contract addresses (wrap, never overflow) */
 .cands{list-style:none;margin:.4rem 0;padding:0;display:grid;gap:var(--sp1)}
 .cands li{min-height:var(--tap);display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp2)}
