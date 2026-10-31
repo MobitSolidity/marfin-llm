@@ -368,6 +368,8 @@ def cg_fx(url):
             return fx("search_uniswap.json")
         if term == "broken":
             return {"coins": "not a list"}
+        if term == "listed-only":
+            return {"coins": [{"id": "listed-only", "symbol": "lo", "name": "Listed Only", "market_cap_rank": None}]}
         return {"coins": [], "exchanges": [], "categories": []}
     if u.path.endswith("/coins/uniswap"):
         return fx("coin_uniswap.json")
@@ -919,6 +921,64 @@ check_true("CSS: the tour fits a 320 px screen and the reduced-motion and forced
 check_true("no inline style or handler on /learn", not re.search(r'\sstyle="|\son[a-z]+="', lb), method="(V)")
 check_true("the self-introduction lists /learn too (it reads NAV)",
            "/learn" in [h for h, _t in ASKM.about_facts(U.NAV)["pages"]], method="(V)")
+
+# ===========================================================================
+section("battery gaps: guards the first mutate_d0143 run showed were untested")
+# ===========================================================================
+import http.server                                                       # noqa: E402
+import threading                                                         # noqa: E402
+import tools.registry as TREG                                            # noqa: E402
+
+_orig_schemas = TREG.tool_schemas
+try:
+    TREG.tool_schemas = lambda: _orig_schemas()[:3]
+    check("about: the tool count follows the registry (3 when the registry has 3)",
+          ASKM.about_facts(U.NAV)["n_tools"], 3, method="(V)")
+finally:
+    TREG.tool_schemas = _orig_schemas
+check_true("crypto route: a question over 120 characters is not routed, even with an address in it",
+           ASKM.crypto_query("please explain in detail what this contract does and whether it is safe " * 2 + UNI) is None,
+           method="(A)")
+check_true("crypto route: four search words is not a token name", ASKM.crypto_query("token alpha beta gamma delta") is None,
+           method="(A)")
+check_true("... three is", ASKM.crypto_query("token alpha beta gamma") == "alpha beta gamma", method="(B)")
+_twins = [{"id": "x-one", "symbol": "x1", "name": "Twin", "rank": 5}, {"id": "x-two", "symbol": "x2", "name": "Twin", "rank": 9}]
+check_true("two coins with the same exact name -> ambiguous, never the first", CR.pick("twin", _twins)["status"] == "ambiguous",
+           method="(A)")
+check_true("Tron check: a decode that is not 25 bytes is refused", not CR._tron_ok(b"\x41" * 24)
+           and not CR._tron_ok(b"\x41" * 26), method="(A)")
+r = chub().crypto_lookup("listed-only")
+check_true("a coin /search lists but whose detail is 404 -> not_found with the reason, never 'resolved'",
+           r["status"] == "not_found" and r["coin"] is None and "no detail" in r["reason"], method="(A)")
+
+
+class _H404(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(404)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"error":"coin not found"}')
+
+    def log_message(self, *a):
+        pass
+
+
+_S404 = http.server.HTTPServer(("127.0.0.1", 0), _H404)
+threading.Thread(target=_S404.serve_forever, daemon=True).start()
+check_true("a real HTTP 404 from CoinGecko becomes CoinNotFound ('not on this chain'), not a failure",
+           err_type(lambda: CG._http_get("http://127.0.0.1:%d/coins/x" % _S404.server_port)) == "CoinNotFound", method="(M)")
+_S404.shutdown()
+G8 = app(hub=rhub())
+_seen = []
+G8.p_markets = lambda m, q, f, refresh_results=None: (_seen.append(dict(q)), U.Response(200, "ok"))[1]
+CLK[0] += 120
+G8.handle("POST", "/refresh", form={"csrf": G8.csrf, "tab": "fx", "back": "evil=1&ccy=USD&tab=crypto"})
+check_true("refresh 'back': only whitelisted keys reach the page, and the tab comes from the form",
+           _seen and "evil" not in _seen[0] and _seen[0].get("ccy") == "USD" and _seen[0]["tab"] == "fx", method="(A)")
+check_true("tour: the automatic first-run show is skipped once the tour was finished or skipped",
+           'tget("andarz-tour-done") !== "1") { showTour(cur); }' in js7, method="(V)")
+check_true("a missing change is a dash, never a number or a percent", U.App._chg(None) == '<span class="muted">\u2014</span>',
+           method="(A)")
 
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
