@@ -24,6 +24,12 @@ WHAT IT ADDS, AND WHY EACH PIECE
                about  -- "introduce yourself", «خودت را معرفی کن», "what can
                          you do": answered from the live registries (D-0143),
                          never by the model, so it cannot go stale or improvise.
+               crypto -- a contract address (EVM 0x..., Solana, Tron), or a
+                         short question with "crypto"/"token"/"coin"/«رمزارز»/
+                         «توکن» or a Persian coin name: looked up on CoinGecko
+                         (market/crypto_resolve.py, D-0143), never by the model;
+                         ambiguous names list ranked candidates. Needs a DataHub
+                         (the web UI passes one); "Powered by CoinGecko".
                tools  -- the question carries >= 2 numbers AND the tool
                          selector matched a family (the measured calc path:
                          100 % tool-path correctness, Phase 7).
@@ -90,7 +96,7 @@ TOP_K = 4
 DEFAULT_CORPUS = os.path.join("evals", "rag_corpus_combined.jsonl")
 DEFAULT_AUDIT = os.path.join(os.path.expanduser("~"), ".marfin", "ask_audit.jsonl")
 
-ROUTES = ("about", "tools", "macro", "rag", "plain")
+ROUTES = ("about", "crypto", "tools", "macro", "rag", "plain")
 
 WARN_CONTRADICTED = {
     "en": "WARNING: a figure in this reply does NOT match the evidence shown to the model. "
@@ -154,6 +160,112 @@ def is_about(question):
     if not t or len(t) > 60:
         return False
     return bool(_ABOUT_EN.search(t) or _ABOUT_FA.search(t))
+
+
+# ---------------------------------------------------------------------------
+# D-0143: crypto token lookup, decided WITHOUT the model (CoinGecko data only).
+# ---------------------------------------------------------------------------
+_CRYPTO_KW = re.compile(r"(?:\b(?:crypto|cryptocurrency|token|coin)\b|\u0631\u0645\u0632\s?\u0627\u0631\u0632|"
+                        r"\u062a\u0648\u06a9\u0646|\u0627\u0631\u0632 \u062f\u06cc\u062c\u06cc\u062a\u0627\u0644)")
+_CRYPTO_STOP = set("what whats is are the price prices of for a an me show find look up lookup about info information "
+                   "crypto cryptocurrency token coin tell current today now please on coingecko search details "
+                   "\u0642\u06cc\u0645\u062a \u0686\u0646\u062f \u0686\u0646\u062f\u0647 \u0686\u0642\u062f\u0631 "
+                   "\u0627\u0633\u062a \u0647\u0633\u062a \u0631\u0645\u0632\u0627\u0631\u0632 \u0631\u0645\u0632 "
+                   "\u0627\u0631\u0632 \u062f\u06cc\u062c\u06cc\u062a\u0627\u0644 \u062a\u0648\u06a9\u0646 "
+                   "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062f\u0631\u0628\u0627\u0631\u0647 \u0631\u0627 "
+                   "\u0631\u0648 \u0628\u06af\u0648 \u0646\u0634\u0627\u0646 \u0628\u062f\u0647 \u062c\u0633\u062a\u062c\u0648\u06cc "
+                   "\u0627\u0645\u0631\u0648\u0632 \u0627\u0644\u0627\u0646".split())
+_ADDR_RE = re.compile(r"(0[xX][0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})")
+
+
+def crypto_query(question):
+    """The token text to look up, or None. Addresses first (case kept), then Persian names, then keywords."""
+    from market import crypto_resolve as CR
+    raw = question or ""
+    if len(raw) > 120:
+        return None
+    for m in _ADDR_RE.finditer(CR.normalise(raw)):
+        c = CR.classify(m.group(1))
+        if c["kind"] in ("evm", "solana", "tron"):
+            return c["value"]
+    t = _norm_q(raw)
+    for k in sorted(CR.ALIASES_FA, key=len, reverse=True):
+        if re.search(r"(?<!\S)%s(?!\S)" % re.escape(k), t):
+            return k
+    if not _CRYPTO_KW.search(t):
+        return None
+    words = [w for w in re.findall(r"[\w.\-]+", t) if w not in _CRYPTO_STOP]
+    return " ".join(words) if 1 <= len(words) <= 3 else None
+
+
+def _cfmt(v, pct=False):
+    if v is None:
+        return "\u2014"
+    if pct:
+        return "%s %+.2f%%" % ("\u25b2" if v > 0 else ("\u25bc" if v < 0 else "\u25cf"), v)
+    if abs(v) >= 1:
+        return "{:,.2f}".format(v)
+    return "%.6g" % v
+
+
+def crypto_text(lang, res):
+    """The lookup result as text. Every figure is CoinGecko's (RETRIEVED); a missing one is a dash."""
+    fa = lang == "fa"
+    st, vs = res["status"], str(res.get("vs") or "usd").upper()
+    lines = []
+    if res.get("alias"):
+        lines.append(("\u0646\u0627\u0645 \u0641\u0627\u0631\u0633\u06cc \u00ab%s\u00bb \u0628\u0627 \u062c\u062f\u0648\u0644 \u062b\u0627\u0628\u062a "
+                      "(STATIC) \u0628\u0647 \u00ab%s\u00bb \u062a\u0628\u062f\u06cc\u0644 \u0634\u062f." if fa else
+                      "Persian name \u00ab%s\u00bb mapped to \u00ab%s\u00bb by the STATIC alias table.")
+                     % (res["alias"]["fa"], res["alias"]["search"]))
+    if st == "resolved":
+        c = res["coin"]
+        L = (("\u0642\u06cc\u0645\u062a", "Price"), ("\u062a\u063a\u06cc\u06cc\u0631 \u06f2\u06f4 \u0633\u0627\u0639\u062a", "24h change"),
+             ("\u062a\u063a\u06cc\u06cc\u0631 \u06f7 \u0631\u0648\u0632", "7d change"), ("\u0627\u0631\u0632\u0634 \u0628\u0627\u0632\u0627\u0631", "Market cap"),
+             ("\u0631\u062a\u0628\u0647", "Rank"), ("\u062d\u062c\u0645 \u06f2\u06f4 \u0633\u0627\u0639\u062a", "24h volume"),
+             ("\u0628\u0627\u0644\u0627\u062a\u0631\u06cc\u0646/\u067e\u0627\u06cc\u06cc\u0646\u200c\u062a\u0631\u06cc\u0646 \u06f2\u06f4 \u0633\u0627\u0639\u062a", "24h high / low"),
+             ("\u0633\u0642\u0641 \u062a\u0627\u0631\u06cc\u062e\u06cc (ATH)", "All-time high"), ("\u06a9\u0641 \u062a\u0627\u0631\u06cc\u062e\u06cc (ATL)", "All-time low"),
+             ("\u0639\u0631\u0636\u0647\u0654 \u062f\u0631 \u06af\u0631\u062f\u0634 / \u06a9\u0644 / \u062d\u062f\u0627\u06a9\u062b\u0631", "Supply circulating / total / max"),
+             ("\u0622\u062e\u0631\u06cc\u0646 \u0628\u0647\u200c\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc CoinGecko", "CoinGecko last updated"))
+        i = 1 if not fa else 0
+        vals = ("%s %s" % (_cfmt(c["price"]), vs), _cfmt(c["change_24h"], True), _cfmt(c["change_7d"], True),
+                "%s %s" % (_cfmt(c["market_cap"]), vs), "#%d" % c["rank"] if c.get("rank") else "\u2014",
+                "%s %s" % (_cfmt(c["volume"]), vs), "%s / %s" % (_cfmt(c["high_24h"]), _cfmt(c["low_24h"])),
+                "%s (%s)" % (_cfmt(c["ath"]), c.get("ath_date") or "\u2014"),
+                "%s (%s)" % (_cfmt(c["atl"]), c.get("atl_date") or "\u2014"),
+                "%s / %s / %s" % (_cfmt(c["circulating_supply"]), _cfmt(c["total_supply"]), _cfmt(c["max_supply"])),
+                c.get("last_updated") or "\u2014")
+        lines.append("**%s (%s)** \u2014 CoinGecko id: %s%s" % (c["name"], c["symbol"], c["id"],
+                     ("  \u00b7  " + ("\u06cc\u0627\u0641\u062a\u0647 \u0631\u0648\u06cc " if fa else "found on ") + c["found_on"]) if c.get("found_on") else ""))
+        lines += ["- %s: %s" % (lab[i], v) for lab, v in zip(L, vals)]
+        from market import coingecko as CG
+        addrs = [(p[2], c["platforms"][p[1]]) for p in CG.PLATFORMS if c["platforms"].get(p[1])]
+        if addrs:
+            lines.append("**%s**" % ("\u0622\u062f\u0631\u0633 \u0642\u0631\u0627\u0631\u062f\u0627\u062f\u0647\u0627" if fa else "Contract addresses"))
+            lines += ["- %s: %s" % a for a in addrs]
+        if res.get("candidates"):
+            lines.append(("\u0646\u062a\u0627\u06cc\u062c \u0645\u0634\u0627\u0628\u0647 \u062f\u06cc\u06af\u0631: " if fa else "Other matches: ")
+                         + ", ".join("%s (%s)" % (x["id"], x["symbol"]) for x in res["candidates"][:5]))
+    elif st == "ambiguous":
+        lines.append(("\u00ab%s\u00bb \u0628\u0627 \u0686\u0646\u062f \u0631\u0645\u0632\u0627\u0631\u0632 \u062c\u0648\u0631 \u0627\u0633\u062a\u061b \u0628\u062f\u0648\u0646 \u062d\u062f\u0633 "
+                      "\u06cc\u06a9\u06cc \u0627\u0646\u062a\u062e\u0627\u0628 \u0646\u0645\u06cc\u200c\u0634\u0648\u062f. \u0634\u0646\u0627\u0633\u0647 (id) \u06cc\u0627 \u0622\u062f\u0631\u0633 \u0642\u0631\u0627\u0631\u062f\u0627\u062f \u0631\u0627 \u0628\u0646\u0648\u06cc\u0633\u06cc\u062f:"
+                      if fa else "\u00ab%s\u00bb matches several coins; none is picked silently. Ask again with the id or the contract address:")
+                     % res["query"])
+        lines += ["- %s (%s)%s" % (x["id"], x["symbol"], "  rank #%d" % x["rank"] if x.get("rank") else "  unranked")
+                  for x in res["candidates"]]
+    elif st == "not_found":
+        lines.append(("CoinGecko \u0631\u0645\u0632\u0627\u0631\u0632\u06cc \u0628\u0631\u0627\u06cc \u00ab%s\u00bb \u0646\u062f\u0627\u0631\u062f." if fa
+                      else "CoinGecko has no coin for \u00ab%s\u00bb.") % res["query"])
+    elif st == "invalid":
+        lines.append(("\u0648\u0631\u0648\u062f\u06cc \u0645\u0639\u062a\u0628\u0631 \u0646\u06cc\u0633\u062a: %s" if fa else "Not a valid input: %s") % res["reason"])
+    else:
+        lines.append(("\u062f\u0627\u062f\u0647 \u062f\u0631 \u062f\u0633\u062a\u0631\u0633 \u0646\u06cc\u0633\u062a: %s" if fa else "Data unavailable: %s") % res.get("error"))
+    if res.get("checked"):
+        lines.append(("\u0632\u0646\u062c\u06cc\u0631\u0647\u200c\u0647\u0627: " if fa else "Chains: ")
+                     + ", ".join("%s %s" % (n, s) for n, s in res["checked"]))
+    lines.append(("RETRIEVED \u0627\u0632 CoinGecko\u060c \u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 \u0686\u0646\u062f \u0635\u0631\u0627\u0641\u06cc\u061b \u0644\u062d\u0638\u0647\u200c\u0627\u06cc \u0646\u06cc\u0633\u062a \u0648 \u062a\u0648\u0635\u06cc\u0647\u0654 \u0645\u0627\u0644\u06cc \u0646\u06cc\u0633\u062a."
+                  if fa else "RETRIEVED from CoinGecko, aggregated across exchanges; not real-time and not financial advice."))
+    return "\n".join(lines)
 
 
 def _ui_pages():
@@ -262,8 +374,9 @@ class Assistant(object):
     """
 
     def __init__(self, runner, index=None, macro_fetch=None, audit=None,
-                 clock=None, use_macro=True, pages=None):
+                 clock=None, use_macro=True, pages=None, hub=None):
         self.runner = runner
+        self.hub = hub                           # D-0143: DataHub for the crypto route (None: route off)
         self.pages = pages                       # None -> the web UI's NAV, read live (D-0143)
         self.index = index
         self.macro_fetch = macro_fetch or MACRO.fetch
@@ -281,6 +394,10 @@ class Assistant(object):
         """(route, detail). Decided without the model."""
         if is_about(question):                   # D-0143: before every other route
             return "about", {}
+        if self.hub is not None:                 # D-0143: before tools (an address is full of digits)
+            cq = crypto_query(question)
+            if cq:
+                return "crypto", {"query": cq}
         from tools.selector import select_tools
         sel = select_tools(question)
         # D-0136: numbers that are part of a catalogue series NAME ("10-year",
@@ -418,6 +535,15 @@ class Assistant(object):
             # Never the model: the registries answer (the runner may even be None here).
             text = about_text(out["lang"], self.pages)
             out["about"] = True
+            out["no_model"] = "about"
+        if route == "crypto":
+            # Never the model: CoinGecko's figures, shown as retrieved (the runner may be None here).
+            res = self.hub.crypto_lookup(detail["query"])
+            text = crypto_text(out["lang"], res)
+            out["crypto"] = res
+            out["no_model"] = "crypto"
+            out["sources"] = ["coingecko"]
+            out["data_as_of"] = (res.get("coin") or {}).get("last_updated")
         if route == "tools":
             text = self._tools(question, out)
         elif route == "macro":
@@ -467,7 +593,7 @@ class Assistant(object):
         for name in out["sources"]:
             for k in ("fred", "bis_statistics", "ecb_data_portal", "world_bank_indicators",
                       "imf_sdmx_data", "gdelt_doc", "nyfed_markets_data", "sec_edgar_xbrl",
-                      "sec_edgar_submissions"):
+                      "sec_edgar_submissions", "coingecko"):
                 try:
                     if k == name or get_source(k).name == name:
                         keys.append(k)
@@ -476,12 +602,17 @@ class Assistant(object):
         return required_notices(keys)
 
 
+#: D-0143: turns answered without a model -> (render note, HTML meta note)
+_NO_MODEL = {"about": ("built from the registries", "registries"),
+             "crypto": ("CoinGecko data as retrieved", "CoinGecko")}
+
+
 def render(out):
     """The answer as printed. Every section is labelled; nothing is hidden."""
     fa = out["lang"] == "fa"
     lines = ["route: %s%s%s" % (out["route"], "   data as of: %s" % out["data_as_of"]
                                 if out.get("data_as_of") else "",
-                                "   (no model: built from the registries)" if out.get("about") else "")]
+                                "   (no model: %s)" % _NO_MODEL[out["no_model"]][0] if out.get("no_model") else "")]
     for w in out["warnings"]:
         lines.append(w)
     lines.append("")
@@ -610,7 +741,8 @@ def turn_html(out):
     parts.append('<div class="q" dir="auto">%s</div>' % _inline(out["question"]))
     parts.append('<div class="meta">route: %s%s%s</div>' % (
         _h.escape(out["route"]), (" &middot; data as of: %s" % _h.escape(out["data_as_of"]))
-        if out.get("data_as_of") else "", " &middot; no model (registries)" if out.get("about") else ""))
+        if out.get("data_as_of") else "", " &middot; no model (%s)" % _NO_MODEL[out["no_model"]][1]
+        if out.get("no_model") else ""))
     for w in out["warnings"]:
         parts.append('<div class="warn" dir="auto">%s</div>' % _inline(w))
     parts.append('<div class="reply">%s</div>' % _reply_html(out["reply"] or "(empty reply)"))

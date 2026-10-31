@@ -44,6 +44,11 @@ from rag import sec_facts as _sec
 from rag.sources import required_notices
 
 CACHE_TTL_S = 600.0
+#: D-0143: CoinGecko calls allowed per rolling minute. Keyless: "~5 calls/min (dynamic)" per the
+#: official Keyless page (VERIFIED 2026-10-30; MEASURED the same day: a 2nd call within 20 s got 429).
+#: With the free Demo key: 30, deliberately below the plan's published limit (ESTIMATED headroom).
+CG_PER_MIN_KEYLESS = 5
+CG_PER_MIN_DEMO = 30
 STALE_DAYS = 400            # a policy-rate series older than this is a discontinued one
 
 #: ISO-2 -> (ISO-3 for the World Bank, Persian name). XM/EMU is the euro area.
@@ -111,7 +116,7 @@ SOURCES_FA = (
     ("world_bank_indicators", "بانک جهانی", "۱۰ شاخص اقتصادی برای ۲۱۷ کشور (سالانه)", "بدون کلید"),
     ("alpha_vantage", "Alpha Vantage (رایگان)", "سهام آمریکا (قیمت پایانی، جست‌وجوی نماد)، جفت‌ارزهای فارکس؛ "
      "۲۵ درخواست در روز", "کلید رایگان ALPHAVANTAGE_API_KEY"),
-    ("coingecko", "CoinGecko", "بازار رمزارزها: قیمت، ارزش بازار، حجم، تغییرات، نمودار ۳۶۵ روزه",
+    ("coingecko", "CoinGecko", "بازار رمزارزها: قیمت، ارزش بازار، حجم، تغییرات، نمودار ۳۶۵ روزه، جست‌وجوی توکن با نام، نماد یا آدرس قرارداد",
      "بدون کلید (حدود ۵ درخواست در دقیقه) یا کلید رایگان COINGECKO_DEMO_API_KEY"),
     ("sec_edgar_xbrl", "کمیسیون بورس آمریکا (SEC EDGAR)", "صورت‌های مالی سالانهٔ شرکت‌های آمریکایی از گزارش 10-K",
      "ایمیل تماس در SEC_CONTACT_EMAIL"),
@@ -127,6 +132,17 @@ class DataError(RuntimeError):
     """A data request refused or failed. The message is shown to the user verbatim."""
 
 
+class RateBudget(DataError):
+    """D-0143: refused BEFORE any network call because the per-minute budget is spent."""
+
+    def __init__(self, msg, retry_after_s):
+        DataError.__init__(self, msg)
+        self.retry_after_s = retry_after_s
+
+
+_NOT_FOUND = ("not-found",)              # cached negative answer (CoinGecko HTTP 404)
+
+
 def _transient(exc):
     return isinstance(exc, _ERRORS) and any(t in str(exc).lower() for t in _TRANSIENT)
 
@@ -140,7 +156,8 @@ class DataHub(object):
     def __init__(self, ecb_get=None, bis_get=None, fred_get=None, wb_get=None, av_fetch=None,
                  clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep,
                  fred_key: Optional[str] = None, ttl: float = CACHE_TTL_S,
-                 cg_get=None, av_get=None, sec_get=None, sec_contact: Optional[str] = None):
+                 cg_get=None, av_get=None, sec_get=None, sec_contact: Optional[str] = None,
+                 cg_per_min: Optional[int] = None):
         self.ecb_get, self.bis_get, self.fred_get, self.wb_get = ecb_get, bis_get, fred_get, wb_get
         self.av_fetch = av_fetch
         # D-0142: crypto (CoinGecko), forex pairs / quotes / search (Alpha Vantage), fundamentals (SEC)
@@ -148,6 +165,8 @@ class DataHub(object):
         self.clock, self.sleep, self.fred_key, self.ttl = clock, sleep, fred_key, ttl
         self._cache: Dict[Any, Any] = {}
         self.calls = 0                      # network calls actually made (tests read it)
+        self.cg_per_min = cg_per_min        # None: decided from COINGECKO_DEMO_API_KEY at call time
+        self._cg_times: List[float] = []    # D-0143: times of CoinGecko network calls (rolling minute)
 
     # -- plumbing ---------------------------------------------------------------------------
     def _cached(self, key, fn):
@@ -337,21 +356,82 @@ class DataHub(object):
         vs = str(vs or "usd").lower()
         if vs not in _cg.VS_CURRENCIES:
             raise DataError("quote currency %r is not offered; choose one of %s" % (vs, ", ".join(_cg.VS_CURRENCIES)))
-        rows = self._guard(("cg_markets", vs, n), lambda: _cg.fetch_markets(vs, n, http_get=self.cg_get))
+        rows = self._cg(("cg_markets", vs, n), lambda: _cg.fetch_markets(vs, n, http_get=self.cg_get))
         return {"vs": vs, "rows": rows, "label": "RETRIEVED (CoinGecko, aggregated across exchanges; indicative)",
                 "notices": required_notices(["coingecko"]),
                 "note": "قیمت‌ها میانگین وزنی چند صرافی‌اند، نه قیمت قابل معاملهٔ یک صرافی مشخص؛ چند دقیقه تأخیر دارند."}
 
     def crypto_global(self) -> Dict[str, Any]:
         from market import coingecko as _cg
-        g = self._guard(("cg_global",), lambda: _cg.fetch_global(http_get=self.cg_get))
+        g = self._cg(("cg_global",), lambda: _cg.fetch_global(http_get=self.cg_get))
         return dict(g, label="RETRIEVED (CoinGecko /global)", notices=required_notices(["coingecko"]))
 
     def crypto_chart(self, coin_id: str, vs: str = "usd", days: int = 90) -> Dict[str, Any]:
         from market import coingecko as _cg
-        pts = self._guard(("cg_chart", coin_id, vs, days), lambda: _cg.fetch_chart(coin_id, vs, days, http_get=self.cg_get))
+        pts = self._cg(("cg_chart", coin_id, vs, days), lambda: _cg.fetch_chart(coin_id, vs, days, http_get=self.cg_get))
         return {"id": coin_id, "vs": vs, "points": pts, "label": "RETRIEVED (CoinGecko daily, 00:00 UTC)",
                 "notices": required_notices(["coingecko"])}
+
+    # -- D-0143: CoinGecko budget and token lookup ------------------------------------------
+    def cg_limit(self) -> int:
+        if self.cg_per_min is not None:
+            return self.cg_per_min
+        import os
+        return CG_PER_MIN_DEMO if str(os.environ.get("COINGECKO_DEMO_API_KEY", "")).strip() else CG_PER_MIN_KEYLESS
+
+    def cg_budget(self) -> Dict[str, Any]:
+        """Calls left in the rolling minute and when the next one frees up (shown in the UI)."""
+        now = self.clock()
+        self._cg_times = [t for t in self._cg_times if now - t < 60.0]
+        lim = self.cg_limit()
+        left = max(0, lim - len(self._cg_times))
+        wait = 0 if left else int(60.0 - (now - self._cg_times[0])) + 1
+        return {"limit": lim, "left": left, "retry_after_s": wait}
+
+    def _cg(self, key, fn):
+        """A CoinGecko request: cache first, then the per-minute budget, then the network. Never retried."""
+        hit = self._cache.get(key)
+        if hit is not None and self.clock() - hit[0] < self.ttl:
+            return hit[1]
+        b = self.cg_budget()
+        if not b["left"]:
+            raise RateBudget("CoinGecko budget spent: %d calls a minute (%s). Try again in %d s; nothing was sent."
+                             % (b["limit"], "free Demo key" if b["limit"] > CG_PER_MIN_KEYLESS else "keyless",
+                                b["retry_after_s"]), b["retry_after_s"])
+        self._cg_times.append(self.clock())
+        return self._guard(key, fn)
+
+    @staticmethod
+    def _or_not_found(fn):
+        from market import coingecko as _cg
+
+        def go():
+            try:
+                return fn()
+            except _cg.CoinNotFound:
+                return _NOT_FOUND
+        return go
+
+    def crypto_search(self, query: str) -> List[Dict[str, Any]]:
+        from market import coingecko as _cg
+        q = " ".join(str(query or "").split()).lower()
+        return self._cg(("cg_search", q), lambda: _cg.fetch_search(q, http_get=self.cg_get))
+
+    def crypto_coin(self, coin_id: str, vs: str = "usd") -> Optional[Dict[str, Any]]:
+        from market import coingecko as _cg
+        r = self._cg(("cg_coin", coin_id, vs), self._or_not_found(
+            lambda: _cg.fetch_coin(coin_id, vs, http_get=self.cg_get)))
+        return None if r is _NOT_FOUND else r
+
+    def crypto_contract(self, platform_id: str, address: str, vs: str = "usd") -> Optional[Dict[str, Any]]:
+        from market import coingecko as _cg
+        r = self._cg(("cg_contract", platform_id, address, vs), self._or_not_found(
+            lambda: _cg.fetch_contract(platform_id, address, vs, http_get=self.cg_get)))
+        return None if r is _NOT_FOUND else r
+
+    def crypto_lookup(self, text: str, vs: str = "usd") -> Dict[str, Any]:
+        from market import crypto_resolve as _cr
+        return _cr.resolve(text, self, vs)
 
     # -- D-0142: forex pairs, quotes and search (Alpha Vantage, shared 25/day budget) --------
     def fx_pair(self, frm: str, to: str) -> Dict[str, Any]:
@@ -392,6 +472,11 @@ class DataHub(object):
         f = self._guard(("sec_facts", hit["cik"]), lambda: _sec.fetch_fundamentals(hit["cik"], ua, http_get=self.sec_get))
         return dict(f, ticker=t, label="RETRIEVED (SEC EDGAR XBRL companyfacts; annual 10-K figures, latest filing wins)",
                     notices=[], note="ارقام سالانه و از گزارش 10-K شرکت‌اند؛ هر عدد با شمارهٔ ثبت گزارش قابل ردیابی است.")
+
+
+# D-0143: the resolver reads the error types from the hub it is given (no import back, no cycle).
+DataHub.DataError = DataError
+DataHub.RateBudget = RateBudget
 
 
 def today() -> datetime.date:

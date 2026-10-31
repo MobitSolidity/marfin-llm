@@ -28,6 +28,15 @@ TMP = tempfile.mkdtemp(prefix="andarz_d0143_")
 _SAVED_ENV = dict(os.environ)
 
 
+def err_type(fn):
+    """The exception class name fn raises, or None."""
+    try:
+        fn()
+    except Exception as exc:                                    # noqa: BLE001
+        return type(exc).__name__
+    return None
+
+
 def read(rel):
     return io.open(os.path.join(ROOT, rel), encoding="utf-8").read()
 
@@ -296,7 +305,7 @@ check_true("render() marks the turn as built without a model",
            ASKM.render(oe).splitlines()[0] == "route: about   (no model: built from the registries)", "(V)")
 check_true("turn_html() meta marks the turn as built without a model",
            '<div class="meta">route: about &middot; no model (registries)</div>' in ASKM.turn_html(oe), "(V)")
-check_true("a non-about turn has no 'no model' marker", "no model" not in ASKM.render(dict(oe, about=False, route="plain")).splitlines()[0], "(A)")
+check_true("a non-about turn has no 'no model' marker", "no model" not in ASKM.render(dict(oe, about=False, no_model=None, route="plain")).splitlines()[0], "(A)")
 
 check_true("ask.py never imports ui (no import cycle; the UI passes pages=NAV instead)",
            not re.search(r"^\s*(?:import ui\b|from ui import)", read("scripts/ask.py"), re.M)
@@ -320,6 +329,278 @@ check_true("the first chip is the self-introduction and it routes to 'about'", A
 check_true("ask.py docstring no longer uses Apple/AAPL as the example",
            not re.search(r"apple|aapl", ASKM.__doc__ or "", re.I), "(A)")
 check_true("docs/deployment.md no longer uses Apple/AAPL as the example", not re.search(r"\bapple\b|\baapl\b", read("docs/deployment.md"), re.I), "(A)")
+
+# ===========================================================================
+section("4. crypto token lookup: CoinGecko /search, /coins/{id}, /coins/{platform}/contract/{address}")
+# ===========================================================================
+import urllib.parse                                                      # noqa: E402
+from market import coingecko as CG                                       # noqa: E402
+from market import crypto_resolve as CR                                  # noqa: E402
+
+FXD = os.path.join(ROOT, "tests", "fixtures", "coingecko")
+
+
+def fx(name):
+    return json.loads(io.open(os.path.join(FXD, name), encoding="utf-8").read())
+
+
+UNI = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"           # Uniswap on Ethereum (MEASURED fixture)
+SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"          # a valid base58 32-byte key
+TRX = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"                    # a valid Tron base58check address
+_CONTRACT = fx("contract_eth_uni.json")
+# Solana / Tron answers are SYNTHETIC: the MEASURED contract shape with another platform's id.
+_SYN = {("solana", SOL): dict(_CONTRACT, id="syn-sol", symbol="ssol", name="Synthetic Sol Token",
+                              asset_platform_id="solana", contract_address=SOL, platforms={"solana": SOL}),
+        ("tron", TRX): dict(_CONTRACT, id="syn-trx", symbol="strx", name="Synthetic Tron Token",
+                            asset_platform_id="tron", contract_address=TRX, platforms={"tron": TRX})}
+CGLOG = []
+
+
+def cg_fx(url):
+    CGLOG.append(url)
+    u = urllib.parse.urlsplit(url)
+    q = urllib.parse.parse_qs(u.query)
+    if u.path.endswith("/search"):
+        term = q["query"][0]
+        if term == "uniswap":
+            return fx("search_uniswap.json")
+        if term == "uni":                       # the fixture's coins, searched by symbol
+            return fx("search_uniswap.json")
+        if term == "broken":
+            return {"coins": "not a list"}
+        return {"coins": [], "exchanges": [], "categories": []}
+    if u.path.endswith("/coins/uniswap"):
+        return fx("coin_uniswap.json")
+    if u.path.endswith("/coins/listed-only"):
+        raise CG.CoinNotFound("404")
+    m = re.search(r"/coins/([a-z0-9-]+)/contract/(.+)$", u.path)
+    if m:
+        if (m.group(1), m.group(2)) == ("ethereum", UNI):
+            return _CONTRACT
+        if (m.group(1), m.group(2)) in _SYN:
+            return _SYN[(m.group(1), m.group(2))]
+        raise CG.CoinNotFound("404")            # MEASURED: unknown contract -> 404 coin not found
+    return FD.cg_get(url)
+
+
+def chub(**kw):
+    kw.setdefault("cg_get", cg_fx)
+    kw.setdefault("cg_per_min", 100)
+    return FD.hub(**kw)
+
+
+# -- fixtures are real recordings -----------------------------------------------------------
+check_true("fixtures recorded from one live call per endpoint (search, coin, contract, 404, 429)",
+           all(os.path.exists(os.path.join(FXD, n)) for n in (
+               "search_uniswap.json", "coin_uniswap.json", "contract_eth_uni.json",
+               "contract_not_found.json", "http_429_contract.json", "http_429_throttled.txt")), method="(M)")
+check_true("the recorded 404 body is CoinGecko's own 'coin not found'",
+           fx("contract_not_found.json") == {"error": "coin not found"}, method="(M)")
+check_true("the recorded 429 body is refused, never parsed as data",
+           err_type(lambda: CG.parse_coin(fx("http_429_contract.json"))) == "CoinGeckoError"
+           and err_type(lambda: CG.parse_search(fx("http_429_contract.json"))) == "CoinGeckoError", method="(M)")
+check_true("the 404 body becomes CoinNotFound (not a failure: 'not on this chain')",
+           err_type(lambda: CG.parse_coin(fx("contract_not_found.json"))) == "CoinNotFound", method="(V)")
+
+# -- parsing ---------------------------------------------------------------------------------
+c = CG.parse_coin(fx("coin_uniswap.json"))
+check_true("coin detail: name, symbol, rank and every monitor field parsed from the MEASURED fixture",
+           (c["id"], c["symbol"], c["rank"]) == ("uniswap", "UNI", 25) and all(
+               c[k] is not None for k in ("price", "change_24h", "change_7d", "market_cap", "volume", "high_24h",
+                                          "low_24h", "ath", "atl", "circulating_supply", "total_supply", "max_supply")),
+           method="(M)")
+check_true("contract addresses come from CoinGecko's own platforms map",
+           c["platforms"]["ethereum"] == UNI and c["platforms"]["polygon-pos"].startswith("0x"), method="(M)")
+check_true("CoinGecko's timestamp is kept to the second, labelled UTC",
+           re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$", c["last_updated"] or "") is not None, method="(V)")
+bare = CG.parse_coin({"id": "x-coin", "symbol": "x", "name": "X", "market_data": {"current_price": {"usd": 0}}})
+check_true("a missing or zero figure is None (shown as a dash), never 0",
+           bare["price"] is None and bare["market_cap"] is None and bare["ath"] is None and bare["last_updated"] is None,
+           method="(A)")
+for name, bad in (("a string price", {"id": "a", "symbol": "a", "name": "A", "market_data": {"current_price": {"usd": "7"}}}),
+                  ("an infinite price", {"id": "a", "symbol": "a", "name": "A", "market_data": {"current_price": {"usd": float("inf")}}}),
+                  ("a boolean supply", {"id": "a", "symbol": "a", "name": "A", "market_data": {"total_supply": True}}),
+                  ("an id with a slash", {"id": "../x", "symbol": "a", "name": "A"}),
+                  ("market_data not an object", {"id": "a", "symbol": "a", "name": "A", "market_data": []}),
+                  ("not an object at all", ["a"])):
+    check_true("parse_coin refuses %s (malformed JSON shape)" % name, err_type(lambda: CG.parse_coin(bad)) == "CoinGeckoError", method="(A)")
+check_true("parse_search refuses a malformed payload", err_type(lambda: CG.parse_search({"coins": "x"})) == "CoinGeckoError"
+           and err_type(lambda: CG.parse_search([1])) == "CoinGeckoError", method="(A)")
+srch = CG.parse_search(fx("search_uniswap.json"))
+check_true("search keeps only coins, in CoinGecko's order", [x["id"] for x in srch][:2] == ["uniswap", "uniswap-wormhole"], method="(M)")
+
+# -- URLs: only whitelisted platforms and well-formed addresses reach the network ----------
+check_true("contract URL: Ethereum address lower-cased (CoinGecko stores it lower-case, MEASURED)",
+           CG.contract_url("ethereum", UNI.upper().replace("0X", "0x")).endswith("/coins/ethereum/contract/" + UNI), method="(M)")
+for name, fn in (("an unknown platform", lambda: CG.contract_url("dogechain", UNI)),
+                 ("a path in the platform", lambda: CG.contract_url("../ethereum", UNI)),
+                 ("a short EVM address", lambda: CG.contract_url("ethereum", "0x1234")),
+                 ("an EVM address on Solana", lambda: CG.contract_url("solana", UNI)),
+                 ("a Solana key on Tron", lambda: CG.contract_url("tron", SOL)),
+                 ("a query injected into an address", lambda: CG.contract_url("ethereum", UNI + "?x=1")),
+                 ("an empty search", lambda: CG.search_url("   ")),
+                 ("a 65-character search", lambda: CG.search_url("a" * 65)),
+                 ("a coin id with a slash", lambda: CG.coin_url("a/b"))):
+    check_true("URL builder refuses %s" % name, err_type(fn) == "CoinGeckoError", method="(A)")
+check_true("chain order is the owner's: Ethereum, BSC, Polygon, Base, Arbitrum, Solana, Tron",
+           [p[2] for p in CG.PLATFORMS] == ["Ethereum", "BNB Smart Chain", "Polygon PoS", "Base", "Arbitrum One",
+                                            "Solana", "Tron"], method="(V)")
+
+# -- classify / normalise -------------------------------------------------------------------
+for text, kind in ((UNI, "evm"), (UNI.upper().replace("0X", "0x"), "evm"), ("\u06f0x" + UNI[2:], "evm"),
+                   (SOL, "solana"), (TRX, "tron"), ("uniswap", "name"), ("UNI", "name"), ("\u0628\u06cc\u062a\u200c\u06a9\u0648\u06cc\u0646", "name"),
+                   ("0x1234", "invalid"), (TRX[:-1] + "u", "invalid"), (SOL.lower(), "invalid"), (TRX.lower(), "invalid"),
+                   ("12345", "invalid"), ("", "invalid"), ("a" * 65, "invalid")):
+    check_true("classify(%r) -> %s" % (text[:24], kind), CR.classify(text)["kind"] == kind,
+               method="(A)" if kind == "invalid" else "(B)")
+check_true("normalise: Persian digits, ZWNJ and Arabic yeh/kaf are folded",
+           CR.normalise("\u06f1\u06f2 \u200c\u0643\u064a") == "12 \u06a9\u06cc", method="(V)")
+check_true("a mistyped Tron address is refused by its checksum (not searched as a name)",
+           "checksum" in CR.classify(TRX[:-1] + "u")["reason"], method="(A)")
+
+# -- the matching rule (pure) ---------------------------------------------------------------
+p = CR.pick("uniswap", srch)
+check_true("exact id/name -> resolved, the others kept as 'other matches'",
+           p["status"] == "resolved" and p["coin_id"] == "uniswap" and p["match"] == "name" and len(p["candidates"]) == 2, method="(B)")
+p = CR.pick("uni", srch)
+check_true("a symbol shared by two coins -> AMBIGUOUS with ranked candidates, never a silent pick",
+           p["status"] == "ambiguous" and p["coin_id"] is None and [x["id"] for x in p["candidates"]] == ["uniswap", "uniswap-wormhole"],
+           method="(A)")
+p = CR.pick("uni.e", srch)
+check_true("a unique symbol -> resolved by symbol", p["status"] == "resolved" and p["match"] == "symbol"
+           and p["coin_id"] == "bridged-uniswap-lightlink", method="(B)")
+check_true("nothing returned -> not_found", CR.pick("zzz", [])["status"] == "not_found", method="(B)")
+check_true("ranking: market-cap rank first, unranked last, CoinGecko's order breaking ties",
+           [x["id"] for x in CR.rank([{"id": "a", "rank": None}, {"id": "b", "rank": 9}, {"id": "c", "rank": 2},
+                                      {"id": "d", "rank": None}])] == ["c", "b", "a", "d"], method="(V)")
+
+# -- resolve through the DataHub ------------------------------------------------------------
+H = chub()
+r = H.crypto_lookup("uniswap")
+check_true("name -> resolved with CoinGecko's figures and the attribution",
+           r["status"] == "resolved" and r["coin"]["id"] == "uniswap" and r["notices"] == ["Powered by CoinGecko"], method="(B)")
+check_true("symbol shared by two coins -> ambiguous, no coin detail fetched",
+           H.crypto_lookup("UNI")["status"] == "ambiguous" and not any("/coins/uniswap-wormhole" in u for u in CGLOG), method="(A)")
+del CGLOG[:]
+r = H.crypto_lookup(UNI.upper().replace("0X", "0x"))
+check_true("EVM address (wrong case) -> found on Ethereum with ONE call; later chains 'not checked'",
+           r["status"] == "resolved" and r["coin"]["found_on"] == "Ethereum" and len(CGLOG) == 1
+           and r["checked"][0] == ("Ethereum", "found") and all(st == "not_checked" for _n, st in r["checked"][1:]), method="(B)")
+del CGLOG[:]
+r = H.crypto_lookup("0x" + "ab" * 20)
+check_true("unknown EVM address -> every EVM chain tried in order, then not_found (no guess)",
+           r["status"] == "not_found" and [n for n, _s in r["checked"]] == ["Ethereum", "BNB Smart Chain", "Polygon PoS", "Base",
+                                                                         "Arbitrum One"] and len(CGLOG) == 5, method="(A)")
+r = H.crypto_lookup(SOL)
+check_true("Solana address -> the Solana platform only", r["status"] == "resolved" and r["coin"]["found_on"] == "Solana"
+           and [n for n, _s in r["checked"]] == ["Solana"], method="(B)")
+r = H.crypto_lookup(TRX)
+check_true("Tron address -> the Tron platform only", r["status"] == "resolved" and r["coin"]["found_on"] == "Tron", method="(B)")
+r = H.crypto_lookup("nosuchcoinzz")
+check_true("a name CoinGecko does not know -> not_found, said plainly", r["status"] == "not_found" and r["coin"] is None, method="(A)")
+r = H.crypto_lookup("0x1234")
+check_true("invalid input -> refused with the reason, no network call", r["status"] == "invalid" and "40 hex" in r["reason"], method="(A)")
+r = H.crypto_lookup("\u06cc\u0648\u0646\u06cc \u0633\u0648\u0627\u067e")
+check_true("Persian name -> STATIC alias table -> CoinGecko search, labelled STATIC",
+           r["status"] == "resolved" and r["alias"]["search"] == "uniswap" and "STATIC" in r["alias"]["label"], method="(B)")
+check_true("the alias table only maps to search words (the coin itself always comes from CoinGecko)",
+           all(isinstance(v, str) and v == v.lower() for v in CR.ALIASES_FA.values()), method="(V)")
+r = H.crypto_lookup("broken")
+check_true("malformed /search JSON -> 'error', never a fabricated coin", r["status"] == "error" and r["coin"] is None, method="(A)")
+
+# -- cache, budget, 429 ---------------------------------------------------------------------
+del CGLOG[:]
+H.crypto_lookup("uniswap")
+check("a repeated lookup within 10 minutes is served from the cache (0 network calls)", len(CGLOG), 0, method="(V)")
+T = [1000.0]
+HB = chub(cg_per_min=2, clock=lambda: T[0])
+del CGLOG[:]
+r = HB.crypto_lookup("0x" + "cd" * 20)
+check_true("budget of 2/min: the 3rd chain is NOT requested; rate_limited with the chains checked so far",
+           r["status"] == "rate_limited" and len(CGLOG) == 2 and r["retry_after_s"] > 0
+           and ("Polygon PoS", "not_checked") in r["checked"] and "nothing was sent" in r["error"], method="(A)")
+check_true("the budget is shown: 0 left, and when the next call frees up", HB.cg_budget()["left"] == 0
+           and 1 <= HB.cg_budget()["retry_after_s"] <= 61, method="(V)")
+T[0] += 61
+check_true("after a minute the budget is back", HB.cg_budget()["left"] == 2, method="(B)")
+check("keyless limit is 5/min (official Keyless page)", DH.DataHub().cg_limit() if not os.environ.get("COINGECKO_DEMO_API_KEY") else 5, 5,
+      method="(V)")
+os.environ["COINGECKO_DEMO_API_KEY"] = "CG-FAKEFAKEFAKEFAKE"
+check("with the free Demo key: 30/min", DH.DataHub().cg_limit(), 30, method="(V)")
+os.environ.pop("COINGECKO_DEMO_API_KEY")
+N429 = []
+
+
+def cg_429(url):
+    N429.append(url)
+    raise CG.CoinGeckoError("CoinGecko rate limit reached (status 429). The keyless limit is about 5 calls a minute")
+
+
+r = chub(cg_get=cg_429).crypto_lookup("uniswap")
+check_true("a CoinGecko 429 -> rate_limited, reported, and NOT retried (exactly one call)",
+           r["status"] == "rate_limited" and "429" in r["error"] and len(N429) == 1, method="(A)")
+_real_gate = CG.check_access
+NET = []
+try:
+    def _deny(key, *a, **k):
+        raise S_ACCESS("source %r is disabled" % key)
+    from rag.sources import AccessError as S_ACCESS                     # noqa: E402
+    CG.check_access = _deny
+    for fn in (lambda: CG.fetch_search("uniswap", http_get=NET.append),
+               lambda: CG.fetch_coin("uniswap", http_get=NET.append),
+               lambda: CG.fetch_contract("ethereum", UNI, http_get=NET.append)):
+        check_true("the registry gate runs BEFORE any network call (%d calls)" % len(NET),
+                   err_type(fn) == "AccessError" and NET == [], method="(A)")
+finally:
+    CG.check_access = _real_gate
+
+# -- UI: GET search box on Markets -> crypto (works without JS) -------------------------------
+AU = app(hub=chub())
+b4 = AU.handle("GET", "/markets", query={"tab": "crypto"}).body
+check_true("Markets -> crypto has a GET search form (no JS needed) with a labelled field",
+           '<form method="get" action="/markets" class="card" role="search">' in b4 and 'name="lookup"' in b4, method="(V)")
+check_true("the form states the chain order and the CoinGecko budget left this minute",
+           "Ethereum → BNB Smart Chain" in b4 and "سهمیهٔ CoinGecko" in b4, method="(V)")
+bu = AU.handle("GET", "/markets", query={"tab": "crypto", "lookup": "uniswap"}).body
+check_true("a lookup shows the coin, its contract addresses and 'Powered by CoinGecko'",
+           "Uniswap (UNI)" in bu and UNI in bu and "Powered by CoinGecko" in bu and "آدرس قراردادها" in bu, method="(B)")
+ba = AU.handle("GET", "/markets", query={"tab": "crypto", "lookup": "UNI"}).body
+check_true("an ambiguous lookup lists ranked candidates as links, nothing picked",
+           '<ul class="cands">' in ba and "lookup=uniswap-wormhole" in ba and "بی‌صدا انتخاب نمی‌شود" in ba, method="(A)")
+bx = AU.handle("GET", "/markets", query={"tab": "crypto", "lookup": "<script>x</script>"}).body
+check_true("hostile lookup text is escaped, never markup", "<script>x</script>" not in bx and "&lt;script&gt;" in bx, method="(A)")
+check_true("still no inline style or handler on the crypto tab", not re.search(r'\sstyle="|\son[a-z]+="', bu), method="(V)")
+
+# -- the crypto route in Assistant.route() -----------------------------------------------------
+BOT = ASKM.Assistant(_Boom(), use_macro=False, hub=chub())
+for q, want in (("uniswap token", "uniswap"), ("price of UNI coin", "uni"), (UNI, UNI), ("\u0642\u06cc\u0645\u062a \u0628\u06cc\u062a \u06a9\u0648\u06cc\u0646", "\u0628\u06cc\u062a \u06a9\u0648\u06cc\u0646"),
+                (SOL, SOL), (TRX, TRX)):
+    check_true("route(%r) -> crypto %r" % (q[:24], want[:24]), BOT.route(q) == ("crypto", {"query": want}), method="(B)")
+for q in ("P/E with price 150 and EPS 6?", "who are you", "\u0646\u0631\u062e \u062a\u0648\u0631\u0645 \u0622\u0645\u0631\u06cc\u06a9\u0627 \u062f\u0631 \u0698\u0627\u0646\u0648\u06cc\u0647 \u06f2\u06f0\u06f2\u06f4 \u0686\u0642\u062f\u0631 \u0628\u0648\u062f\u061f"):
+    check_true("route(%r) is not crypto" % q[:24], BOT.route(q)[0] != "crypto", method="(A)")
+check_true("without a DataHub the crypto route is off (CLI: no silent network use)",
+           ASKM.Assistant(_Boom(), use_macro=False).route("uniswap token")[0] != "crypto", method="(A)")
+_Boom.calls = 0
+oc = BOT.answer("uniswap token")
+check_true("crypto answer: CoinGecko's figures, the model never called", _Boom.calls == 0 and "Uniswap (UNI)" in oc["reply"]
+           and oc["route"] == "crypto", method="(A)")
+check_true("crypto answer carries 'Powered by CoinGecko' and the not-real-time stance",
+           "Powered by CoinGecko" in oc["notices"] and "not real-time" in oc["reply"], method="(V)")
+check_true("render/turn_html mark the turn as model-free CoinGecko data",
+           "(no model: CoinGecko data as retrieved)" in ASKM.render(oc).splitlines()[0]
+           and "no model (CoinGecko)" in ASKM.turn_html(oc), method="(V)")
+ocf = BOT.answer("\u0642\u06cc\u0645\u062a \u06cc\u0648\u0646\u06cc \u0633\u0648\u0627\u067e")
+check_true("Persian question -> Persian answer", ocf["lang"] == "fa" and "\u0642\u06cc\u0645\u062a" in ocf["reply"], method="(B)")
+check_true("ambiguous via the assistant: candidates listed, no figures invented",
+           "none is picked silently" in BOT.answer("UNI coin")["reply"], method="(A)")
+CU = app(hub=chub())
+check_true("UI with no model: a token question is answered from CoinGecko",
+           "Uniswap (UNI)" in CU.handle("POST", "/ask", form={"csrf": CU.csrf, "question": "uniswap token"}).body
+           and "بدون مدل · داده‌های CoinGecko" in CU.handle("GET", "/ask").body, method="(B)")
+check_true("DataHub source list mentions the token lookup",
+           "\u062c\u0633\u062a\u200c\u0648\u062c\u0648\u06cc \u062a\u0648\u06a9\u0646" in dict((r[0], r[2]) for r in DH.SOURCES_FA)["coingecko"], method="(V)")
+check_true("legal doc lists the new CoinGecko endpoints", all(e in read("docs/legal/market-data-providers.md") for e in
+           ("/search", "/coins/{id}", "/coins/{platform}/contract/{address}")), method="(V)")
 
 os.environ.clear()
 os.environ.update(_SAVED_ENV)

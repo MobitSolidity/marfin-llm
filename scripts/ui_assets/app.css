@@ -277,3 +277,9 @@ a.chip{text-decoration:none}a.chip.on{background:var(--brand);color:var(--brand-
 }
 /* every disclosure is a 44 px target (the Markets 'stale series' summary measured 28 px) */
 details > summary{min-height:var(--tap);display:flex;align-items:center;gap:var(--sp2);cursor:pointer}
+
+/* D-0143(4): token lookup -- candidate list and contract addresses (wrap, never overflow) */
+.cands{list-style:none;margin:.4rem 0;padding:0;display:grid;gap:var(--sp1)}
+.cands li{min-height:var(--tap);display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp2)}
+.cands a{min-height:var(--tap);display:inline-flex;align-items:center}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere;word-break:break-all}

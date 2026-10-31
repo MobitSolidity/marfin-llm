@@ -118,7 +118,7 @@ check_true("NOTICE names the copyright holder and the licence", "Copyright 2026 
 # path, in NOTICE AND LICENSES.md -- and the carve-out must match what is
 # actually tracked (a new third-party directory with no carve-out fails here).
 _tracked = subprocess.check_output(["git", "-C", ROOT, "ls-files"]).decode().split()
-for _dir in ("tests/fixtures/alpha_vantage/", "configs/model-cards/"):
+for _dir in ("tests/fixtures/alpha_vantage/", "tests/fixtures/coingecko/", "configs/model-cards/"):
     check_true("third-party %s is tracked AND carved out of the licence in NOTICE and LICENSES.md" % _dir,
                any(t.startswith(_dir) for t in _tracked) and _dir in _NOTICE and _dir in read("LICENSES.md"),
                "(V)")
@@ -131,8 +131,11 @@ _FIXDIRS = sorted({t.split("/")[2] for t in _tracked if t.startswith("tests/fixt
 # is Apache-2.0 with the rest of the project and needs no NOTICE carve-out. It is
 # listed here so that any OTHER new fixture directory still forces a decision.
 _OWN_FIXDIRS = {"ask"}
-check_true("every tests/fixtures/ subdirectory is a known carve-out (alpha_vantage) or project-own (ask)",
-           set(_FIXDIRS) - _OWN_FIXDIRS == {"alpha_vantage"}, "(V) %r" % _FIXDIRS)
+check_true("every tests/fixtures/ subdirectory is a known carve-out (alpha_vantage, coingecko) or project-own (ask)",
+           set(_FIXDIRS) - _OWN_FIXDIRS == {"alpha_vantage", "coingecko"}, "(V) %r" % _FIXDIRS)
+check_true("the CoinGecko carve-out (D-0143) says the fixtures are NOT licensed by this project",
+           "tests/fixtures/coingecko/* -- verbatim API responses captured from the" in _NOTICE
+           and "CoinGecko API captures (D-0143)" in read("LICENSES.md"), "(V)")
 check_true("... and the project-own fixtures carry no third-party source",
            all(not any(w in open(os.path.join(ROOT, t), encoding="utf-8").read().lower()
                        for w in ("alpha vantage", "copyright", "all rights reserved"))

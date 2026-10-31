@@ -447,3 +447,40 @@ registry entries are in `src/rag/sources.py` (rendered into `LICENSES.md`).
 
 All three clients refuse HTTP redirects (MEASURED: urllib's default handler re-sends credential
 headers to the redirect target), and none stores responses on disk (in-memory, 600 s).
+
+## 9. Amendment, 2026-10-30 (D-0143): CoinGecko token lookup
+
+No new provider. The token lookup (`src/market/crypto_resolve.py`, Markets → crypto search box,
+the assistant's `crypto` route) uses three more endpoints of the **same** CoinGecko API, under the
+same terms and the same attribution as §8:
+
+| Endpoint | Used for | Keyless? | Evidence |
+|---|---|---|---|
+| `/search?query=` | a name or symbol → candidate coins | yes | listed in the official Demo/Keyless endpoint overview (VERIFIED 2026-10-30); live call HTTP 200 (MEASURED 2026-10-30, `tests/fixtures/coingecko/search_uniswap.json`) |
+| `/coins/{id}` | coin detail: price, 24h/7d change, market cap, rank, volume, high/low, ATH/ATL, supply, contract addresses | yes | same overview (VERIFIED); live call HTTP 200 (MEASURED, `coin_uniswap.json`) |
+| `/coins/{platform}/contract/{address}` | a contract address → the coin, chain by chain (Ethereum, BNB Smart Chain, Polygon PoS, Base, Arbitrum One, Solana, Tron) | yes | same overview (VERIFIED); live call HTTP 200 (MEASURED, `contract_eth_uni.json`); an unknown contract is HTTP 404 `{"error":"coin not found"}` (MEASURED, `contract_not_found.json`) |
+
+Keyless access did **not** refuse any of the three, so the Demo key stays optional. What the keyless
+limit looks like in practice (MEASURED 2026-10-30): a second call within about 20 s returned HTTP 429
+(`Throttled`, or the JSON body in `http_429_contract.json`, with `retry-after: 26`). The official
+Keyless page says "~5 calls/min (dynamic, varies by server load)" and asks clients to back off.
+
+How the project complies:
+
+- **Budget enforced before the network.** `DataHub` counts CoinGecko calls in a rolling minute
+  (5 keyless; 30 with `COINGECKO_DEMO_API_KEY`, below the plan's published limit) and refuses the
+  next call with the time to wait. Nothing is sent when the budget is spent.
+- **No retry on a 429.** It is shown with the remedy (wait, or set the free Demo key). The resolver
+  stops at the first chain that knows a contract, so an address costs one call when it is on
+  Ethereum.
+- **Cached 600 s in memory**, including "not found" answers, so a repeated lookup costs nothing.
+- **Attribution.** "Powered by CoinGecko" is shown with every lookup result, on the Markets page and
+  in the assistant's answer.
+- **No guess.** An ambiguous name or symbol lists ranked candidates; nothing is picked silently. A coin
+  CoinGecko does not return is reported as not found.
+- **Persian names.** A hand-written table (labelled STATIC wherever it is used) only turns a Persian
+  name into an English search word. The coin always comes from CoinGecko.
+
+Not used: DexScreener and GeckoTerminal. Their terms were not verified for this change, so they stay
+out (§7.4: silence is not permission). Holders, liquidity, news and sentiment have no permitted source
+here and are shown as UNKNOWN.

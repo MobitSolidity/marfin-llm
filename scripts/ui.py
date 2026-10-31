@@ -318,6 +318,10 @@ class App(object):
         self._remote = None                     # (settings fingerprint, assistant, label)
         self._audit = None
         self.hub = hub or DH.DataHub()
+        # D-0143: the crypto route needs the DataHub (cache + CoinGecko budget); an injected
+        # assistant without one gets this App's hub, so every engine shares one budget.
+        if self.assistant is not None and getattr(self.assistant, "hub", "absent") is None:
+            self.assistant.hub = self.hub
         self.csrf = secrets.token_urlsafe(24)
         self.paper_dir = paper_dir
         self.ask_audit_path = ask_audit_path
@@ -363,7 +367,7 @@ class App(object):
         local = self.assistant
         index = local.index if local is not None else ASK.build_index_from(ASK.DEFAULT_CORPUS)
         use_macro = local.use_macro if local is not None else True
-        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro, pages=NAV),
+        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro, pages=NAV, hub=self.hub),
                 "%s: %s" % (prov, eff["model_id"]))
 
     def remote_assistant(self):
@@ -673,13 +677,79 @@ class App(object):
             for r in rows)
         return '<div class="tbl"><table>%s%s</table></div>' % (head, body)
 
+    def _crypto_search_form(self, lookup, vs):
+        """D-0143: GET form (works without JS). Name, symbol or contract address; the budget is shown."""
+        b = self.hub.cg_budget()
+        return ('<form method="get" action="/markets" class="card" role="search"><input type="hidden" name="tab" value="crypto">'
+                '<input type="hidden" name="vs" value="%s"><h2>جست‌وجوی توکن</h2><div class="form-row">'
+                '<label>نام، نماد یا آدرس قرارداد<input name="lookup" dir="ltr" value="%s" maxlength="120" '
+                'autocomplete="off" spellcheck="false" placeholder="uniswap · UNI · 0x… · Solana · T…"></label>'
+                '<button>جست‌وجو</button></div><p class="note">زنجیره‌ها به این ترتیب بررسی می‌شوند: %s. '
+                'سهمیهٔ CoinGecko: <b class="ltr">%d</b> از <b class="ltr">%d</b> درخواست در این دقیقه باقی است%s. '
+                'نتیجه‌ها ۱۰ دقیقه نگه داشته می‌شوند.</p></form>') % (
+            esc(vs), esc(lookup), esc(" → ".join(p[2] for p in __import__("market.coingecko", fromlist=["x"]).PLATFORMS)),
+            b["left"], b["limit"], (" (درخواست بعدی تا %d ثانیهٔ دیگر)" % b["retry_after_s"]) if not b["left"] else "")
+
+    def _crypto_lookup_card(self, res):
+        """D-0143: the resolver's answer. Ambiguous -> ranked candidates as links, never a silent pick."""
+        st, vs = res["status"], res["vs"]
+        head = '<div class="card" aria-live="polite"><h2>نتیجهٔ جست‌وجو: <span class="ltr">%s</span></h2>' % esc(res["query"] or res["input"])
+        alias = ('<p class="note">نام فارسی با جدول ثابت دست‌نویس (STATIC) به <b class="ltr">%s</b> تبدیل شد؛ '
+                 'خود رمزارز از CoinGecko می‌آید.</p>' % esc(res["alias"]["search"])) if res.get("alias") else ""
+        cand = lambda rows: '<ul class="cands">%s</ul>' % "".join(
+            '<li><a href="/markets?tab=crypto&amp;vs=%s&amp;lookup=%s"><b class="ltr">%s</b></a> <span class="muted ltr">%s · %s</span></li>' % (
+                esc(vs), esc(urllib.parse.quote(c["id"])), esc(c["symbol"]), esc(c["name"]),
+                esc("rank #%d" % c["rank"]) if c.get("rank") else "بدون رتبه") for c in rows)
+        checked = ('<p class="note">زنجیره‌ها: %s</p>' % esc("، ".join(
+            "%s: %s" % (n, {"found": "یافت شد", "not_found": "نیست", "not_checked": "بررسی نشد"}.get(s, s))
+            for n, s in res["checked"]))) if res.get("checked") else ""
+        if st == "resolved":
+            c = res["coin"]
+            rows = (("قیمت", "%s %s" % (fmtn(c["price"]), vs.upper())), ("تغییر ۲۴ ساعت", None, c["change_24h"]),
+                    ("تغییر ۷ روز", None, c["change_7d"]), ("ارزش بازار", fmtn(c["market_cap"])),
+                    ("رتبه", ("#%d" % c["rank"]) if c.get("rank") else "\u2014"), ("حجم ۲۴ ساعت", fmtn(c["volume"])),
+                    ("بالاترین / پایین‌ترین ۲۴ ساعت", "%s / %s" % (fmtn(c["high_24h"]), fmtn(c["low_24h"]))),
+                    ("سقف تاریخی (ATH)", "%s (%s)" % (fmtn(c["ath"]), c.get("ath_date") or "\u2014")),
+                    ("کف تاریخی (ATL)", "%s (%s)" % (fmtn(c["atl"]), c.get("atl_date") or "\u2014")),
+                    ("عرضهٔ در گردش / کل / حداکثر", "%s / %s / %s" % (fmtn(c["circulating_supply"]), fmtn(c["total_supply"]),
+                                                                 fmtn(c["max_supply"]))),
+                    ("آخرین به‌روزرسانی CoinGecko", c.get("last_updated") or "\u2014"))
+            tbl = "".join('<tr><th>%s</th><td class="num">%s</td></tr>' % (
+                esc(r[0]), self._chg(r[2]) if r[1] is None else esc(r[1])) for r in rows)
+            from market import coingecko as _cg
+            addrs = "".join('<tr><th>%s</th><td class="ltr mono">%s</td></tr>' % (esc(p[2]), esc(c["platforms"][p[1]]))
+                            for p in _cg.PLATFORMS if c["platforms"].get(p[1]))
+            body = ('<p><b class="ltr">%s (%s)</b> <span class="muted ltr">id: %s</span>%s</p><table>%s</table>%s%s%s' % (
+                esc(c["name"]), esc(c["symbol"]), esc(c["id"]),
+                (" · یافته روی <b>%s</b>" % esc(c["found_on"])) if c.get("found_on") else "", tbl,
+                ('<h3>آدرس قراردادها (از CoinGecko)</h3><table>%s</table>' % addrs) if addrs else "",
+                ('<h3>نتیجه‌های مشابه دیگر</h3>' + cand(res["candidates"][:5])) if res.get("candidates") else "",
+                '<p class="note ltr">%s</p>' % esc(res["label"])))
+        elif st == "ambiguous":
+            body = ('<p class="warn">این عبارت با چند رمزارز جور است و هیچ‌کدام بی‌صدا انتخاب نمی‌شود. یکی را انتخاب کنید '
+                    '(به ترتیب رتبهٔ ارزش بازار):</p>' + cand(res["candidates"]))
+        elif st == "not_found":
+            body = '<p class="empty">CoinGecko رمزارزی برای این ورودی ندارد. %s</p>' % esc(res.get("reason") or "")
+        elif st == "invalid":
+            body = '<p class="err">ورودی معتبر نیست: <span class="ltr">%s</span></p>' % esc(res["reason"])
+        elif st == "rate_limited":
+            body = ('<p class="err">سهمیهٔ CoinGecko پر است؛ هیچ درخواستی تکرار نشد. <span class="ltr">%s</span><br>'
+                    'یک دقیقه بعد دوباره جست‌وجو کنید، یا کلید رایگان <code>COINGECKO_DEMO_API_KEY</code> را تنظیم کنید.</p>'
+                    % esc(res.get("error") or ""))
+        else:
+            body = '<p class="err">دریافت نشد (هیچ عددی جایگزین نمی‌شود): <code>%s</code></p>' % esc(res.get("error") or "")
+        return head + alias + body + checked + self._attrib(res) + "</div>"
+
     def _mk_crypto(self, q):
         from market import coingecko as _cg
         vs = (q.get("vs") or "usd").strip().lower()
         if vs not in _cg.VS_CURRENCIES:
             vs = "usd"
         coin = (q.get("coin") or "").strip().lower()
-        out = []
+        lookup = (q.get("lookup") or "").strip()[:120]
+        out = [self._crypto_search_form(lookup, vs)]
+        if lookup:
+            out.append(self._crypto_lookup_card(self.hub.crypto_lookup(lookup, vs)))
         g, err = self._try(self.hub.crypto_global)
         if err:
             out.append(err)
@@ -835,11 +905,13 @@ class App(object):
                 else:
                     out["engine_label"] = "آنلاین · " + label
                     self.history.append(out)
-            elif self.assistant is None and ASK.is_about(question):
-                # D-0143: the self-introduction is built from the registries, never by a model,
-                # so it works even when no model is loaded. Same audit log as every other turn.
-                out = ASK.Assistant(None, audit=self.audit(), use_macro=False, pages=NAV).answer(question)
-                out["engine_label"] = "بدون مدل · از فهرست‌های برنامه"
+            elif self.assistant is None and (ASK.is_about(question) or ASK.crypto_query(question)):
+                # D-0143: the self-introduction (registries) and the token lookup (CoinGecko) never
+                # use a model, so they work even when none is loaded. Same audit log as every turn.
+                out = ASK.Assistant(None, audit=self.audit(), use_macro=False, pages=NAV,
+                                    hub=self.hub).answer(question)
+                out["engine_label"] = ("بدون مدل · از فهرست‌های برنامه" if out["route"] == "about"
+                                       else "بدون مدل · داده‌های CoinGecko")
                 self.history.append(out)
             elif self.assistant is None:
                 body += '<div class="err">بدون مدل نمی‌توان پاسخ داد.</div>'
