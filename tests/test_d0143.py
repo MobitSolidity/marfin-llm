@@ -733,6 +733,110 @@ check_true("refresh 'back' keeps only known keys, the tab comes from the form, h
            "<script>" not in hb and 'class="on">اقتصاد کشورها' in hb and "evil" not in hb, method="(A)")
 check_true("refresh pages carry no inline style or handler", not re.search(r'\sstyle="|\son[a-z]+="', after + bs), method="(V)")
 
+# ===========================================================================
+section("5. /monitor: one asset, sourced figures, COMPUTED indicators, UNKNOWN for the unsourced")
+# ===========================================================================
+from calc import technicals as TA                                        # noqa: E402
+from calc import valuation as VAL                                        # noqa: E402
+
+check_true("/monitor is in NAV (so the sidebar, the menu and the self-introduction list it)",
+           "/monitor" in dict(U.NAV) and "/monitor" in [h for h, _t in ASKM.about_facts()["pages"]], method="(V)")
+M5 = app(hub=chub())
+m0 = M5.handle("GET", "/monitor")
+check_true("empty /monitor: 200, a GET search form (no JS), an empty state, no fetch",
+           m0.status == 200 and '<form method="get" action="/monitor" class="card" role="search">' in m0.body
+           and 'class="empty"' in m0.body and 'action="/refresh"' not in m0.body, method="(V)")
+check_true("the watchlist is NOT built (no server-side store yet) and says so", "watchlist" in m0.body, method="(V)")
+
+mc = M5.handle("GET", "/monitor", query={"kind": "crypto", "id": "uniswap", "days": "90"}).body
+for label, frag in (("price, rank, ATH/ATL and supply", "سقف تاریخی (ATH)"), ("contract addresses", UNI),
+                    ("24h/7d change with arrows", "\u25b2"), ("Powered by CoinGecko", "Powered by CoinGecko"),
+                    ("a COMPUTED price chart with SMA/EMA", "SMA(20)"), ("RSI(14)", "RSI(14)"),
+                    ("MACD(12,26,9)", "MACD(12,26,9)"), ("the refresh control for this asset", 'name="tab" value="monitor"')):
+    check_true("crypto monitor shows %s" % label, frag in mc, method="(V)")
+check_true("charts are server-side SVG (at least 3), labelled COMPUTED", mc.count('<svg class="chart"') >= 3
+           and mc.count("COMPUTED") >= 3, method="(V)")
+check_true("unsourced items are UNKNOWN, never guessed: holders, liquidity, news, sentiment",
+           all(w in mc for w in ("holders", "liquidity", "اخبار", "sentiment")) and mc.count("UNKNOWN") >= 4, method="(A)")
+for d in (30, 90, 365):
+    check_true("window chip %d days is offered" % d, "days=%d\">%d روز</a>" % (d, d) in mc, method="(V)")
+check_true("an unoffered window (7) falls back to 90 days",
+           "نمودار 90 روزه" in M5.handle("GET", "/monitor", query={"kind": "crypto", "id": "uniswap", "days": "7"}).body,
+           method="(A)")
+ma = M5.handle("GET", "/monitor", query={"kind": "crypto", "id": "UNI"}).body
+check_true("ambiguous crypto on /monitor: ranked candidates link back to /monitor, nothing picked",
+           "/monitor?kind=crypto&amp;vs=usd&amp;id=uniswap-wormhole" in ma and "SMA(20)" not in ma, method="(A)")
+check_true("no inline style or handler on /monitor", not re.search(r'\sstyle="|\son[a-z]+="', mc + ma), method="(V)")
+
+# -- indicators equal src/calc, and refuse short history ------------------------------------
+pts5 = [{"date": "2026-01-%02d" % (i + 1) if i < 31 else "2026-02-%02d" % (i - 30), "value": 100.0 + (i % 7) * 1.5 + i * 0.3}
+        for i in range(40)]
+html5, facts5 = U.indicator_charts(pts5)
+cl5 = [p["value"] for p in pts5]
+fd5 = dict(facts5)
+check_true("SMA/EMA/RSI/MACD values are exactly src/calc/technicals' results",
+           fd5["SMA(20)"] == U.fmtn(TA.sma(cl5, 20).value) and fd5["EMA(20)"] == U.fmtn(TA.ema(cl5, 20).value)
+           and fd5["RSI(14)"] == U.fmtn(TA.rsi(cl5, 14).value, 2)
+           and fd5["MACD"] == U.fmtn(TA.macd(cl5, 12, 26, 9).value["macd"], 4), method="(V)")
+h20, f20 = U.indicator_charts(pts5[:20])
+check_true("with 20 points MACD (needs 34) is UNKNOWN and not drawn; RSI still computed",
+           "MACD(12,26,9): UNKNOWN" in h20 and "MACD" not in dict(f20) and "RSI(14)" in dict(f20), method="(A)")
+h10, f10 = U.indicator_charts(pts5[:10])
+check_true("with 10 points SMA/EMA/RSI are UNKNOWN too (no shorter window substituted)",
+           all("%s: UNKNOWN" % n in h10 for n in ("SMA(20)", "EMA(20)", "RSI(14)")) and f10 == [], method="(A)")
+
+# -- stocks: AV end-of-day, SEC 10-K, ratios via src/calc ------------------------------------
+ms = M5.handle("GET", "/monitor", query={"kind": "stock", "id": "aapl", "days": "90"}).body
+fu5 = M5.hub.fundamentals("AAPL")
+lat = {m["key"]: m["points"][-1]["value"] for m in fu5["metrics"] if m["points"]}
+nm = VAL.net_margin(lat["net_income"], lat["revenue"]).value * 100.0
+check_true("stock monitor: end-of-day price, the SEC 10-K table and a ratios table",
+           "قیمت پایانی و شاخص‌ها" in ms and "صورت‌های مالی سالانه" in ms and "نسبت‌ها" in ms, method="(V)")
+check_true("net margin is src/calc's net_margin on the latest 10-K figures (COMPUTED)",
+           U.fmtn(nm, 2) + "٪" in ms and "net_income / revenue" in ms, method="(V)")
+pe5 = VAL.pe_ratio(M5.hub.stock("AAPL")["last"]["value"], lat["eps_diluted"]).value
+check_true("P/E = end-of-day close / annual diluted EPS, and the two dates are said to differ",
+           U.fmtn(pe5, 2) + "x" in ms and "دو تاریخ متفاوت" in ms, method="(V)")
+check_true("a 90-day window on 23 free-tier days says so (the rest is UNKNOWN), never stretched",
+           "فقط 23 روز موجود است" in ms, method="(A)")
+mb = M5.handle("GET", "/monitor", query={"kind": "stock", "id": "<b>x"}).body
+check_true("an invalid ticker is refused and escaped", "نماد سهم معتبر نیست" in mb and "<b>x" not in mb, method="(A)")
+check_true("stock refresh on /monitor asks to confirm the Alpha Vantage budget", 'name="confirm" value="yes"' in ms, method="(V)")
+CLK[0] += 400
+mr = M5.handle("POST", "/refresh", form={"csrf": M5.csrf, "tab": "monitor",
+                                         "back": "kind=crypto&id=uniswap&vs=usd&days=90"})
+check_true("refresh from /monitor re-renders /monitor for the same asset", mr.status == 200
+           and "<title>پایش دارایی - Andarz</title>" in mr.body and "Uniswap (UNI)" in mr.body, method="(B)")
+
+# -- optional AI summary: facts only, every number checked -----------------------------------
+check_true("without a model the summary button is disabled and says why",
+           'disabled aria-disabled="true">ساخت خلاصه' in mc, method="(V)")
+ns = M5.handle("POST", "/monitor", form={"csrf": M5.csrf, "kind": "crypto", "id": "uniswap", "days": "90", "summary": "1"}).body
+check_true("a summary request with no model generates nothing and says the figures stand alone",
+           "مدل محلی بارگذاری نشده است" in ns, method="(A)")
+PROMPTS = []
+
+
+class _Sum(object):
+    max_tokens = 256
+
+    def generate(self, prompt):
+        PROMPTS.append(prompt)
+        return ("Uniswap at 7.00 with rank 25; it will reach 999 next week. <script>x</script>",
+                {"completion_tokens": 20})
+
+
+S5 = app(hub=chub(), assistant=ASKM.Assistant(_Sum(), use_macro=False))
+sm = S5.handle("POST", "/monitor", form={"csrf": S5.csrf, "kind": "crypto", "id": "uniswap", "days": "90", "summary": "1"}).body
+check_true("the summary prompt carries ONLY the page's facts", len(PROMPTS) == 1 and "Facts:" in str(PROMPTS[0])
+           and "RSI(14) =" in str(PROMPTS[0]), method="(V)")
+check_true("a number the facts do not contain (999) is flagged above the summary",
+           "عددی دارد که در فهرست ارقام نیست (999" in sm, method="(A)")
+check_true("the model's text is escaped and labelled ESTIMATED", "<script>x</script>" not in sm and "ESTIMATED" in sm, method="(A)")
+arec = [json.loads(x) for x in io.open(S5.ask_audit_path, encoding="utf-8").read().splitlines() if x.strip()]
+check_true("the summary is written to the audit log with its unlisted numbers",
+           any(r.get("event") == "monitor_summary" and 999.0 in r.get("unlisted_numbers", []) for r in arec), method="(V)")
+
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
 print("")

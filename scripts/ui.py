@@ -93,7 +93,8 @@ PAPER_CASH = 100000.0
 #: Typed by the human on the commit form. Distinct from the kill-switch phrase on purpose.
 COMMIT_PHRASE = "CONFIRM"
 
-NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"), ("/calc", "فرمول‌ها و ماشین‌حساب‌ها"),
+NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"), ("/monitor", "پایش دارایی"),
+       ("/calc", "فرمول‌ها و ماشین‌حساب‌ها"),
        ("/ask", "پرسش از مدل"), ("/macro", "سری‌های کلان"), ("/paper", "معاملهٔ کاغذی"),
        ("/audit", "گزارش ممیزی"), ("/maintenance", "نگهداری"), ("/providers", "ارائه‌دهنده‌ها"),
        ("/phase11", "فاز ۱۱ (معلق)"))
@@ -253,6 +254,54 @@ def svg_multi(series, w=680, h=240, pad=34):
                % (pad, h - 8, esc(xs[0]), w - pad, h - 8, esc(xs[-1])))
     return ('<svg class="chart" viewBox="0 0 %d %d" role="img">%s</svg>' % (w, h, "".join(out)),
             '<div class="legend">%s</div>' % "".join(legend))
+
+
+def indicator_charts(points):
+    """
+    D-0143(5): price with SMA(20) and EMA(20), RSI(14) with the 30/70 guides, and MACD(12,26,9), all
+    COMPUTED by src/calc/technicals.py from the RETRIEVED closes and drawn as server-side SVG. An
+    indicator without enough history is reported as UNKNOWN, never drawn from a shorter window.
+    points: [{"date", "value"}], oldest first. Returns (html, facts) -- facts are the last values.
+    """
+    from calc import technicals as TA
+    dates = [p["date"] for p in points]
+    closes = [float(p["value"]) for p in points]
+    out, facts = [], []
+
+    def tail(series, start):
+        return [(dates[start + i], v) for i, v in enumerate(series)]
+
+    def unknown(name, need):
+        return '<p class="muted">%s: UNKNOWN (به دست‌کم %d نقطه نیاز دارد؛ %d نقطه موجود است).</p>' % (
+            esc(name), need, len(closes))
+    lines = [("قیمت پایانی", list(zip(dates, closes)))]
+    for name, fn, series in (("SMA(20)", TA.sma, TA._sma_series), ("EMA(20)", TA.ema, TA._ema_series)):
+        try:
+            last = fn(closes, 20).value                          # the public function does the refusing
+            lines.append((name, tail(series(closes, 20), 19)))
+            facts.append((name, fmtn(last)))
+        except (ValueError, TypeError):
+            out.append(unknown(name, 20))
+    chart, legend = svg_multi(lines)
+    out.insert(0, '<h3>قیمت با میانگین‌های متحرک <span class="muted">(COMPUTED)</span></h3>%s%s' % (chart, legend))
+    try:
+        r = TA.rsi(closes, 14).value
+        rs = tail(TA._rsi_series(closes, 14), 14)
+        guide = [(d, 70.0) for d, _v in rs], [(d, 30.0) for d, _v in rs]
+        c2, l2 = svg_multi([("RSI(14)", rs), ("70", guide[0]), ("30", guide[1])], h=160)
+        out.append('<h3>RSI(14) <span class="muted">(COMPUTED؛ ۷۰/۳۰ قرارداد است، نه سیگنال)</span></h3>%s%s' % (c2, l2))
+        facts.append(("RSI(14)", fmtn(r, 2)))
+    except (ValueError, TypeError):
+        out.append(unknown("RSI(14)", 15))
+    try:
+        m = TA.macd(closes, 12, 26, 9).value
+        ml, sl, _h = TA._macd_series(closes, 12, 26, 9)
+        c3, l3 = svg_multi([("MACD", tail(ml, 25)), ("Signal", tail(sl, 25 + 8))], h=160)
+        out.append('<h3>MACD(12,26,9) <span class="muted">(COMPUTED)</span></h3>%s%s' % (c3, l3))
+        facts += [("MACD", fmtn(m["macd"], 4)), ("MACD signal", fmtn(m["signal"], 4))]
+    except (ValueError, TypeError):
+        out.append(unknown("MACD(12,26,9)", 34))
+    return "".join(out), facts
 
 
 def svg_bar(value, vmax):
@@ -436,7 +485,8 @@ class App(object):
         routes = {"/": self.p_home, "/markets": self.p_markets, "/ask": self.p_ask, "/calc": self.p_calc,
                   "/macro": self.p_macro,
                   "/paper": self.p_paper, "/audit": self.p_audit, "/maintenance": self.p_maintenance,
-                  "/providers": self.p_providers, "/phase11": self.p_phase11, "/refresh": self.p_refresh}
+                  "/providers": self.p_providers, "/phase11": self.p_phase11, "/refresh": self.p_refresh,
+                  "/monitor": self.p_monitor}
         fn = routes.get(path)
         if fn is None:
             return self.page(path, "یافت نشد", '<p>این صفحه وجود ندارد.</p>', 404)
@@ -527,7 +577,8 @@ class App(object):
     TAB_SOURCES = {"overview": ("ecb_data_portal", "bis_statistics", "coingecko", "fred"),
                    "crypto": ("coingecko",), "forex": ("alpha_vantage",),
                    "stocks": ("alpha_vantage", "sec_edgar_xbrl"), "fx": ("ecb_data_portal", "bis_statistics"),
-                   "rates": ("bis_statistics",), "us": ("fred",), "world": ("world_bank_indicators",), "sources": ()}
+                   "rates": ("bis_statistics",), "us": ("fred",), "world": ("world_bank_indicators",), "sources": (),
+                   "monitor": ("coingecko", "alpha_vantage", "sec_edgar_xbrl")}
     BACK_KEYS = ("tab", "vs", "coin", "lookup", "from", "to", "amount", "ccy", "series", "ind", "c", "symbol", "q",
                  "kind", "id", "days")
     _ICON_REFRESH = ('<svg class="ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">'
@@ -605,6 +656,9 @@ class App(object):
         back = {k: v[-1] for k, v in urllib.parse.parse_qs(str(f.get("back") or "")[:1000]).items() if k in self.BACK_KEYS}
         back["tab"] = tab
         results = self.hub.refresh(self.TAB_SOURCES[tab], confirm=f.get("confirm") == "yes")
+        if tab == "monitor":
+            back.pop("tab", None)
+            return self.p_monitor("GET", back, {}, refresh_results=results)
         return self.p_markets("GET", back, {}, refresh_results=results)
 
     def p_markets(self, method, q, f, refresh_results=None):
@@ -826,6 +880,187 @@ class App(object):
         else:
             body = '<p class="err">دریافت نشد (هیچ عددی جایگزین نمی‌شود): <code>%s</code></p>' % esc(res.get("error") or "")
         return head + alias + body + checked + self._attrib(res) + "</div>"
+
+    # -- D-0143(5): /monitor -- one asset, every sourced figure, indicators, UNKNOWN for the rest --
+    MONITOR_DAYS = (30, 90, 365)
+    #: Items the owner asked for that no PERMITTED source here provides. Shown as UNKNOWN, never guessed.
+    MONITOR_UNKNOWN = (("تعداد دارندگان (holders)", "منبع مجاز ندارد؛ کاوشگرهای زنجیره (Etherscan و ...) بررسی نشده‌اند"),
+                       ("نقدشوندگی استخرها (liquidity)", "GeckoTerminal/DexScreener: شرایط استفاده بررسی نشده"),
+                       ("اخبار", "منبع خبری مجاز ثبت نشده است"),
+                       ("احساسات بازار (sentiment)", "منبع مجاز ثبت نشده است"))
+
+    def _monitor_form(self, kind, ident, days, vs):
+        from market import coingecko as _cg
+        dchips = "".join('<a class="chip%s" href="/monitor?kind=%s&amp;id=%s&amp;vs=%s&amp;days=%d">%d روز</a>' % (
+            " on" if d == days else "", esc(kind), esc(urllib.parse.quote(ident)), esc(vs), d, d)
+            for d in self.MONITOR_DAYS) if ident else ""
+        return ('<form method="get" action="/monitor" class="card" role="search"><h2>کدام دارایی؟</h2>'
+                '<fieldset class="seg"><legend>نوع</legend><label><input type="radio" name="kind" value="crypto"%s> رمزارز</label>'
+                '<label><input type="radio" name="kind" value="stock"%s> سهام آمریکا</label></fieldset>'
+                '<div class="form-row"><label>رمزارز: نام، نماد یا آدرس قرارداد · سهام: نماد<input name="id" dir="ltr" '
+                'value="%s" maxlength="120" autocomplete="off" spellcheck="false" placeholder="uniswap · 0x… · IBM"></label>'
+                '<label>ارز مظنهٔ رمزارز<select name="vs">%s</select></label><input type="hidden" name="days" value="%d">'
+                '<button>نمایش</button></div><div class="chips">%s</div><p class="note">جست‌وجوی رمزارز با همان حل‌کنندهٔ '
+                'زبانهٔ رمزارزها (CoinGecko). سهام: قیمت پایانی Alpha Vantage و صورت‌های مالی SEC. هیچ‌کدام لحظه‌ای نیست.</p>'
+                '</form>') % (
+            "" if kind == "stock" else " checked", " checked" if kind == "stock" else "", esc(ident),
+            "".join('<option value="%s"%s>%s</option>' % (v, " selected" if v == vs else "", v.upper()) for v in _cg.VS_CURRENCIES),
+            days, dchips)
+
+    def _unknown_card(self):
+        return ('<div class="card"><h2>موارد بدون منبع <span class="muted">(UNKNOWN)</span></h2><table>%s</table>'
+                '<p class="note">این‌ها حدس زده یا صفر نشان داده نمی‌شوند؛ منبع‌های پیشنهادی در «پرسش‌های باز» آمده‌اند.</p></div>'
+                ) % "".join('<tr><th>%s</th><td>UNKNOWN <span class="muted">— %s</span></td></tr>' % (esc(k), esc(w))
+                            for k, w in self.MONITOR_UNKNOWN)
+
+    def _monitor_crypto(self, ident, vs, days):
+        res = self.hub.crypto_lookup(ident, vs)
+        out = [self._crypto_lookup_card(res).replace('href="/markets?tab=crypto&amp;vs=', 'href="/monitor?kind=crypto&amp;vs=')
+               .replace("&amp;lookup=", "&amp;id=")]
+        facts = []
+        if res["status"] != "resolved":
+            return out, facts
+        c = res["coin"]
+        facts += [("نام", "%s (%s)" % (c["name"], c["symbol"])), ("قیمت (%s)" % vs.upper(), fmtn(c["price"])),
+                  ("تغییر ۲۴ ساعت ٪", fmtn(c["change_24h"], 2)), ("تغییر ۷ روز ٪", fmtn(c["change_7d"], 2)),
+                  ("ارزش بازار", fmtn(c["market_cap"])), ("رتبه", c["rank"] or "\u2014")]
+        ch, err = self._try(lambda: self.hub.crypto_chart(c["id"], vs, days))
+        if err:
+            out.append('<div class="card"><h2>نمودار و شاخص‌ها</h2>%s</div>' % err)
+            return out, facts
+        html_, f2 = indicator_charts(ch["points"])
+        first, last = ch["points"][0]["value"], ch["points"][-1]["value"]
+        chg = (last / first - 1.0) * 100.0 if first else None
+        facts += [("تغییر %d روز ٪ (COMPUTED)" % days, fmtn(chg, 2))] + f2
+        out.append('<div class="card"><h2>نمودار %d روزه و شاخص‌ها: <span class="ltr">%s / %s</span></h2>'
+                   '<p class="note">تغییر در بازه (COMPUTED): %s &middot; %d نقطهٔ روزانه، آخرین %s</p>%s'
+                   '<p class="note ltr">%s; indicators COMPUTED by src/calc/technicals.py</p>%s</div>' % (
+                       days, esc(c["symbol"]), esc(vs.upper()), self._chg(chg), len(ch["points"]),
+                       esc(ch["points"][-1]["date"]), html_, esc(ch["label"]), self._attrib(ch)))
+        return out, facts
+
+    def _monitor_stock(self, sym, days):
+        from calc import valuation as VAL
+        out, facts = [], []
+        if not re.match(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$", sym):
+            return ['<div class="err">نماد سهم معتبر نیست: <span class="ltr">%s</span></div>' % esc(sym)], facts
+        s, err = self._try(lambda: self.hub.stock(sym))
+        last_price = None
+        if err:
+            out.append('<div class="card"><h2>قیمت پایانی</h2>%s</div>' % err)
+        else:
+            pts = s["points"][-days:]
+            last_price = s["last"]["value"]
+            short = len(s["points"]) < days
+            html_, f2 = indicator_charts(pts)
+            facts += [("نماد", s["symbol"]), ("قیمت پایانی", fmtn(last_price)), ("تاریخ", s["last"]["date"])] + f2
+            out.append('<div class="card"><h2>قیمت پایانی و شاخص‌ها: <span class="ltr">%s</span></h2><div class="big">%s</div>'
+                       '<p class="note">%s &middot; %s</p>%s%s<p class="note ltr">%s</p></div>' % (
+                           esc(s["symbol"]), esc(fmtn(last_price)), esc(s["last"]["date"]), esc(s["note"]),
+                           ('<p class="warn">بازهٔ %d روزه خواسته شد ولی فقط %d روز موجود است (نسخهٔ رایگان Alpha Vantage، '
+                            'خروجی compact)؛ بقیه UNKNOWN است.</p>' % (days, len(s["points"]))) if short else "",
+                           html_, esc(s["label"])))
+        fu, ferr = self._try(lambda: self.hub.fundamentals(sym))
+        if ferr:
+            out.append('<div class="card"><h2>صورت‌های مالی (SEC 10-K)</h2>%s</div>' % ferr)
+            return out, facts
+        latest = {}
+        for m in fu["metrics"]:
+            if m["points"]:
+                latest[m["key"]] = m["points"][-1]
+        rows = []
+
+        def ratio(title, fn, *keys, **kw):
+            vals = [latest.get(k, {}).get("value") for k in keys]
+            if any(v is None for v in vals) or ("price" in kw and kw["price"] is None):
+                rows.append((title, "UNKNOWN", "یکی از ورودی‌ها در 10-K نیست"))
+                return
+            try:
+                r = fn(kw["price"], *vals) if "price" in kw else fn(*vals)
+            except (ValueError, TypeError) as exc:
+                rows.append((title, "تعریف‌نشده", str(exc)[:160]))
+                return
+            shown = fmtn(r.value * 100.0, 2) + "٪" if r.units == "fraction" else fmtn(r.value, 2) + "x"
+            rows.append((title, shown, "%s · سال مالی %s" % (r.formula, latest[keys[0]]["fy_end"])))
+            facts.append((title + " (COMPUTED)", shown))
+        ratio("حاشیهٔ سود خالص", VAL.net_margin, "net_income", "revenue")
+        ratio("حاشیهٔ سود عملیاتی", VAL.operating_margin, "operating_income", "revenue")
+        ratio("بازده حقوق صاحبان سهام (ROE)", VAL.roe, "net_income", "equity")
+        ratio("بازده دارایی‌ها (ROA)", VAL.roa, "net_income", "assets")
+        ratio("P/E (قیمت پایانی / EPS رقیق‌شدهٔ سالانه)", VAL.pe_ratio, "eps_diluted", price=last_price)
+        out.append(self._fundamentals_card(sym))
+        out.append('<div class="card"><h2>نسبت‌ها <span class="muted">(COMPUTED با src/calc از ارقام 10-K)</span></h2><table>'
+                   '<tr><th>نسبت</th><th class="num">مقدار</th><th>مبنا</th></tr>%s</table><p class="note">P/E قیمت پایانی '
+                   'امروز را بر سود سالانهٔ آخرین 10-K تقسیم می‌کند؛ دو تاریخ متفاوت‌اند و این در مبنا آمده است.</p></div>'
+                   % "".join('<tr><th>%s</th><td class="num">%s</td><td class="muted">%s</td></tr>' % (esc(a), esc(b), esc(c))
+                             for a, b, c in rows))
+        return out, facts
+
+    def _monitor_summary(self, facts):
+        """Optional AI summary of the COMPUTED/RETRIEVED facts only. Every number is checked against them."""
+        if not facts:
+            return ""
+        if self.assistant is None:
+            return ('<div class="card"><h2>خلاصهٔ هوش مصنوعی</h2><p class="muted">مدل محلی بارگذاری نشده است؛ ارقام بالا '
+                    'خودشان کامل‌اند. (خلاصه فقط با مدل محلی ساخته می‌شود.)</p></div>')
+        listed = "; ".join("%s = %s" % (k, v) for k, v in facts)
+        q = ("Summarise ONLY the following facts in at most three short sentences, in Persian. Do not add any "
+             "number, date, forecast or advice that is not listed. Facts: " + listed)
+        text, _m = self.assistant._generate(ASK.RP.build_plain_prompt(q, refusal_language=True))
+        g = ASK.guard_execution_claims(ASK._strip_calls(text), lang="fa")
+        allowed = ASK.L.extract_numbers(ASK.L.fold_digits(listed))
+        extra = [n for n in ASK.L.extract_numbers(ASK.L.fold_digits(g["text"]))
+                 if not any(abs(n - a) <= max(0.01, abs(a) * 0.005) for a in allowed)]
+        self.audit().write("monitor_summary", self.clock(), facts=listed[:2000], reply=g["text"][:2000],
+                           unlisted_numbers=extra[:20], blocked=g["blocked"])
+        warn = ('<p class="warn">هشدار: این خلاصه عددی دارد که در فهرست ارقام نیست (%s). به جدول‌ها اعتماد کنید، نه به خلاصه.</p>'
+                % esc(", ".join(fmtn(x) for x in extra[:5]))) if extra else ""
+        return ('<div class="card"><h2>خلاصهٔ هوش مصنوعی <span class="muted">(ESTIMATED؛ متن مدل)</span></h2>%s<p dir="auto">%s</p>'
+                '<p class="note">فقط از ارقام همین صفحه ساخته شد؛ هر عدد آن با فهرست ارقام مقایسه شد. توصیهٔ مالی نیست.</p></div>'
+                ) % (warn, esc(g["text"]))
+
+    def p_monitor(self, method, q, f, refresh_results=None):
+        from market import coingecko as _cg
+        src = dict(q)
+        if method == "POST":
+            src.update({k: f[k] for k in ("kind", "id", "vs", "days") if f.get(k)})
+        kind = "stock" if src.get("kind") == "stock" else "crypto"
+        ident = str(src.get("id") or "").strip()[:120]
+        vs = str(src.get("vs") or "usd").strip().lower()
+        if vs not in _cg.VS_CURRENCIES:
+            vs = "usd"
+        try:
+            days = int(str(src.get("days") or "90"))
+        except ValueError:
+            days = 90
+        if days not in self.MONITOR_DAYS:
+            days = 90
+        body = [self._monitor_form(kind, ident, days, vs)]
+        facts = []
+        if ident:
+            parts, facts = (self._monitor_stock(ident.upper(), days) if kind == "stock"
+                            else self._monitor_crypto(ident, vs, days))
+            body.insert(1, self._refresh_bar("monitor", {"kind": kind, "id": ident, "vs": vs, "days": str(days)},
+                                             refresh_results))
+            body += parts
+            body.append(self._unknown_card())
+            if method == "POST" and f.get("summary") == "1":
+                body.append(self._monitor_summary(facts))
+            elif facts:
+                body.append('<form method="post" action="/monitor" class="card" data-busy="در حال نوشتن خلاصه...">%s'
+                            '<input type="hidden" name="kind" value="%s"><input type="hidden" name="id" value="%s">'
+                            '<input type="hidden" name="vs" value="%s"><input type="hidden" name="days" value="%d">'
+                            '<input type="hidden" name="summary" value="1"><h2>خلاصهٔ هوش مصنوعی (اختیاری)</h2><p class="note">'
+                            'مدل محلی فقط ارقام همین صفحه را خلاصه می‌کند؛ عددی که در فهرست نباشد علامت می‌خورد.%s</p>'
+                            '<button%s>ساخت خلاصه</button></form>' % (
+                                self.hidden(), esc(kind), esc(ident), esc(vs), days,
+                                "" if self.assistant else " مدل بارگذاری نشده است.",
+                                "" if self.assistant else ' disabled aria-disabled="true"'))
+        else:
+            body.append('<div class="empty">یک رمزارز (نام، نماد یا آدرس قرارداد) یا نماد یک سهم آمریکایی وارد کنید.</div>')
+        body.append('<p class="note">فهرست پایش (watchlist) هنوز ساخته نشده است؛ پرسش باز برای مالک است.</p>')
+        return self.page("/monitor", "پایش دارایی", "".join(body),
+                         subtitle="همهٔ ارقام از منبع با برچسب؛ شاخص‌ها COMPUTED؛ آنچه منبع ندارد UNKNOWN. لحظه‌ای نیست؛ توصیهٔ مالی نیست.")
 
     def _mk_crypto(self, q):
         from market import coingecko as _cg
