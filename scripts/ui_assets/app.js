@@ -12,6 +12,10 @@
     if (saved === "dark" || saved === "light") { root.setAttribute("data-theme", saved); }
   } catch (e) { /* storage blocked: follow the system theme */ }
 
+  /* D-0143(7): storage helpers -- every access in try/catch (storage may be blocked) */
+  function tget(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function tset(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* blocked: the tour just restarts */ } }
+
   function each(sel, fn, scope) {
     Array.prototype.forEach.call((scope || document).querySelectorAll(sel), fn);
   }
@@ -116,6 +120,44 @@
         if (!window.confirm(form.getAttribute("data-confirm"))) { e.preventDefault(); }
       });
     });
+
+    /* D-0143(7): first-run tour -- skippable, resumable, re-launchable from the menu */
+    var tour = document.querySelector("[data-tour]");
+    if (tour) {
+      var steps = tour.querySelectorAll(".tour-step");
+      var pos = tour.querySelector("[data-tour-pos]");
+      var nextBtn = tour.querySelector("[data-tour-next]");
+      var nextText = nextBtn ? nextBtn.textContent : "";
+      var cur = parseInt(tget("andarz-tour-step") || "0", 10);
+      if (!(cur >= 0 && cur < steps.length)) { cur = 0; }
+      var showTour = function (i) {
+        cur = Math.max(0, Math.min(steps.length - 1, i));
+        Array.prototype.forEach.call(steps, function (s, j) { s.classList.toggle("on", j === cur); });
+        if (pos) { pos.textContent = String(cur + 1); }
+        if (nextBtn) { nextBtn.textContent = cur === steps.length - 1 ? nextBtn.getAttribute("data-last") : nextText; }
+        tset("andarz-tour-step", String(cur));
+        tour.classList.remove("is-hidden");
+      };
+      var hideTour = function (done) {
+        tour.classList.add("is-hidden");
+        if (done) { tset("andarz-tour-done", "1"); }
+      };
+      var startTour = function () { tset("andarz-tour-done", "0"); showTour(0); tour.focus(); };
+      each("[data-tour-next]", function (b) {
+        b.addEventListener("click", function () { if (cur >= steps.length - 1) { hideTour(true); } else { showTour(cur + 1); } });
+      });
+      each("[data-tour-prev]", function (b) { b.addEventListener("click", function () { showTour(cur - 1); }); });
+      each("[data-tour-skip]", function (b) { b.addEventListener("click", function () { hideTour(true); }); });
+      each("[data-tour-start]", function (b) {
+        b.classList.remove("is-hidden");
+        b.addEventListener("click", startTour);
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !tour.classList.contains("is-hidden")) { hideTour(false); }
+      });
+      if (/[?&]tour=1(&|$)/.test(window.location.search)) { startTour(); }
+      else if (steps.length && tget("andarz-tour-done") !== "1") { showTour(cur); }
+    }
 
     /* copy a result */
     each("[data-copy]", function (btn) {

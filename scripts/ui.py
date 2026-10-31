@@ -95,9 +95,106 @@ COMMIT_PHRASE = "CONFIRM"
 
 NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"), ("/monitor", "پایش دارایی"),
        ("/calc", "فرمول‌ها و ماشین‌حساب‌ها"),
-       ("/ask", "پرسش از مدل"), ("/macro", "سری‌های کلان"), ("/paper", "معاملهٔ کاغذی"),
+       ("/ask", "پرسش از مدل"), ("/learn", "راهنما و آموزش"), ("/macro", "سری‌های کلان"), ("/paper", "معاملهٔ کاغذی"),
        ("/audit", "گزارش ممیزی"), ("/maintenance", "نگهداری"), ("/providers", "ارائه‌دهنده‌ها"),
        ("/phase11", "فاز ۱۱ (معلق)"))
+
+#: D-0143(7): /learn and the first-run tour. One entry per NAV page (a test fails if a NAV page has
+#: none). {placeholders} are filled from the live registries at render time -- no count is typed here.
+LEARN = {
+    "/": ("نمای کلی: حالت اجرا، وضعیت مدل و کلیدها، و میان‌برها.",
+          "صفحهٔ اول نشان می‌دهد برنامه در چه حالتی است (فقط تحلیل؛ معاملهٔ واقعی خاموش)، مدل محلی بارگذاری شده یا "
+          "نه، و کدام کلیدهای داده تنظیم شده‌اند.", "home"),
+    "/markets": ("داده‌های بازار از {sources} منبع مجاز، در {tabs} زبانه.",
+                 "ارزها، نرخ بهره، اوراق و کالا، اقتصاد کشورها، رمزارزها، فارکس و سهام آمریکا. هر جدول منبع و تاریخ "
+                 "خودش را دارد و هیچ‌کدام لحظه‌ای نیست. دکمهٔ تازه‌سازی فقط منابع همان زبانه را دوباره می‌گیرد.", "markets"),
+    "/monitor": ("یک دارایی با همهٔ ارقام منبع‌دار و شاخص‌های محاسبه‌شده.",
+                 "رمزارز را با نام، نماد یا آدرس قرارداد ({chains} زنجیره) پیدا کنید، یا نماد یک سهم آمریکایی را بدهید. "
+                 "نمودار {windows} روزه با SMA، EMA، RSI و MACD؛ آنچه منبع ندارد UNKNOWN است.", "monitor"),
+    "/calc": ("{tools} ماشین‌حساب دقیق در {cats} دسته، بدون مدل.",
+              "هر فرمول ورودی‌هایش را بررسی می‌کند و ورودی نامعتبر را رد می‌کند؛ نتیجه COMPUTED است و فرمول کنارش "
+              "نوشته می‌شود.", "calc"),
+    "/ask": ("پرسش به فارسی یا انگلیسی؛ اعداد پاسخ با شواهد کنترل می‌شوند.",
+             "مسیر پاسخ بدون مدل انتخاب می‌شود ({routes} مسیر). «خودت را معرفی کن» و جست‌وجوی رمزارز حتی بدون مدل "
+             "کار می‌کنند.", "ask"),
+    "/learn": ("همین راهنما: صفحه‌ها، قدم‌های اول و واژه‌نامه.",
+               "راهنمای شروع را از منو دوباره باز کنید؛ بدون جاوااسکریپت همین صفحه نسخهٔ کامل آن است.", "learn"),
+    "/macro": ("سری‌های کلان (تورم، بیکاری، نرخ بهره) با بازهٔ دلخواه.",
+               "داده‌ها از FRED و BIS می‌آیند و با تاریخ و واحد خودشان نشان داده می‌شوند.", "macro"),
+    "/paper": ("تمرین سفارش با پول مجازی.",
+               "سفارش کاغذی همهٔ کنترل‌های ریسک را می‌گذراند ولی هیچ پولی جابه‌جا نمی‌شود؛ ثبت نهایی عبارت تأیید "
+               "می‌خواهد.", "paper"),
+    "/audit": ("گزارش ممیزی با زنجیرهٔ هش.",
+               "هر پرسش، خلاصه و سفارش کاغذی در یک فایل محلی با زنجیرهٔ هش ثبت می‌شود تا هر دستکاری دیده شود.", "audit"),
+    "/maintenance": ("سلامت برنامه و نسخه‌ها.",
+                     "بررسی می‌کند فایل‌ها با آخرین نسخهٔ منتشرشده یکی‌اند و کارهای نگهداری عقب نیفتاده‌اند.", "maint"),
+    "/providers": ("موتور آفلاین یا آنلاین.",
+                   "مدل محلی پیش‌فرض است و چیزی از رایانه بیرون نمی‌رود. برای موتور آنلاین ({providers} ارائه‌دهندهٔ آماده)، "
+                   "کلید فقط در متغیر محیطی گذاشته می‌شود.", "providers"),
+    "/phase11": ("معاملهٔ واقعی: معلق.",
+                 "پیش‌نیازهای معاملهٔ واقعی فهرست شده‌اند و تا همه برآورده نشوند این فاز خاموش می‌ماند.", "lock"),
+}
+#: The tour's stops, in order (titles come from NAV, text from LEARN).
+TOUR = ("/", "/markets", "/monitor", "/calc", "/ask", "/paper", "/learn")
+#: Inline-SVG illustrations (64x64, palette via CSS classes; no image request, no style attribute).
+_ILL = {
+    "home": '<path class="c" d="M12 30 32 12l20 18v22H12z"/><path class="b" d="M8 32 32 10l24 22M16 30v22h32V30M27 52V38h10v14"/>',
+    "markets": '<path class="c" d="M14 26h8v18h-8zM42 18h8v22h-8z"/><path class="b" d="M18 18v34M46 10v36M32 22v26M28 30h8v12h-8zM14 26h8v18h-8zM42 18h8v22h-8z"/>',
+    "monitor": '<path class="c" d="M10 12h40v30H10z"/><path class="b" d="M10 12h40v30H10zM16 34l8-8 6 5 10-12M42 42l12 12"/><circle class="a" cx="42" cy="42" r="5"/>',
+    "calc": '<path class="c" d="M16 8h32v48H16z"/><path class="b" d="M16 8h32v48H16zM22 14h20v10H22z"/><circle class="a" cx="25" cy="33" r="3"/><circle class="a" cx="32" cy="33" r="3"/><circle class="a" cx="39" cy="33" r="3"/><circle class="a" cx="25" cy="43" r="3"/><circle class="a" cx="32" cy="43" r="3"/><circle class="a" cx="39" cy="43" r="3"/>',
+    "ask": '<path class="c" d="M10 12h44v28H28l-10 10v-10h-8z"/><path class="b" d="M10 12h44v28H28l-10 10v-10h-8zM20 22h24M20 30h16"/>',
+    "learn": '<path class="c" d="M8 14c8-3 16-3 24 2v36c-8-5-16-5-24-2z"/><path class="b" d="M8 14c8-3 16-3 24 2 8-5 16-5 24-2v36c-8-3-16-3-24 2-8-5-16-5-24-2zM32 16v36"/>',
+    "macro": '<path class="c" d="M12 36h8v16h-8zM28 24h8v28h-8zM44 30h8v22h-8z"/><path class="b" d="M8 52h48M12 36h8v16h-8zM28 24h8v28h-8zM44 30h8v22h-8z"/>',
+    "paper": '<path class="c" d="M16 8h22l10 10v38H16z"/><path class="b" d="M16 8h22l10 10v38H16zM38 8v10h10M22 30h20M22 38h20M22 46h12"/>',
+    "audit": '<path class="b" d="M22 26a8 8 0 0 1 0 12h-6a8 8 0 0 1 0-12zM48 26a8 8 0 0 1 0 12h-6a8 8 0 0 1 0-12zM24 32h16"/><circle class="a" cx="32" cy="32" r="3"/>',
+    "maint": '<path class="c" d="M40 10a12 12 0 0 0-12 16L10 44l10 10 18-18a12 12 0 0 0 16-12l-8 4-6-6z"/><path class="b" d="M40 10a12 12 0 0 0-12 16L10 44l10 10 18-18a12 12 0 0 0 16-12l-8 4-6-6z"/>',
+    "providers": '<path class="c" d="M20 24h24v12a12 12 0 0 1-24 0z"/><path class="b" d="M26 10v14M38 10v14M20 24h24v12a12 12 0 0 1-24 0zM32 48v8"/>',
+    "lock": '<path class="c" d="M14 28h36v26H14z"/><path class="b" d="M14 28h36v26H14zM22 28v-8a10 10 0 0 1 20 0v8M32 38v8"/>',
+    "page": '<path class="c" d="M16 8h32v48H16z"/><path class="b" d="M16 8h32v48H16zM22 20h20M22 30h20M22 40h14"/>',
+}
+_FA_D = str.maketrans("0123456789", "\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9")
+
+
+def fa_digits(v):
+    return str(v).translate(_FA_D)
+
+
+def ill(kind):
+    return ('<svg class="ill" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true" focusable="false">%s</svg>'
+            % _ILL.get(kind, _ILL["page"]))
+
+
+def learn_counts():
+    """Every number /learn and the tour state, read from its registry at render time (VERIFIED)."""
+    from market import coingecko as _cg
+    return {"tools": len(REG.tool_names()), "cats": len(CAT.CATEGORIES), "sources": len(DH.SOURCES_FA),
+            "chains": len(_cg.PLATFORMS), "tabs": len(App.MARKET_TABS), "pages": len(NAV),
+            "windows": "/".join(str(d) for d in App.MONITOR_DAYS), "routes": len(ASK.ROUTES),
+            "providers": len([k for k in LP.PROVIDERS if k != "local"])}
+
+
+def learn_text(href, which):
+    c = dict((k, fa_digits(v)) for k, v in learn_counts().items())
+    entry = LEARN.get(href)
+    if entry is None:
+        return "برای این صفحه هنوز توضیحی نوشته نشده است." if which == 1 else ""
+    return entry[which].format(**c)
+
+
+def tour_panel():
+    """D-0143(7): hidden by default; app.js shows it on first run, resumes it, and re-opens it from the menu."""
+    titles = dict(NAV)
+    stops = [h for h in TOUR if h in titles]
+    steps = "".join('<li class="tour-step" data-step="%d"><b class="tour-t">%s</b><p>%s</p><a href="%s">رفتن به این صفحه</a></li>' % (
+        i, esc(titles[h]), esc(learn_text(h, 0)), h) for i, h in enumerate(stops))
+    return ('<aside class="tour is-hidden" id="tour" data-tour role="dialog" aria-modal="false" aria-labelledby="tour-h" '
+            'tabindex="-1"><h2 id="tour-h">راهنمای شروع <span class="muted">(قدم <span data-tour-pos>۱</span> از %s)</span></h2>'
+            '<ol class="tour-steps">%s</ol><div class="tour-nav"><button type="button" class="ghost" data-tour-prev>قبلی</button>'
+            '<button type="button" data-tour-next data-last="پایان">بعدی</button>'
+            '<button type="button" class="ghost" data-tour-skip>رد کردن راهنما</button></div>'
+            '<p class="note">پیشرفت فقط در همین مرورگر ذخیره می‌شود. بستن با Esc؛ دوباره از منو: «راهنمای شروع».</p></aside>'
+            ) % (fa_digits(len(stops)), steps)
+
 
 #: D-0141: the look lives in two static files, served from a fixed whitelist (never a path
 #: taken from the request), so the Content-Security-Policy can forbid inline styles and
@@ -446,15 +543,17 @@ class App(object):
                '<script src="/static/app.js" defer></script></head><body>'
                '<a class="skip" href="#main">\u067e\u0631\u0634 \u0628\u0647 \u0645\u062d\u062a\u0648\u0627</a><div class="shell">'
                '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/mark.svg" alt="" width="36" height="36"><span class="wm">Andarz <b>اندرز</b></span></a>'
-               '<nav class="nav">%s</nav><div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
+               '<nav class="nav">%s</nav><button type="button" class="ghost tour-start is-hidden" data-tour-start>راهنمای شروع</button>'
+               '<div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
                '<div class="main"><header class="top"><details class="menu"><summary aria-label="منوی صفحه‌ها">منو</summary>'
-               '<nav class="nav nav-m">%s</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
+               '<nav class="nav nav-m">%s<button type="button" class="ghost tour-start is-hidden" data-tour-start>راهنمای شروع</button>'
+               '</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
                '<button class="theme" type="button" data-theme-toggle title="روشن / تیره" aria-label="تغییر تم روشن و تیره">&#9680;</button></header>'
-               '<main class="content" id="main" tabindex="-1">%s</main>'
+               '<main class="content" id="main" tabindex="-1">%s</main>%s'
                '<footer class="foot">این خروجی تحلیلی است، نه توصیهٔ مالی شخصی. معاملهٔ واقعی در این برنامه غیرفعال است '
                '(فاز ۱۱ معلق).</footer></div></div></body></html>') % (
             esc(title), nav, esc(VERSION), nav, esc(title),
-            ('<p class="sub">%s</p>' % esc(subtitle)) if subtitle else "", body)
+            ('<p class="sub">%s</p>' % esc(subtitle)) if subtitle else "", body, tour_panel())
         doc = wrap_tables(doc)
         return Response(status, doc, headers={"Content-Security-Policy": CSP,
                                               "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
@@ -486,7 +585,7 @@ class App(object):
                   "/macro": self.p_macro,
                   "/paper": self.p_paper, "/audit": self.p_audit, "/maintenance": self.p_maintenance,
                   "/providers": self.p_providers, "/phase11": self.p_phase11, "/refresh": self.p_refresh,
-                  "/monitor": self.p_monitor}
+                  "/monitor": self.p_monitor, "/learn": self.p_learn}
         fn = routes.get(path)
         if fn is None:
             return self.page(path, "یافت نشد", '<p>این صفحه وجود ندارد.</p>', 404)
@@ -1061,6 +1160,69 @@ class App(object):
         body.append('<p class="note">فهرست پایش (watchlist) هنوز ساخته نشده است؛ پرسش باز برای مالک است.</p>')
         return self.page("/monitor", "پایش دارایی", "".join(body),
                          subtitle="همهٔ ارقام از منبع با برچسب؛ شاخص‌ها COMPUTED؛ آنچه منبع ندارد UNKNOWN. لحظه‌ای نیست؛ توصیهٔ مالی نیست.")
+
+    # -- D-0143(7): /learn -- the static version of the tour, a first-steps checklist, a glossary --
+    GLOSSARY = (("RETRIEVED", "عددی که همان‌طور که منبع داده نشان داده می‌شود، با نام منبع و تاریخ."),
+                ("END_OF_DAY", "قیمت پایانی روز؛ نه لحظه‌ای و نه قابل معامله."),
+                ("P/E", "قیمت تقسیم بر سود هر سهم؛ برای سود صفر یا منفی تعریف نشده است."),
+                ("SMA / EMA", "میانگین متحرک ساده / نمایی قیمت‌های پایانی در یک پنجرهٔ ثابت."),
+                ("RSI", "شاخص قدرت نسبی بین ۰ تا ۱۰۰؛ مرزهای ۷۰ و ۳۰ قرارداد است، نه سیگنال."),
+                ("MACD", "تفاوت دو میانگین نمایی و خط سیگنال آن."),
+                ("ATH / ATL", "بالاترین / پایین‌ترین قیمت تاریخی‌ای که CoinGecko ثبت کرده است."),
+                ("ارزش بازار", "قیمت ضرب در عرضهٔ در گردش."),
+                ("آدرس قرارداد", "نشانی توکن روی یک زنجیره؛ نام‌ها تکراری‌اند، آدرس یکتاست."),
+                ("بدون کلید / کلید Demo", "CoinGecko بدون کلید حدود ۵ درخواست در دقیقه می‌دهد؛ کلید رایگان Demo بیشتر."),
+                ("معاملهٔ کاغذی", "شبیه‌سازی سفارش با پول مجازی؛ هیچ سفارشی به کارگزار نمی‌رود."),
+                ("ANALYSIS_ONLY", "حالت اجرای برنامه: فقط تحلیل. معاملهٔ واقعی از این برنامه روشن نمی‌شود."))
+
+    def _checklist(self):
+        def env(k):
+            return bool(str(os.environ.get(k, "")).strip())
+        items = (("کلید رایگان FRED در <code>FRED_API_KEY</code> (اوراق، نفت، گاز، شاخص دلار)", env("FRED_API_KEY"), "/markets?tab=us"),
+                 ("کلید رایگان Alpha Vantage در <code>ALPHAVANTAGE_API_KEY</code> (سهام و فارکس)", env("ALPHAVANTAGE_API_KEY"),
+                  "/markets?tab=stocks"),
+                 ("ایمیل تماس در <code>SEC_CONTACT_EMAIL</code> (صورت‌های مالی SEC)", env("SEC_CONTACT_EMAIL"), "/monitor"),
+                 ("اختیاری: کلید رایگان Demo در <code>COINGECKO_DEMO_API_KEY</code> (سهمیهٔ بیشتر رمزارز)",
+                  "optional" if not env("COINGECKO_DEMO_API_KEY") else True, "/markets?tab=crypto"),
+                 ("بارگذاری مدل محلی (<code>--model</code> یا <code>--server</code>)", self.assistant is not None, "/ask"),
+                 ("در «پرسش» بنویسید «خودت را معرفی کن» (بدون مدل هم کار می‌کند)", None, "/ask"),
+                 ("یک ماشین‌حساب را با مثال آماده‌اش اجرا کنید", None, "/calc"),
+                 ("یک رمزارز را با نام یا آدرس قرارداد در «پایش دارایی» پیدا کنید", None, "/monitor"),
+                 ("یک سفارش کاغذی پیش‌نمایش کنید", None, "/paper"))
+        rows = []
+        for text, state, href in items:
+            mark = {True: ("\u2713", "انجام شده", "ok"), False: ("\u25cb", "مانده", "due"),
+                    "optional": ("\u25cb", "اختیاری", "muted"), None: ("\u2192", "قدم دستی", "muted")}[state]
+            rows.append('<li><span class="%s" aria-hidden="true">%s</span> <span class="%s">%s</span>: %s '
+                        '<a href="%s">برو</a></li>' % (mark[2], mark[0], mark[2], mark[1], text, href))
+        return ('<section class="card" id="first-steps"><h2>قدم‌های اول</h2><ol class="check">%s</ol><p class="note">وضعیت '
+                'کلیدها هنگام ساخت همین صفحه از متغیرهای محیطی خوانده شد (فقط وجودشان؛ مقدار هیچ کلیدی نشان داده '
+                'نمی‌شود).</p></section>') % "".join(rows)
+
+    def p_learn(self, method, q, f):
+        c = learn_counts()
+        titles = dict(NAV)
+        stats = (("صفحه", c["pages"]), ("ماشین‌حساب", c["tools"]), ("دستهٔ فرمول", c["cats"]), ("منبع داده", c["sources"]),
+                 ("زنجیرهٔ جست‌وجوی توکن", c["chains"]), ("مسیر پاسخ", c["routes"]))
+        head = ('<div class="stats">%s</div><p class="note">همهٔ این شمارش‌ها هنگام ساخت صفحه از خود برنامه خوانده شده‌اند '
+                '(VERIFIED)، نه تایپ شده.</p>') % "".join(
+            '<div class="stat"><div class="k">%s</div><div class="v">%s</div></div>' % (esc(k), esc(fa_digits(v))) for k, v in stats)
+        stops = [h for h in TOUR if h in titles]
+        tour = ('<section class="card" id="tour-static"><h2>راهنمای شروع (نسخهٔ ایستا)</h2><ol class="tour-list">%s</ol>'
+                '<p><a class="btn" href="/learn?tour=1">شروع دوبارهٔ راهنمای تعاملی</a> '
+                '<span class="note">با جاوااسکریپت خاموش، همین فهرست راهنماست.</span></p></section>') % "".join(
+            '<li><a href="%s"><b class="tour-t">%s</b></a>: %s</li>' % (h, esc(titles[h]), esc(learn_text(h, 0))) for h in stops)
+        secs = "".join('<section class="card learn-sec" id="learn-%s">%s<div><h2><a href="%s">%s</a></h2><p>%s</p><p>%s</p>'
+                       '</div></section>' % (esc(h.strip("/") or "home"), ill(LEARN.get(h, ("", "", "page"))[2]), h,
+                                            esc(t), esc(learn_text(h, 0)), esc(learn_text(h, 1)))
+                       for h, t in NAV)
+        labels = "".join('<dt class="ltr">%s</dt><dd>%s</dd>' % (esc(k), esc(fa)) for k, _en, fa in ASK.EVIDENCE_LABELS)
+        terms = "".join('<dt>%s</dt><dd>%s</dd>' % (esc(k), esc(v)) for k, v in self.GLOSSARY)
+        gloss = ('<section class="card" id="glossary"><h2>واژه‌نامه</h2><h3>برچسب‌های شاهد</h3><dl class="gloss">%s</dl>'
+                 '<h3>اصطلاح‌ها</h3><dl class="gloss">%s</dl></section>') % (labels, terms)
+        body = (head + tour + self._checklist() + '<h2 class="sec-h">صفحه‌ها، یکی‌یکی</h2>' + secs + gloss)
+        return self.page("/learn", "راهنما و آموزش", body,
+                         subtitle="هر صفحه چه می‌کند، از کجا شروع کنید، و معنی برچسب‌ها. همه‌چیز بدون جاوااسکریپت هم کار می‌کند.")
 
     def _mk_crypto(self, q):
         from market import coingecko as _cg

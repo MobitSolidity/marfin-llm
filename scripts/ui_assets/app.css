@@ -278,6 +278,30 @@ a.chip{text-decoration:none}a.chip.on{background:var(--brand);color:var(--brand-
 /* every disclosure is a 44 px target (the Markets 'stale series' summary measured 28 px) */
 details > summary{min-height:var(--tap);display:flex;align-items:center;gap:var(--sp2);cursor:pointer}
 
+/* D-0143(7): /learn and the first-run tour (CSS-first; app.js only toggles .is-hidden / .on) */
+.ill{width:64px;height:64px;flex:none}
+.ill .a{fill:var(--fill)}
+.ill .b{fill:none;stroke:var(--ink);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.ill .c{fill:var(--info)}
+.learn-sec{display:flex;gap:var(--sp4);align-items:flex-start}
+.learn-sec h2{margin-top:0}
+.gloss{display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr);gap:var(--sp2) var(--sp4);margin:0}
+.gloss dt{font-weight:700}
+.gloss dd{margin:0;overflow-wrap:anywhere}
+.check,.tour-list{display:grid;gap:var(--sp2);padding-inline-start:1.3rem}
+.check li{min-height:var(--tap);overflow-wrap:anywhere}
+.tour{position:fixed;z-index:50;inset-block-end:var(--sp3);inset-inline-end:var(--sp3);width:min(24rem,calc(100vw - 2 * var(--sp3)));
+  max-height:calc(100vh - 2 * var(--sp3));overflow:auto;background:var(--panel);color:var(--ink);border:2px solid var(--brand);
+  border-radius:var(--r);padding:var(--sp4);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.tour h2{margin:0 0 var(--sp2);font-size:1.05rem}
+.tour-steps{list-style:none;margin:0;padding:0}
+.tour-step{display:none}
+.tour-step.on{display:block}
+.tour-nav{display:flex;flex-wrap:wrap;gap:var(--sp2);margin-top:var(--sp3)}
+.tour-start{width:100%;margin:var(--sp2) 0}
+@media (max-width:640px){.learn-sec{flex-direction:column}.gloss{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){.tour{transition:none;animation:none}}
+@media (forced-colors:active){.ill .b{stroke:CanvasText}.ill .a,.ill .c{fill:Highlight}.tour{border-color:CanvasText}}
 /* D-0143(6): refresh controls -- 44 px target, icon + text, status list wraps */
 .refresh{display:grid;gap:var(--sp2)}
 .refresh-form{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp3)}

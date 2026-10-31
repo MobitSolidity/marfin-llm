@@ -837,6 +837,89 @@ arec = [json.loads(x) for x in io.open(S5.ask_audit_path, encoding="utf-8").read
 check_true("the summary is written to the audit log with its unlisted numbers",
            any(r.get("event") == "monitor_summary" and 999.0 in r.get("unlisted_numbers", []) for r in arec), method="(V)")
 
+# ===========================================================================
+section("7. /learn and the first-run tour: Persian, generated counts, inline SVG, CSS-first, no-JS static")
+# ===========================================================================
+from tools.registry import tool_names                                    # noqa: E402
+from tools import catalog_fa as CATM                                     # noqa: E402
+
+check_true("/learn is in NAV", "/learn" in dict(U.NAV), method="(V)")
+check_true("every NAV page has a /learn entry (a new page without one fails here)",
+           all(h in U.LEARN for h, _t in U.NAV), method="(V)")
+check_true("every tour stop is a NAV page", all(h in dict(U.NAV) for h in U.TOUR), method="(V)")
+L7 = app(hub=chub())
+lb = L7.handle("GET", "/learn").body
+check_true("/learn renders 200 in Persian (rtl)", L7.handle("GET", "/learn").status == 200
+           and '<html lang="fa" dir="rtl">' in lb, method="(V)")
+for h, t in U.NAV:
+    check_true("/learn has a section for %s with its NAV title and a link" % h,
+               'id="learn-%s"' % (h.strip("/") or "home") in lb and '<a href="%s">%s</a>' % (h, U.esc(t)) in lb, method="(V)")
+c7 = U.learn_counts()
+check_true("counts come from the registries: tools, categories, sources, chains, pages, routes",
+           c7["tools"] == len(tool_names()) and c7["cats"] == len(CATM.CATEGORIES) and c7["sources"] == len(DH.SOURCES_FA)
+           and c7["chains"] == len(CG.PLATFORMS) and c7["pages"] == len(U.NAV) and c7["routes"] == len(ASKM.ROUTES), method="(V)")
+check_true("... and appear on the page in Persian digits",
+           all(U.fa_digits(c7[k]) in lb for k in ("tools", "cats", "sources", "chains", "pages")), method="(V)")
+check_true("no {placeholder} is left unfilled", "{" not in re.sub(r"<style.*?</style>", "", lb).split("<main", 1)[1].split("</main>")[0],
+           method="(A)")
+_saved_nav = U.NAV
+try:
+    U.NAV = U.NAV + (("/extra", "صفحهٔ آزمایشی"),)
+    lb2 = L7.handle("GET", "/learn").body
+    check_true("counts follow the registry: an extra NAV page changes the count and gets a placeholder section",
+               U.fa_digits(len(U.NAV)) in lb2 and 'id="learn-extra"' in lb2
+               and "برای این صفحه هنوز توضیحی نوشته نشده است" in lb2, method="(B)")
+finally:
+    U.NAV = _saved_nav
+check_true("illustrations are inline SVG only (one per section; no <img> in /learn's content)",
+           lb.count('<svg class="ill"') == len(U.NAV) and "<img" not in lb.split('<main', 1)[1], method="(V)")
+check_true("illustrations carry no style attribute and are hidden from screen readers",
+           all('aria-hidden="true"' in m for m in re.findall(r'<svg class="ill"[^>]*>', lb)), method="(V)")
+check_true("a first-steps checklist with key status (presence only, never a value)",
+           'id="first-steps"' in lb and "FRED_API_KEY" in lb and "مقدار هیچ کلیدی نشان داده" in lb, method="(V)")
+os.environ["FRED_API_KEY"] = "SECRETVALUE1234567890"
+lbk = L7.handle("GET", "/learn").body
+check_true("a set key shows 'done' and its value never appears", "SECRETVALUE1234567890" not in lbk
+           and "انجام شده" in lbk, method="(A)")
+os.environ.pop("FRED_API_KEY")
+check_true("a glossary with all five evidence labels and the terms the pages use",
+           'id="glossary"' in lb and all(k in lb for k in ("VERIFIED", "MEASURED", "COMPUTED", "ESTIMATED", "UNKNOWN",
+                                                           "RSI", "MACD", "ATH / ATL", "ANALYSIS_ONLY")), method="(V)")
+check_true("without JS /learn is the tour: a static list of every stop with links",
+           'id="tour-static"' in lb and all('<a href="%s"><b class="tour-t">' % h in lb for h in U.TOUR), method="(V)")
+check_true("the static page offers to restart the interactive tour (a plain link)", 'href="/learn?tour=1"' in lb, method="(V)")
+
+# -- the tour panel: on every page, hidden until JS shows it ----------------------------------
+for pth in ("/", "/markets", "/monitor", "/calc", "/learn"):
+    bp = L7.handle("GET", pth).body
+    check_true("%s: the tour panel is present and HIDDEN by default (no JS -> no overlay)" % pth,
+               '<aside class="tour is-hidden" id="tour" data-tour role="dialog"' in bp, method="(V)")
+    check_true("%s: the re-launch buttons (sidebar + mobile menu) are hidden without JS" % pth,
+               bp.count('class="ghost tour-start is-hidden" data-tour-start') == 2, method="(V)")
+hb7 = L7.handle("GET", "/").body
+check_true("the tour has one step per stop, with skip / previous / next controls",
+           hb7.count('class="tour-step"') == len(U.TOUR) and "data-tour-skip" in hb7 and "data-tour-prev" in hb7
+           and "data-tour-next" in hb7, method="(V)")
+check_true("tour buttons are real buttons (keyboard), type=button (never submit a form)",
+           len(re.findall(r'<button type="button"[^>]*data-tour-(?:prev|next|skip)', hb7)) == 3, method="(V)")
+js7 = read("scripts/ui_assets/app.js")
+_ls = [m.start() for m in re.finditer(r"window\.localStorage", js7)]
+check_true("app.js: every localStorage access (%d) sits inside an open try block (tget/tset helpers)" % len(_ls),
+           len(_ls) >= 4 and all(js7.rfind("try {", 0, i) > js7.rfind("catch", 0, i) for i in _ls), method="(V)")
+check_true("app.js: skippable (marks done), resumable (saved step), re-launchable (data-tour-start), Esc closes",
+           all(k in js7 for k in ('tset("andarz-tour-done", "1")', 'tget("andarz-tour-step")', "[data-tour-start]",
+                                  '"Escape"', "tour=1")), method="(V)")
+check_true("app.js still builds no markup and evaluates nothing",
+           all(x not in js7 for x in ("innerHTML", "outerHTML", "eval(", "document.write", "new Function", "insertAdjacentHTML")),
+           method="(A)")
+css7 = read("scripts/ui_assets/app.css")
+check_true("CSS: the tour fits a 320 px screen and the reduced-motion and forced-colors rules exist",
+           "width:min(24rem,calc(100vw - 2 * var(--sp3)))" in css7 and ".tour{transition:none;animation:none}" in css7
+           and ".tour{border-color:CanvasText}" in css7, method="(V)")
+check_true("no inline style or handler on /learn", not re.search(r'\sstyle="|\son[a-z]+="', lb), method="(V)")
+check_true("the self-introduction lists /learn too (it reads NAV)",
+           "/learn" in [h for h, _t in ASKM.about_facts(U.NAV)["pages"]], method="(V)")
+
 os.environ.clear()
 os.environ.update(_SAVED_ENV)
 print("")
