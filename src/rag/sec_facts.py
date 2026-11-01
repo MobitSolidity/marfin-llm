@@ -69,12 +69,12 @@ _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def user_agent(email: Optional[str] = None) -> str:
-    """'marfin-llm/0.14 (<contact>)' from the argument or SEC_CONTACT_EMAIL; refuses a non-address."""
+    """'Andarz/0.15 (<contact>)' from the argument or SEC_CONTACT_EMAIL; refuses a non-address."""
     e = str(email if email is not None else os.environ.get(CONTACT_ENV, "")).strip()
     if not _EMAIL.match(e):
         raise SecError("SEC requires a contact e-mail in every request (MEASURED: HTTP 403 without one). "
                        "Set %s to your e-mail address; it is sent only to sec.gov." % CONTACT_ENV)
-    return "marfin-llm/0.14 (%s)" % e
+    return "Andarz/0.15 (%s)" % e
 
 
 def _http_get(url: str, ua: str, timeout: float = 30.0) -> Any:

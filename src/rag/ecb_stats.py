@@ -61,7 +61,7 @@ def data_url(currencies: Sequence[str], last_n: int = 1) -> str:
 
 
 def _http_get(url: str, timeout: float = 20.0) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "marfin-llm/0.13 (personal research)",
+    req = urllib.request.Request(url, headers={"User-Agent": "Andarz/0.15 (personal research)",
                                                "Accept": "text/csv"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

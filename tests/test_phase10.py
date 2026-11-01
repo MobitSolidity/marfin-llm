@@ -384,7 +384,7 @@ for bad in ("0.10", "v0.10.0", "0.10.0-rc1", "", None):
     check_raises("parse_version refuses %r" % (bad,), lambda b=bad: REL.parse_version(b), REL.ReleaseError)
 check_true("0.10.0 sorts after 0.9.9 (numeric, not string)",
            REL.parse_version("0.10.0") > REL.parse_version("0.9.9"), "(V)")
-check_true("VERSION file is 0.14.0 (D-0142: providers manager with online/offline engine, crypto/forex/US-stock data, brand assets; a MINOR bump for new features)", REL.read_version() == "0.14.0", "(V)")
+check_true("VERSION file is 0.15.0 (D-0143: Andarz rebrand, palette, responsive UI, about route, token lookup, refresh controls, /monitor, /learn; a MINOR bump for new features)", REL.read_version() == "0.15.0", "(V)")
 
 R = os.path.join(TMP, "repo")
 for rel in REL.PINNED_FILES:
@@ -556,6 +556,11 @@ check_true("0.14.0 pins the provider settings store, the no-redirect client, the
            {"src/llm/providers.py", "src/llm/clients.py", "src/llm/settings.py", "src/market/coingecko.py",
             "src/market/av_markets.py", "src/rag/sec_facts.py", "assets/brand/logo.svg", "assets/brand/favicon.svg"}
            <= set(_m140.get("files", {})), "(V)")
+_m150 = {r["version"]: r for r in _chain}.get("0.15.0", {})
+check_true("0.15.0 pins the token resolver and the served brand mark / dark logo (D-0143)",
+           {"src/market/crypto_resolve.py", "assets/brand/mark.svg", "assets/brand/logo-dark.svg",
+            "scripts/ui.py", "scripts/ask.py", "src/rag/datahub.py", "src/market/coingecko.py"}
+           <= set(_m150.get("files", {})), "(V)")
 check_true("release history is 0.10.0, 0.10.1, 0.10.2, ... with no gaps or reuse",
            [r["version"] for r in _chain][:3] == ["0.10.0", "0.10.1", "0.10.2"]
            and len({r["version"] for r in _chain}) == len(_chain), "(V)")

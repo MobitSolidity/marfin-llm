@@ -45,6 +45,9 @@ def render():
            "third-party material listed below and in `NOTICE`, which keeps its own terms:", "",
            "- `tests/fixtures/alpha_vantage/*.json`: verbatim Alpha Vantage API captures; Alpha Vantage "
            "terms (personal, non-commercial use). Not licensed to you by this project.",
+           "- `tests/fixtures/coingecko/*`: verbatim CoinGecko API captures (D-0143); CoinGecko API terms "
+           "(attribution \"Powered by CoinGecko\", no resale or redistribution of API access). Not licensed "
+           "to you by this project.",
            "- `configs/model-cards/*.json`: configuration files published by the model authors, under "
            "their licences.",
            "- Data and model outputs in `evidence/` keep the terms of the source they came from (tables below).",

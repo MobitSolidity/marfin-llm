@@ -1,4 +1,4 @@
-# marfin-llm -- Ollama Modelfile (Phase 8, D-0123)
+# Andarz (marfin-llm) -- Ollama Modelfile (Phase 8, D-0123)
 #
 # The weights: Qwen3.5-4B-Q4_K_M, chosen in D-0123 from the user's Persian
 # review (Q4 better 10 / Q5 better 7 / equal 7) plus every automatic measure.

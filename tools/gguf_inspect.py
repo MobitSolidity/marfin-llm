@@ -48,7 +48,7 @@ class _Source:
             start = self.buf_at + len(self.buf)
             req = urllib.request.Request(self.where, headers={
                 "Range": "bytes=%d-%d" % (start, start + self.chunk - 1),
-                "User-Agent": "marfin-llm-gguf-inspect"})
+                "User-Agent": "Andarz-gguf-inspect"})
             with urllib.request.urlopen(req, timeout=120) as r:
                 if r.status != 206:
                     raise IOError("server ignored Range (HTTP %s); refusing to download "

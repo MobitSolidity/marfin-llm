@@ -1,4 +1,4 @@
-marfin-llm
+Andarz (اندرز) -- repository marfin-llm
 Copyright 2026 MobitSolidity (repository owner)
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
@@ -10,6 +10,11 @@ from the live registries: LICENSES.md):
 - tests/fixtures/alpha_vantage/*.json -- verbatim API responses captured from
   Alpha Vantage, kept as test fixtures. Alpha Vantage's terms grant personal,
   non-commercial use only; these files are NOT licensed to you by this project.
+- tests/fixtures/coingecko/* -- verbatim API responses captured from the
+  CoinGecko public API (one call per endpoint, 2026-10-30), kept as test
+  fixtures. CoinGecko's API terms apply (attribution "Powered by CoinGecko";
+  no resale or redistribution of API access); these files are NOT licensed to
+  you by this project.
 - configs/model-cards/*.json -- model configuration files published by their
   model authors (Qwen, Microsoft, IBM, Hugging Face), under those authors'
   licences.

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ask.py -- ask marfin-llm a question, on the i5-12400 (D-0135).
+ask.py -- ask Andarz (اندرز) a question, on the i5-12400 (D-0135).
 
-    python scripts\\ask.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf "What was Apple's net income in fiscal 2023?"
+    python scripts\\ask.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf "What is the P/E ratio for a price of 150 and EPS of 8.4?"
     python scripts\\ask.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf          (interactive; /quit to leave)
 
 WHY THIS FILE EXISTS
@@ -21,6 +21,15 @@ already (D-0091).
 WHAT IT ADDS, AND WHY EACH PIECE
 --------------------------------
   route      One route per question, chosen without the model:
+               about  -- "introduce yourself", «خودت را معرفی کن», "what can
+                         you do": answered from the live registries (D-0143),
+                         never by the model, so it cannot go stale or improvise.
+               crypto -- a contract address (EVM 0x..., Solana, Tron), or a
+                         short question with "crypto"/"token"/"coin"/«رمزارز»/
+                         «توکن» or a Persian coin name: looked up on CoinGecko
+                         (market/crypto_resolve.py, D-0143), never by the model;
+                         ambiguous names list ranked candidates. Needs a DataHub
+                         (the web UI passes one); "Powered by CoinGecko".
                tools  -- the question carries >= 2 numbers AND the tool
                          selector matched a family (the measured calc path:
                          100 % tool-path correctness, Phase 7).
@@ -62,6 +71,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import time
 
@@ -86,7 +96,7 @@ TOP_K = 4
 DEFAULT_CORPUS = os.path.join("evals", "rag_corpus_combined.jsonl")
 DEFAULT_AUDIT = os.path.join(os.path.expanduser("~"), ".marfin", "ask_audit.jsonl")
 
-ROUTES = ("tools", "macro", "rag", "plain")
+ROUTES = ("about", "crypto", "tools", "macro", "rag", "plain")
 
 WARN_CONTRADICTED = {
     "en": "WARNING: a figure in this reply does NOT match the evidence shown to the model. "
@@ -105,6 +115,231 @@ WARN_TOOL_NOT_RESTATED = {
           "\u06a9\u0646\u062f. \u0639\u062f\u062f \u062e\u0637 \u0627\u0628\u0632\u0627\u0631\u060c \u067e\u0627"
           "\u0633\u062e \u0645\u062d\u0627\u0633\u0628\u0647\u200c\u0634\u062f\u0647 \u0627\u0633\u062a.",
 }
+
+
+# ---------------------------------------------------------------------------
+# D-0143: the self-introduction, decided WITHOUT the model.
+#
+# MEASURED on the owner's machine: asked to introduce itself, the plain route
+# (SYSTEM_BASE: one sentence, no name, no feature list) let the 4B model
+# improvise, and it talked about Apple -- because Apple was the UI's example
+# chip and sits in the SEC/RAG data. SYSTEM_BASE is part of the recorded,
+# graded runs and is NOT edited. Instead this route answers from the live
+# registries at answer time: VERSION, the web UI's NAV, the tool registry, the
+# catalogue's categories, the DataHub source list, the provider registry and
+# the execution mode. A page, tool or source added later appears here with no
+# edit, and nothing here is a number typed by hand.
+# ---------------------------------------------------------------------------
+_ABOUT_EN = re.compile(
+    r"^(?:please |hi |hello |hey )*(?:introduce yourself|who are you|what are you|what can you do|what do you do|"
+    r"what can i do here|tell me about yourself|about you|what is andarz|who is andarz|help)\b")
+_ABOUT_FA = re.compile(
+    r"(?:خودت(?:و| را)? معرفی کن|معرفی کن خودت|خودتو? معرفی|تو کی هستی|شما کی هستید|تو چی هستی|"
+    r"چه کارهایی (?:بلدی|می ?تونی|می ?توانی|انجام می ?دهی)|چه کار(?:ی)? (?:بلدی|می ?کنی|می ?توانی)|"
+    r"اندرز (?:چیست|چیه|کیست)|درباره خودت|از خودت بگو|قابلیت هایت|امکانات(?:ت| تو| برنامه)?(?: چیست| چیه)?$)")
+_FA_DIGITS = str.maketrans("0123456789", "\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9")
+EVIDENCE_LABELS = (
+    ("VERIFIED", "checked against the source itself", "با خود منبع بررسی شده"),
+    ("MEASURED", "measured on a real run or a live call", "در اجرای واقعی یا تماس زنده اندازه گیری شده"),
+    ("COMPUTED", "calculated by a deterministic tool from stated inputs", "با ابزار قطعی از ورودی های مشخص محاسبه شده"),
+    ("ESTIMATED", "an estimate, with its basis stated", "برآورد، همراه با مبنای آن"),
+    ("UNKNOWN", "not known; never replaced by a guess or a 0", "نامعلوم؛ هرگز با حدس یا صفر جایگزین نمی شود"),
+)
+
+
+def _norm_q(question):
+    t = (question or "").strip().lower()
+    t = t.replace("\u200c", " ").replace("\u064a", "\u06cc").replace("\u0643", "\u06a9").replace("\u0623", "\u0627")
+    t = re.sub(r"[\u061f?!.\u060c,;:\u06d4\u00bb\u00ab\"'()]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def is_about(question):
+    """True for a short self-introduction / capability question (en or fa). Never true for a long question."""
+    t = _norm_q(question)
+    if not t or len(t) > 60:
+        return False
+    return bool(_ABOUT_EN.search(t) or _ABOUT_FA.search(t))
+
+
+# ---------------------------------------------------------------------------
+# D-0143: crypto token lookup, decided WITHOUT the model (CoinGecko data only).
+# ---------------------------------------------------------------------------
+_CRYPTO_KW = re.compile(r"(?:\b(?:crypto|cryptocurrency|token|coin)\b|\u0631\u0645\u0632\s?\u0627\u0631\u0632|"
+                        r"\u062a\u0648\u06a9\u0646|\u0627\u0631\u0632 \u062f\u06cc\u062c\u06cc\u062a\u0627\u0644)")
+_CRYPTO_STOP = set("what whats is are the price prices of for a an me show find look up lookup about info information "
+                   "crypto cryptocurrency token coin tell current today now please on coingecko search details "
+                   "\u0642\u06cc\u0645\u062a \u0686\u0646\u062f \u0686\u0646\u062f\u0647 \u0686\u0642\u062f\u0631 "
+                   "\u0627\u0633\u062a \u0647\u0633\u062a \u0631\u0645\u0632\u0627\u0631\u0632 \u0631\u0645\u0632 "
+                   "\u0627\u0631\u0632 \u062f\u06cc\u062c\u06cc\u062a\u0627\u0644 \u062a\u0648\u06a9\u0646 "
+                   "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062f\u0631\u0628\u0627\u0631\u0647 \u0631\u0627 "
+                   "\u0631\u0648 \u0628\u06af\u0648 \u0646\u0634\u0627\u0646 \u0628\u062f\u0647 \u062c\u0633\u062a\u062c\u0648\u06cc "
+                   "\u0627\u0645\u0631\u0648\u0632 \u0627\u0644\u0627\u0646".split())
+_ADDR_RE = re.compile(r"(0[xX][0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})")
+
+
+def crypto_query(question):
+    """The token text to look up, or None. Addresses first (case kept), then Persian names, then keywords."""
+    from market import crypto_resolve as CR
+    raw = question or ""
+    if len(raw) > 120:
+        return None
+    for m in _ADDR_RE.finditer(CR.normalise(raw)):
+        c = CR.classify(m.group(1))
+        if c["kind"] in ("evm", "solana", "tron"):
+            return c["value"]
+    t = _norm_q(raw)
+    for k in sorted(CR.ALIASES_FA, key=len, reverse=True):
+        if re.search(r"(?<!\S)%s(?!\S)" % re.escape(k), t):
+            return k
+    if not _CRYPTO_KW.search(t):
+        return None
+    words = [w for w in re.findall(r"[\w.\-]+", t) if w not in _CRYPTO_STOP]
+    return " ".join(words) if 1 <= len(words) <= 3 else None
+
+
+def _cfmt(v, pct=False):
+    if v is None:
+        return "\u2014"
+    if pct:
+        return "%s %+.2f%%" % ("\u25b2" if v > 0 else ("\u25bc" if v < 0 else "\u25cf"), v)
+    if abs(v) >= 1:
+        return "{:,.2f}".format(v)
+    return "%.6g" % v
+
+
+def crypto_text(lang, res):
+    """The lookup result as text. Every figure is CoinGecko's (RETRIEVED); a missing one is a dash."""
+    fa = lang == "fa"
+    st, vs = res["status"], str(res.get("vs") or "usd").upper()
+    lines = []
+    if res.get("alias"):
+        lines.append(("\u0646\u0627\u0645 \u0641\u0627\u0631\u0633\u06cc \u00ab%s\u00bb \u0628\u0627 \u062c\u062f\u0648\u0644 \u062b\u0627\u0628\u062a "
+                      "(STATIC) \u0628\u0647 \u00ab%s\u00bb \u062a\u0628\u062f\u06cc\u0644 \u0634\u062f." if fa else
+                      "Persian name \u00ab%s\u00bb mapped to \u00ab%s\u00bb by the STATIC alias table.")
+                     % (res["alias"]["fa"], res["alias"]["search"]))
+    if st == "resolved":
+        c = res["coin"]
+        L = (("\u0642\u06cc\u0645\u062a", "Price"), ("\u062a\u063a\u06cc\u06cc\u0631 \u06f2\u06f4 \u0633\u0627\u0639\u062a", "24h change"),
+             ("\u062a\u063a\u06cc\u06cc\u0631 \u06f7 \u0631\u0648\u0632", "7d change"), ("\u0627\u0631\u0632\u0634 \u0628\u0627\u0632\u0627\u0631", "Market cap"),
+             ("\u0631\u062a\u0628\u0647", "Rank"), ("\u062d\u062c\u0645 \u06f2\u06f4 \u0633\u0627\u0639\u062a", "24h volume"),
+             ("\u0628\u0627\u0644\u0627\u062a\u0631\u06cc\u0646/\u067e\u0627\u06cc\u06cc\u0646\u200c\u062a\u0631\u06cc\u0646 \u06f2\u06f4 \u0633\u0627\u0639\u062a", "24h high / low"),
+             ("\u0633\u0642\u0641 \u062a\u0627\u0631\u06cc\u062e\u06cc (ATH)", "All-time high"), ("\u06a9\u0641 \u062a\u0627\u0631\u06cc\u062e\u06cc (ATL)", "All-time low"),
+             ("\u0639\u0631\u0636\u0647\u0654 \u062f\u0631 \u06af\u0631\u062f\u0634 / \u06a9\u0644 / \u062d\u062f\u0627\u06a9\u062b\u0631", "Supply circulating / total / max"),
+             ("\u0622\u062e\u0631\u06cc\u0646 \u0628\u0647\u200c\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc CoinGecko", "CoinGecko last updated"))
+        i = 1 if not fa else 0
+        vals = ("%s %s" % (_cfmt(c["price"]), vs), _cfmt(c["change_24h"], True), _cfmt(c["change_7d"], True),
+                "%s %s" % (_cfmt(c["market_cap"]), vs), "#%d" % c["rank"] if c.get("rank") else "\u2014",
+                "%s %s" % (_cfmt(c["volume"]), vs), "%s / %s" % (_cfmt(c["high_24h"]), _cfmt(c["low_24h"])),
+                "%s (%s)" % (_cfmt(c["ath"]), c.get("ath_date") or "\u2014"),
+                "%s (%s)" % (_cfmt(c["atl"]), c.get("atl_date") or "\u2014"),
+                "%s / %s / %s" % (_cfmt(c["circulating_supply"]), _cfmt(c["total_supply"]), _cfmt(c["max_supply"])),
+                c.get("last_updated") or "\u2014")
+        lines.append("**%s (%s)** \u2014 CoinGecko id: %s%s" % (c["name"], c["symbol"], c["id"],
+                     ("  \u00b7  " + ("\u06cc\u0627\u0641\u062a\u0647 \u0631\u0648\u06cc " if fa else "found on ") + c["found_on"]) if c.get("found_on") else ""))
+        lines += ["- %s: %s" % (lab[i], v) for lab, v in zip(L, vals)]
+        from market import coingecko as CG
+        addrs = [(p[2], c["platforms"][p[1]]) for p in CG.PLATFORMS if c["platforms"].get(p[1])]
+        if addrs:
+            lines.append("**%s**" % ("\u0622\u062f\u0631\u0633 \u0642\u0631\u0627\u0631\u062f\u0627\u062f\u0647\u0627" if fa else "Contract addresses"))
+            lines += ["- %s: %s" % a for a in addrs]
+        if res.get("candidates"):
+            lines.append(("\u0646\u062a\u0627\u06cc\u062c \u0645\u0634\u0627\u0628\u0647 \u062f\u06cc\u06af\u0631: " if fa else "Other matches: ")
+                         + ", ".join("%s (%s)" % (x["id"], x["symbol"]) for x in res["candidates"][:5]))
+    elif st == "ambiguous":
+        lines.append(("\u00ab%s\u00bb \u0628\u0627 \u0686\u0646\u062f \u0631\u0645\u0632\u0627\u0631\u0632 \u062c\u0648\u0631 \u0627\u0633\u062a\u061b \u0628\u062f\u0648\u0646 \u062d\u062f\u0633 "
+                      "\u06cc\u06a9\u06cc \u0627\u0646\u062a\u062e\u0627\u0628 \u0646\u0645\u06cc\u200c\u0634\u0648\u062f. \u0634\u0646\u0627\u0633\u0647 (id) \u06cc\u0627 \u0622\u062f\u0631\u0633 \u0642\u0631\u0627\u0631\u062f\u0627\u062f \u0631\u0627 \u0628\u0646\u0648\u06cc\u0633\u06cc\u062f:"
+                      if fa else "\u00ab%s\u00bb matches several coins; none is picked silently. Ask again with the id or the contract address:")
+                     % res["query"])
+        lines += ["- %s (%s)%s" % (x["id"], x["symbol"], "  rank #%d" % x["rank"] if x.get("rank") else "  unranked")
+                  for x in res["candidates"]]
+    elif st == "not_found":
+        lines.append(("CoinGecko \u0631\u0645\u0632\u0627\u0631\u0632\u06cc \u0628\u0631\u0627\u06cc \u00ab%s\u00bb \u0646\u062f\u0627\u0631\u062f." if fa
+                      else "CoinGecko has no coin for \u00ab%s\u00bb.") % res["query"])
+    elif st == "invalid":
+        lines.append(("\u0648\u0631\u0648\u062f\u06cc \u0645\u0639\u062a\u0628\u0631 \u0646\u06cc\u0633\u062a: %s" if fa else "Not a valid input: %s") % res["reason"])
+    else:
+        lines.append(("\u062f\u0627\u062f\u0647 \u062f\u0631 \u062f\u0633\u062a\u0631\u0633 \u0646\u06cc\u0633\u062a: %s" if fa else "Data unavailable: %s") % res.get("error"))
+    if res.get("checked"):
+        lines.append(("\u0632\u0646\u062c\u06cc\u0631\u0647\u200c\u0647\u0627: " if fa else "Chains: ")
+                     + ", ".join("%s %s" % (n, s) for n, s in res["checked"]))
+    lines.append(("RETRIEVED \u0627\u0632 CoinGecko\u060c \u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 \u0686\u0646\u062f \u0635\u0631\u0627\u0641\u06cc\u061b \u0644\u062d\u0638\u0647\u200c\u0627\u06cc \u0646\u06cc\u0633\u062a \u0648 \u062a\u0648\u0635\u06cc\u0647\u0654 \u0645\u0627\u0644\u06cc \u0646\u06cc\u0633\u062a."
+                  if fa else "RETRIEVED from CoinGecko, aggregated across exchanges; not real-time and not financial advice."))
+    return "\n".join(lines)
+
+
+def _ui_pages():
+    """The web UI's NAV, read live (the content follows any page added to or removed from NAV)."""
+    # No import (ui imports this module; an import here would be a cycle): the UI passes its
+    # NAV as pages=, and a caller that already loaded the UI is read from sys.modules.
+    ui_mod = sys.modules.get("ui")
+    return tuple(getattr(ui_mod, "NAV", ()) or ())
+
+
+def about_facts(pages=None):
+    """Every fact the self-introduction states, each read from its registry at call time."""
+    from tools.registry import tool_schemas
+    from tools import catalog_fa as CATALOG
+    from rag import datahub as DH
+    from llm import providers as LP
+    from execution import mode as MODE
+    try:
+        version = open(os.path.join(_ROOT, "VERSION"), encoding="utf-8").read().strip()
+    except OSError:
+        version = "UNKNOWN"
+    keys = []
+    for row in DH.SOURCES_FA:
+        need = re.findall(r"[A-Z][A-Z0-9_]*_(?:API_KEY|EMAIL|KEY)", row[3])
+        keys.append({"key": row[0], "name_fa": row[1], "what_fa": row[2], "access_fa": row[3], "env": need,
+                     "optional": "\u0628\u062f\u0648\u0646 \u06a9\u0644\u06cc\u062f" in row[3]})
+    return {
+        "name": "Andarz", "name_fa": "\u0627\u0646\u062f\u0631\u0632", "version": version,
+        "pages": tuple(pages) if pages is not None else _ui_pages(),
+        "n_tools": len(tool_schemas()),
+        "categories_fa": tuple(t for _c, t in CATALOG.CATEGORIES),
+        "sources": keys,
+        "n_remote_providers": len([k for k in LP.PROVIDERS if k != "local"]),
+        "mode": MODE.manifest()["mode"],
+        "routes": ROUTES,
+        "labels": EVIDENCE_LABELS,
+    }
+
+
+def about_text(lang, pages=None):
+    f = about_facts(pages)
+    if lang == "fa":
+        d = (lambda n: str(n).translate(_FA_DIGITS))
+        lines = ["**\u0627\u0646\u062f\u0631\u0632 (Andarz)**\u060c \u0646\u0633\u062e\u0647\u0654 %s: \u062f\u0633\u062a\u06cc\u0627\u0631 \u0645\u0627\u0644\u06cc \u0645\u062d\u0644\u06cc \u0648 \u062f\u0648\u0632\u0628\u0627\u0646\u0647 (\u0641\u0627\u0631\u0633\u06cc \u0648 \u0627\u0646\u06af\u0644\u06cc\u0633\u06cc) \u06a9\u0647 \u0631\u0648\u06cc \u0647\u0645\u06cc\u0646 \u0631\u0627\u06cc\u0627\u0646\u0647 \u0627\u062c\u0631\u0627 \u0645\u06cc \u0634\u0648\u062f. \u0627\u0648\u0644 \u0634\u0627\u0647\u062f\u060c \u0628\u0639\u062f \u067e\u0627\u0633\u062e." % f["version"],
+                 "", "**\u0635\u0641\u062d\u0647 \u0647\u0627 (%s):**" % d(len(f["pages"]))]
+        lines += ["- %s" % t for _h, t in f["pages"]] or ["- (\u0631\u0627\u0628\u0637 \u0648\u0628: python scripts/ui.py)"]
+        lines += ["", "**\u0645\u0627\u0634\u06cc\u0646 \u062d\u0633\u0627\u0628 \u0647\u0627:** %s \u0645\u062d\u0627\u0633\u0628\u0647\u0654 \u0642\u0637\u0639\u06cc \u0628\u062f\u0648\u0646 \u0645\u062f\u0644\u060c \u062f\u0631 %s \u062f\u0633\u062a\u0647: %s." % (
+            d(f["n_tools"]), d(len(f["categories_fa"])), "\u060c ".join(f["categories_fa"])),
+                  "", "**\u0645\u0646\u0627\u0628\u0639 \u062f\u0627\u062f\u0647 (%s)** \u2014 \u0647\u06cc\u0686 \u06a9\u062f\u0627\u0645 \u0644\u062d\u0638\u0647 \u0627\u06cc \u06cc\u0627 \u0642\u0627\u0628\u0644 \u0645\u0639\u0627\u0645\u0644\u0647 \u0646\u06cc\u0633\u062a:" % d(len(f["sources"]))]
+        lines += ["- %s: %s (%s)" % (s["name_fa"], s["what_fa"], s["access_fa"]) for s in f["sources"]]
+        lines += ["", "**\u0645\u0648\u062a\u0648\u0631 \u067e\u0627\u0633\u062e:** \u0622\u0641\u0644\u0627\u06cc\u0646 (\u0645\u062f\u0644 \u0645\u062d\u0644\u06cc\u060c \u067e\u06cc\u0634 \u0641\u0631\u0636\u060c \u0647\u06cc\u0686 \u062f\u0627\u062f\u0647 \u0627\u06cc \u0627\u0632 \u0631\u0627\u06cc\u0627\u0646\u0647 \u062e\u0627\u0631\u062c \u0646\u0645\u06cc \u0634\u0648\u062f) \u06cc\u0627 \u0622\u0646\u0644\u0627\u06cc\u0646 (%s \u0627\u0631\u0627\u0626\u0647 \u062f\u0647\u0646\u062f\u0647\u0654 \u0622\u0645\u0627\u062f\u0647 \u06cc\u0627 \u0627\u0631\u0627\u0626\u0647 \u062f\u0647\u0646\u062f\u0647\u0654 \u062e\u0648\u062f\u062a\u0627\u0646\u061b \u06a9\u0644\u06cc\u062f \u0641\u0642\u0637 \u062f\u0631 \u0645\u062a\u063a\u06cc\u0631 \u0645\u062d\u06cc\u0637\u06cc)." % d(f["n_remote_providers"]),
+                  "**\u0645\u0633\u06cc\u0631\u0647\u0627\u06cc \u067e\u0627\u0633\u062e (\u0628\u062f\u0648\u0646 \u0645\u062f\u0644 \u0627\u0646\u062a\u062e\u0627\u0628 \u0645\u06cc \u0634\u0648\u0646\u062f):** %s." % "\u060c ".join(f["routes"]),
+                  "", "**\u0627\u06cc\u0645\u0646\u06cc:** \u062d\u0627\u0644\u062a \u0627\u062c\u0631\u0627 %s (\u0641\u0642\u0637 \u062a\u062d\u0644\u06cc\u0644). \u0645\u0639\u0627\u0645\u0644\u0647\u0654 \u0648\u0627\u0642\u0639\u06cc \u063a\u06cc\u0631\u0641\u0639\u0627\u0644 \u0627\u0633\u062a \u0648 \u0627\u0632 \u0627\u06cc\u0646\u062c\u0627 \u0631\u0648\u0634\u0646 \u0646\u0645\u06cc \u0634\u0648\u062f\u061b \u0645\u0639\u0627\u0645\u0644\u0647\u0654 \u06a9\u0627\u063a\u0630\u06cc \u0641\u0642\u0637 \u0634\u0628\u06cc\u0647 \u0633\u0627\u0632\u06cc \u0627\u0633\u062a. \u062e\u0631\u0648\u062c\u06cc \u062a\u062d\u0644\u06cc\u0644\u06cc \u0627\u0633\u062a\u060c \u0646\u0647 \u062a\u0648\u0635\u06cc\u0647\u0654 \u0645\u0627\u0644\u06cc." % f["mode"],
+                  "", "**\u0628\u0631\u0686\u0633\u0628 \u0647\u0627\u06cc \u0634\u0627\u0647\u062f:**"]
+        lines += ["- %s: %s" % (k, fa) for k, _en, fa in f["labels"]]
+        lines += ["", "\u0627\u06cc\u0646 \u067e\u0627\u0633\u062e \u0628\u062f\u0648\u0646 \u0645\u062f\u0644 \u0648 \u0627\u0632 \u0641\u0647\u0631\u0633\u062a \u0647\u0627\u06cc \u062e\u0648\u062f \u0628\u0631\u0646\u0627\u0645\u0647 \u0633\u0627\u062e\u062a\u0647 \u0634\u062f\u0647 \u0627\u0633\u062a (VERIFIED \u062f\u0631 \u0644\u062d\u0638\u0647\u0654 \u067e\u0627\u0633\u062e)."]
+        return "\n".join(lines)
+    lines = ["**Andarz (\u0627\u0646\u062f\u0631\u0632)**, version %s: a local, bilingual (Persian and English) financial assistant "
+             "that runs on this computer. Evidence first, then the answer." % f["version"],
+             "", "**Pages (%d):**" % len(f["pages"])]
+    lines += ["- %s  (%s)" % (h, t) for h, t in f["pages"]] or ["- (web UI: python scripts/ui.py)"]
+    lines += ["", "**Calculators:** %d deterministic tools, no model needed, in %d categories." % (f["n_tools"], len(f["categories_fa"])),
+              "", "**Data sources (%d)** -- none is real-time or tradable:" % len(f["sources"])]
+    lines += ["- %s%s" % (s["key"], (" (no key; optional %s)" if s["optional"] else " (needs %s)") % ", ".join(s["env"])
+                          if s["env"] else " (no key)") for s in f["sources"]]
+    lines += ["", "**Engines:** offline (the local model, the default; nothing leaves the machine) or online "
+                  "(%d built-in providers or your own; keys only in environment variables)." % f["n_remote_providers"],
+              "**Routes (chosen without the model):** %s." % ", ".join(f["routes"]),
+              "", "**Safety:** execution mode %s (analysis only). Live trading is disabled and cannot be switched on from "
+                  "here; paper trading is a simulation. The output is analysis, not financial advice." % f["mode"],
+              "", "**Evidence labels:**"]
+    lines += ["- %s: %s" % (k, en) for k, en, _fa in f["labels"]]
+    lines += ["", "This reply was built from the program's own registries, without the model (VERIFIED at answer time)."]
+    return "\n".join(lines)
 
 
 def _lang(question):
@@ -139,8 +374,10 @@ class Assistant(object):
     """
 
     def __init__(self, runner, index=None, macro_fetch=None, audit=None,
-                 clock=None, use_macro=True):
+                 clock=None, use_macro=True, pages=None, hub=None):
         self.runner = runner
+        self.hub = hub                           # D-0143: DataHub for the crypto route (None: route off)
+        self.pages = pages                       # None -> the web UI's NAV, read live (D-0143)
         self.index = index
         self.macro_fetch = macro_fetch or MACRO.fetch
         self.audit = audit
@@ -155,6 +392,12 @@ class Assistant(object):
     # ---- routing -------------------------------------------------------
     def route(self, question):
         """(route, detail). Decided without the model."""
+        if is_about(question):                   # D-0143: before every other route
+            return "about", {}
+        if self.hub is not None:                 # D-0143: before tools (an address is full of digits)
+            cq = crypto_query(question)
+            if cq:
+                return "crypto", {"query": cq}
         from tools.selector import select_tools
         sel = select_tools(question)
         # D-0136: numbers that are part of a catalogue series NAME ("10-year",
@@ -288,6 +531,19 @@ class Assistant(object):
                "evidence": [], "tool_results": [], "check": None, "data_as_of": None}
         route, detail = self.route(question)
         text = None
+        if route == "about":
+            # Never the model: the registries answer (the runner may even be None here).
+            text = about_text(out["lang"], self.pages)
+            out["about"] = True
+            out["no_model"] = "about"
+        if route == "crypto":
+            # Never the model: CoinGecko's figures, shown as retrieved (the runner may be None here).
+            res = self.hub.crypto_lookup(detail["query"])
+            text = crypto_text(out["lang"], res)
+            out["crypto"] = res
+            out["no_model"] = "crypto"
+            out["sources"] = ["coingecko"]
+            out["data_as_of"] = (res.get("coin") or {}).get("last_updated")
         if route == "tools":
             text = self._tools(question, out)
         elif route == "macro":
@@ -337,7 +593,7 @@ class Assistant(object):
         for name in out["sources"]:
             for k in ("fred", "bis_statistics", "ecb_data_portal", "world_bank_indicators",
                       "imf_sdmx_data", "gdelt_doc", "nyfed_markets_data", "sec_edgar_xbrl",
-                      "sec_edgar_submissions"):
+                      "sec_edgar_submissions", "coingecko"):
                 try:
                     if k == name or get_source(k).name == name:
                         keys.append(k)
@@ -346,11 +602,17 @@ class Assistant(object):
         return required_notices(keys)
 
 
+#: D-0143: turns answered without a model -> (render note, HTML meta note)
+_NO_MODEL = {"about": ("built from the registries", "registries"),
+             "crypto": ("CoinGecko data as retrieved", "CoinGecko")}
+
+
 def render(out):
     """The answer as printed. Every section is labelled; nothing is hidden."""
     fa = out["lang"] == "fa"
-    lines = ["route: %s%s" % (out["route"], "   data as of: %s" % out["data_as_of"]
-                              if out.get("data_as_of") else "")]
+    lines = ["route: %s%s%s" % (out["route"], "   data as of: %s" % out["data_as_of"]
+                                if out.get("data_as_of") else "",
+                                "   (no model: %s)" % _NO_MODEL[out["no_model"]][0] if out.get("no_model") else "")]
     for w in out["warnings"]:
         lines.append(w)
     lines.append("")
@@ -402,21 +664,21 @@ DEFAULT_HTML = os.path.join(os.path.expanduser("~"), ".marfin", "ask_answer.html
 
 _HTML_HEAD = """<!DOCTYPE html>
 <html lang="fa"><head><meta charset="utf-8">%s
-<title>marfin-llm</title>
+<title>Andarz</title>
 <style>
 body{font-family:Vazirmatn,"Segoe UI",Tahoma,Arial,sans-serif;font-size:17px;line-height:1.9;
-     max-width:60em;margin:1.5em auto;padding:0 1em;background:#fafafa;color:#222}
-.turn{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1em 1.4em;margin:1em 0}
+     max-width:60em;margin:1.5em auto;padding:0 1em;background:#F8EADC;color:#09251C}
+.turn{background:#FDF6EE;border:1px solid #E3C49E;border-radius:8px;padding:1em 1.4em;margin:1em 0}
 .q{font-weight:bold;font-size:1.1em}
-.meta{color:#666;font-size:.85em;direction:ltr;text-align:left}
-.warn{background:#fff3cd;border:1px solid #e0b400;padding:.5em .8em;border-radius:6px;margin:.6em 0}
+.meta{color:#3E5A4E;font-size:.85em;direction:ltr;text-align:left}
+.warn{background:#F6E0C4;border:1px solid #A55704;padding:.5em .8em;border-radius:6px;margin:.6em 0}
 .reply p{margin:.4em 0}
 .reply ul,.reply ol{margin:.3em 0;padding-inline-start:1.6em}
 .reply li{margin:.15em 0}
-.ev,.calc{font-size:.9em;color:#333;border-top:1px dashed #ccc;margin-top:.8em;padding-top:.5em}
+.ev,.calc{font-size:.9em;color:#09251C;border-top:1px dashed #E3C49E;margin-top:.8em;padding-top:.5em}
 .ev div,.calc div{margin:.25em 0}
-.cite{color:#777;font-size:.85em;direction:ltr;text-align:left}
-.note{color:#555;font-size:.85em;margin-top:.8em}
+.cite{color:#3E5A4E;font-size:.85em;direction:ltr;text-align:left}
+.note{color:#3E5A4E;font-size:.85em;margin-top:.8em}
 </style></head><body>
 """
 
@@ -477,9 +739,10 @@ def turn_html(out):
     rtl = out["lang"] == "fa"
     parts.append('<div class="turn" dir="%s">' % ("rtl" if rtl else "ltr"))
     parts.append('<div class="q" dir="auto">%s</div>' % _inline(out["question"]))
-    parts.append('<div class="meta">route: %s%s</div>' % (
+    parts.append('<div class="meta">route: %s%s%s</div>' % (
         _h.escape(out["route"]), (" &middot; data as of: %s" % _h.escape(out["data_as_of"]))
-        if out.get("data_as_of") else ""))
+        if out.get("data_as_of") else "", " &middot; no model (%s)" % _NO_MODEL[out["no_model"]][1]
+        if out.get("no_model") else ""))
     for w in out["warnings"]:
         parts.append('<div class="warn" dir="auto">%s</div>' % _inline(w))
     parts.append('<div class="reply">%s</div>' % _reply_html(out["reply"] or "(empty reply)"))
@@ -544,7 +807,7 @@ def open_audit(path):
 
 
 def main(argv=None, runner=None, stdin=None):
-    ap = argparse.ArgumentParser(description="Ask marfin-llm (local model only).")
+    ap = argparse.ArgumentParser(description="Ask Andarz (local model only).")
     ap.add_argument("question", nargs="?", help="omit for an interactive session")
     ap.add_argument("--model", help="path to the GGUF file (in-process llama.cpp)")
     ap.add_argument("--server", choices=("ollama", "lmstudio"),
@@ -628,7 +891,7 @@ def main(argv=None, runner=None, stdin=None):
         one(a.question)
         return 0
     src = stdin or sys.stdin
-    print("marfin-llm -- ask in Persian or English. /quit to leave.")
+    print("Andarz -- ask in Persian or English. /quit to leave.")
     while True:
         try:
             sys.stdout.write("\n> ")

@@ -35,7 +35,7 @@ python scripts\ui.py                      # without a model: everything except "
 
 **3b. Ask your own question** (D-0135). The same prompts, options and checks as the recommended run above:
 ```powershell
-python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf "What was Apple's net income in fiscal 2023?"
+python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf "What is the P/E ratio for a price of 150 and EPS of 8.4?"
 python scripts\ask.py --model C:\models\Qwen3.5-4B-Q4_K_M.gguf      # interactive; /quit to leave
 ```
 Live US macro data and central-bank policy rates need `setx FRED_API_KEY <key>` (FRED) and network access
@@ -54,7 +54,7 @@ LIVE_TRADING cannot be reached by configuration (SS.6.1).
 
 **5. Verify the installation**
 ```bash
-bash tests/run_all.sh          # 31 suites; no model needed
+bash tests/run_all.sh          # 32 suites; no model needed
 ```
 
 **Secrets:** API keys go in environment variables (see `.env.example`), never in files under version control.

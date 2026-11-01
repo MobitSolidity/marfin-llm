@@ -2,7 +2,7 @@
 # Fetch REAL XBRL facts from SEC EDGAR (public domain, permitted source).
 # One concept per company. A contact-bearing User-Agent is mandatory: SEC
 # returns 403 without one, and that is their stated condition of access.
-UA="marfin-llm/0.1 (contact@example.com)"
+UA="Andarz/0.15 (contact@example.com)"
 OUT=/tmp/r20/raw
 mkdir -p "$OUT"
 

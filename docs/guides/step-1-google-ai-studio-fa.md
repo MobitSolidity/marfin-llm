@@ -150,8 +150,8 @@ python scripts\panel.py
 بعد در کنسول تعاملی:
 
 ```
-marfin> engine google
-marfin> run
+andarz> engine google
+andarz> run
 ```
 
 کنسول دستور را چاپ می‌کند و **می‌ایستد**. دستور اجرا این است:

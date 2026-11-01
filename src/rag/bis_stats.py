@@ -53,7 +53,7 @@ def data_url(dataflow: str, key: str, last_n: int = 1) -> str:
 
 
 def _http_get(url: str, timeout: float = 20.0) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "marfin-llm/0.10 (personal research)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Andarz/0.15 (personal research)"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")

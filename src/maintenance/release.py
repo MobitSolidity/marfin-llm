@@ -68,6 +68,10 @@ PINNED_FILES = (
     "src/rag/sec_facts.py",
     "assets/brand/logo.svg",
     "assets/brand/favicon.svg",
+    # D-0143: the token resolver, and the two brand files the rebranded UI now serves.
+    "src/market/crypto_resolve.py",
+    "assets/brand/mark.svg",
+    "assets/brand/logo-dark.svg",
     "src/safety/untrusted.py",
     "src/tools/registry.py",
     "scripts/run_phase4.py",

@@ -129,7 +129,13 @@
     "tests/test_attribution.py",
     "tests/mutate_attribution.py",
     "evidence/phase4_attribution_2026-09-27.json",
-    "docs/phase-reports/phase-4.md"
+    "docs/phase-reports/phase-4.md",
+    "tools/build_brand.py",
+    "src/market/crypto_resolve.py",
+    "tests/fixtures/coingecko/",
+    "tests/test_d0143.py",
+    "tests/mutate_d0143.py",
+    "releases/0.15.0.json"
   ],
   "decisions": [
     "D-0001 Master prompt v2.0 is canonical",
@@ -227,7 +233,8 @@
     "D-0107",
     "D-0108",
     "D-0109 graphify installed and run (supersedes D-0067 measurement); cross-check exposed 12 submodule-import edges missing from tools/graph_project.py, fixed; tools/impact.py maps a change to the suites and mutation batteries it reaches",
-    "D-0110 Phase 4 task 6 completed across all arms (scripts/attribute_failures.py); no failing threshold is MODEL-only; task 7 analysed: fine-tuning NOT recommended now, decision is the user's"
+    "D-0110 Phase 4 task 6 completed across all arms (scripts/attribute_failures.py); no failing threshold is MODEL-only; task 7 analysed: fine-tuning NOT recommended now, decision is the user's",
+    "D-0143 Andarz rebrand (vector brand set, repo/module/env names and history kept); palette 09251C/A55704/F3D2AF/F8EADC with AA contrast COMPUTED; responsive UI (browser audit 13/1182/222 -> 0/0/0, MEASURED); deterministic about route from live registries; CoinGecko token lookup (search, coin, contract; 7 chains; ambiguous -> ranked candidates; budget before the network); refresh controls; /monitor; /learn and first-run tour; release 0.15.0"
   ],
   "open_questions": [
     "Q8 [NOW LIVE - the gate condition is MEASURED]: decode speed came out at 4.12 tok/s median (4.47 on the probe) against the approved minimum of 8, so the 'if measured decode < 9 tok/s' condition is satisfied. Prefer (a) fallback to a 1.7B model, (b) accept the slower speed and lean on RAG, or (c) re-quantize lower? NOTE: 62.5% of generated tokens were wasted on truncated reasoning, so part of the felt slowness was my configuration, not the hardware. A corrected re-run should precede this choice. UPDATE 2026-08-21: the CAUSE of that waste is fixed (D-0057, budget 768 -> 2048) but the re-run has NOT been launched, so the decode figure standing against this gate is still the contaminated one.",
@@ -237,7 +244,11 @@
     "Q14 [D-0110]: all 3 Persian unanswerable RAG questions are refused in English (outcome=OK hides it; fa_not_in_persian=3). Approve a system-prompt line \"refuse in the language of the question\" for the next re-run?",
     "Q14 [RUN 2026-10-09, D-0114, MEASURED]: second turn lifted tools prose calc 12.5 -> 75 (remaining 2 are '10%' graded against 0.1 -- grader gap G2); refusal line took rag fa_not_in_persian 3 -> 0 but the new Persian refusal wording is unknown to is_abstention (gap G1) -> rag fabrication 0 -> 3; plain CAGR regressed to 20% / 10.94% (MODEL). Verdict still 3/7/2.",
     "Q15 [RESOLVED 2026-10-10, D-0115]: G1 and G2 approved and applied; blast radius MEASURED at exactly 6 rows, all in the Q14 run, all the intended ones.",
-    "Q16 [RESOLVED 2026-10-10, D-0115]: user ruled the Q14 FA-RISK-002 reply (sha256 6369ff55...9433) a hedged refusal; recorded in HUMAN_RULINGS."
+    "Q16 [RESOLVED 2026-10-10, D-0115]: user ruled the Q14 FA-RISK-002 reply (sha256 6369ff55...9433) a hedged refusal; recorded in HUMAN_RULINGS.",
+    "D-0143 Q1 [OPEN]: watchlist on /monitor -- needs a server-side store (e.g. ~/.marfin/watchlist.json, atomic write, CSRF form). Build it?",
+    "D-0143 Q2 [OPEN]: holders, liquidity, news and sentiment are UNKNOWN. Candidate sources to have their terms read: Etherscan/BscScan family (holders), GeckoTerminal or DexScreener (liquidity), GDELT (news; already registered, unreachable from the sandbox). None is used until its terms are verified and you approve it.",
+    "D-0143 Q3 [OPEN]: EIP-55 mixed-case checksums are not verified (Keccak-256 is not in the stdlib). Accept, or add a pure-Python Keccak (about 60 lines, tests against published vectors)?",
+    "D-0143 Q4 [OPEN]: the CoinGecko keyless budget (5/min) makes an unknown EVM address cost up to 5 calls. Set COINGECKO_DEMO_API_KEY (free) for 30/min?"
   ],
   "risks": [
     "R1 Sandbox RAM prevents all measurement (High, certain)",
@@ -320,8 +331,8 @@
   "next_phase": null,
   "next_phase_name": "Phase 11 STARTED on request (D-0140), BLOCKED: 3/8 prerequisites; waits on owner (broker, licensed real-time data, live-policy approval)",
   "next_phase_viable_in_sandbox": false,
-  "next_phase_note": "D-0142: providers manager (user-defined providers, base-URL/model overrides, online/offline engine, no-cost connection test, redirects refused); crypto (CoinGecko), forex pairs and US stocks (Alpha Vantage), SEC fundamentals; logo; repository cleanup; bilingual README; release 0.14.0. Phase 11 still SUSPENDED.",
-  "last_updated": "2026-10-29",
+  "next_phase_note": "D-0143: Andarz rebrand, palette, responsive UI, deterministic self-introduction, CoinGecko token lookup, refresh controls, /monitor, /learn and tour; release 0.15.0. Phase 11 still SUSPENDED.",
+  "last_updated": "2026-10-31",
   "user_answers": {
     "Q1": "16 GB RAM, Intel Core i5-12400, Windows 11, no GPU",
     "Q2": "16K context",
@@ -385,7 +396,7 @@
       "memory_under_load"
     ]
   },
-  "decisions_logged": "D-0001..D-0142",
+  "decisions_logged": "D-0001..D-0143",
   "risks_new": [
     "R10 Persian generation quality (CLOSED 2026-08-31, MEASURED BY HUMAN, VERDICT=FAIL, D-0081). All 37 gradeable cases graded by the user: GOOD 11, WEAK 13, BAD 7, WRONG_LANGUAGE 2, UNSUPPORTED 4. Two approved thresholds fail: unsupported_claim_rate 4/37=10.81% vs max 3%, and fabricated_financial_data_count 8 (machine 4 + human 4, DISJOINT sets) vs max 0. Worst case FA-CALC-002: model called the cagr tool correctly, then attributed a fabricated 9.74% to it ('based on the calculations performed by the tool') when 1.1^5 makes the answer exactly 10% -- fabrication wearing a citation, and the harness's own `fabricated` field for that case is None. The 15 no_output cases are a 2048-token budget failure (answers_lost_to_thinking_truncation=11), never counted as passes, so the graded 37 are a BEST CASE.",
     "R15 stale bytecode can invalidate verification - MITIGATED",
@@ -3291,5 +3302,82 @@
       "run_all_suites": 31
     },
     "release": "0.14.0"
+  },
+  "D-0143_andarz_rebrand_palette_responsive_about_crypto_refresh_monitor_learn_2026_10_31": {
+    "owner_request_2026_10_30": "YES DO THIS AND: GitHub About + items 1,3,2,8,4,6,5,7, one commit each",
+    "github_about": "description and 17 topics set (VERIFIED via the API)",
+    "rebrand": "Andarz (اندرز); repo URL, module names, env vars, ~/.marfin and history unchanged; marfin-theme fallback; 9 generated SVGs, wordmarks as paths",
+    "palette": {
+      "base": [
+        "#09251C",
+        "#A55704",
+        "#F3D2AF",
+        "#F8EADC"
+      ],
+      "text_amber": {
+        "light": "#8A4503",
+        "dark": "#ECA865"
+      },
+      "contrast_worst_text": {
+        "light": 4.99,
+        "dark": 5.39
+      },
+      "label": "COMPUTED from app.css"
+    },
+    "responsive": {
+      "audit": "dev-only Playwright, 19 pages x 6 widths",
+      "before": {
+        "overflow": 13,
+        "small_targets": 1182,
+        "small_inputs": 222
+      },
+      "after": {
+        "overflow": 0,
+        "small_targets": 0,
+        "small_inputs": 0
+      },
+      "label": "MEASURED"
+    },
+    "about_route": "first in Assistant.route(); EN/FA; from VERSION, NAV, tool_schemas(), DataHub sources, providers, mode, labels; never the model",
+    "crypto_lookup": {
+      "endpoints": [
+        "/search",
+        "/coins/{id}",
+        "/coins/{platform}/contract/{address}"
+      ],
+      "keyless": "all three HTTP 200 (MEASURED 2026-10-30); unknown contract -> 404 coin not found",
+      "chains": [
+        "ethereum",
+        "binance-smart-chain",
+        "polygon-pos",
+        "base",
+        "arbitrum-one",
+        "solana",
+        "tron"
+      ],
+      "budget_per_min": {
+        "keyless": 5,
+        "demo_key": 30
+      },
+      "cache_s": 600
+    },
+    "refresh": {
+      "min_interval_s": {
+        "coingecko": 60,
+        "alpha_vantage": 300,
+        "default": 60
+      },
+      "alpha_vantage_confirm": true,
+      "on_failure": "old figures kept, marked stale, error and retry shown",
+      "auto_refresh": false
+    },
+    "monitor": "crypto + US stocks; SMA/EMA/RSI/MACD COMPUTED; holders/liquidity/news/sentiment UNKNOWN; optional summary from facts only; watchlist not built",
+    "learn": "Persian, one section per NAV page, registry counts, inline SVG, checklist, glossary; CSS-first tour, localStorage in try/catch",
+    "tests": {
+      "test_d0143": 360,
+      "mutate_d0143": "53/53 killed (first run: 10 survivors, each got a test)"
+    },
+    "release": "0.15.0 (42 pinned files)",
+    "phase_11": "SUSPENDED"
   }
 }

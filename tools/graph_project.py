@@ -392,7 +392,7 @@ def report(graph, adj, clusters, stats):
     A = L.append
     mods = sorted(adj["ours"])
     A("=" * 74)
-    A("MARFIN-LLM STRUCTURE REPORT")
+    A("ANDARZ (marfin-llm) STRUCTURE REPORT")
     A("=" * 74)
     A("  method: stdlib `ast`, pipeline and confidence labels modelled on")
     A("          graphify (Apache-2.0). Every figure below is MEASURED from")

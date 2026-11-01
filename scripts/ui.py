@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ui.py -- marfin-llm in the browser: every capability on one local page (D-0140).
+ui.py -- Andarz (اندرز) in the browser: every capability on one local page (D-0140).
 
     python scripts\\ui.py --model C:\\models\\Qwen3.5-4B-Q4_K_M.gguf
     python scripts\\ui.py --server lmstudio --model-id qwen3.5-4b
@@ -93,10 +93,108 @@ PAPER_CASH = 100000.0
 #: Typed by the human on the commit form. Distinct from the kill-switch phrase on purpose.
 COMMIT_PHRASE = "CONFIRM"
 
-NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"), ("/calc", "فرمول‌ها و ماشین‌حساب‌ها"),
-       ("/ask", "پرسش از مدل"), ("/macro", "سری‌های کلان"), ("/paper", "معاملهٔ کاغذی"),
+NAV = (("/", "داشبورد"), ("/markets", "بازارها و داده‌ها"), ("/monitor", "پایش دارایی"),
+       ("/calc", "فرمول‌ها و ماشین‌حساب‌ها"),
+       ("/ask", "پرسش از مدل"), ("/learn", "راهنما و آموزش"), ("/macro", "سری‌های کلان"), ("/paper", "معاملهٔ کاغذی"),
        ("/audit", "گزارش ممیزی"), ("/maintenance", "نگهداری"), ("/providers", "ارائه‌دهنده‌ها"),
        ("/phase11", "فاز ۱۱ (معلق)"))
+
+#: D-0143(7): /learn and the first-run tour. One entry per NAV page (a test fails if a NAV page has
+#: none). {placeholders} are filled from the live registries at render time -- no count is typed here.
+LEARN = {
+    "/": ("نمای کلی: حالت اجرا، وضعیت مدل و کلیدها، و میان‌برها.",
+          "صفحهٔ اول نشان می‌دهد برنامه در چه حالتی است (فقط تحلیل؛ معاملهٔ واقعی خاموش)، مدل محلی بارگذاری شده یا "
+          "نه، و کدام کلیدهای داده تنظیم شده‌اند.", "home"),
+    "/markets": ("داده‌های بازار از {sources} منبع مجاز، در {tabs} زبانه.",
+                 "ارزها، نرخ بهره، اوراق و کالا، اقتصاد کشورها، رمزارزها، فارکس و سهام آمریکا. هر جدول منبع و تاریخ "
+                 "خودش را دارد و هیچ‌کدام لحظه‌ای نیست. دکمهٔ تازه‌سازی فقط منابع همان زبانه را دوباره می‌گیرد.", "markets"),
+    "/monitor": ("یک دارایی با همهٔ ارقام منبع‌دار و شاخص‌های محاسبه‌شده.",
+                 "رمزارز را با نام، نماد یا آدرس قرارداد ({chains} زنجیره) پیدا کنید، یا نماد یک سهم آمریکایی را بدهید. "
+                 "نمودار {windows} روزه با SMA، EMA، RSI و MACD؛ آنچه منبع ندارد UNKNOWN است.", "monitor"),
+    "/calc": ("{tools} ماشین‌حساب دقیق در {cats} دسته، بدون مدل.",
+              "هر فرمول ورودی‌هایش را بررسی می‌کند و ورودی نامعتبر را رد می‌کند؛ نتیجه COMPUTED است و فرمول کنارش "
+              "نوشته می‌شود.", "calc"),
+    "/ask": ("پرسش به فارسی یا انگلیسی؛ اعداد پاسخ با شواهد کنترل می‌شوند.",
+             "مسیر پاسخ بدون مدل انتخاب می‌شود ({routes} مسیر). «خودت را معرفی کن» و جست‌وجوی رمزارز حتی بدون مدل "
+             "کار می‌کنند.", "ask"),
+    "/learn": ("همین راهنما: صفحه‌ها، قدم‌های اول و واژه‌نامه.",
+               "راهنمای شروع را از منو دوباره باز کنید؛ بدون جاوااسکریپت همین صفحه نسخهٔ کامل آن است.", "learn"),
+    "/macro": ("سری‌های کلان (تورم، بیکاری، نرخ بهره) با بازهٔ دلخواه.",
+               "داده‌ها از FRED و BIS می‌آیند و با تاریخ و واحد خودشان نشان داده می‌شوند.", "macro"),
+    "/paper": ("تمرین سفارش با پول مجازی.",
+               "سفارش کاغذی همهٔ کنترل‌های ریسک را می‌گذراند ولی هیچ پولی جابه‌جا نمی‌شود؛ ثبت نهایی عبارت تأیید "
+               "می‌خواهد.", "paper"),
+    "/audit": ("گزارش ممیزی با زنجیرهٔ هش.",
+               "هر پرسش، خلاصه و سفارش کاغذی در یک فایل محلی با زنجیرهٔ هش ثبت می‌شود تا هر دستکاری دیده شود.", "audit"),
+    "/maintenance": ("سلامت برنامه و نسخه‌ها.",
+                     "بررسی می‌کند فایل‌ها با آخرین نسخهٔ منتشرشده یکی‌اند و کارهای نگهداری عقب نیفتاده‌اند.", "maint"),
+    "/providers": ("موتور آفلاین یا آنلاین.",
+                   "مدل محلی پیش‌فرض است و چیزی از رایانه بیرون نمی‌رود. برای موتور آنلاین ({providers} ارائه‌دهندهٔ آماده)، "
+                   "کلید فقط در متغیر محیطی گذاشته می‌شود.", "providers"),
+    "/phase11": ("معاملهٔ واقعی: معلق.",
+                 "پیش‌نیازهای معاملهٔ واقعی فهرست شده‌اند و تا همه برآورده نشوند این فاز خاموش می‌ماند.", "lock"),
+}
+#: The tour's stops, in order (titles come from NAV, text from LEARN).
+TOUR = ("/", "/markets", "/monitor", "/calc", "/ask", "/paper", "/learn")
+#: Inline-SVG illustrations (64x64, palette via CSS classes; no image request, no style attribute).
+_ILL = {
+    "home": '<path class="c" d="M12 30 32 12l20 18v22H12z"/><path class="b" d="M8 32 32 10l24 22M16 30v22h32V30M27 52V38h10v14"/>',
+    "markets": '<path class="c" d="M14 26h8v18h-8zM42 18h8v22h-8z"/><path class="b" d="M18 18v34M46 10v36M32 22v26M28 30h8v12h-8zM14 26h8v18h-8zM42 18h8v22h-8z"/>',
+    "monitor": '<path class="c" d="M10 12h40v30H10z"/><path class="b" d="M10 12h40v30H10zM16 34l8-8 6 5 10-12M42 42l12 12"/><circle class="a" cx="42" cy="42" r="5"/>',
+    "calc": '<path class="c" d="M16 8h32v48H16z"/><path class="b" d="M16 8h32v48H16zM22 14h20v10H22z"/><circle class="a" cx="25" cy="33" r="3"/><circle class="a" cx="32" cy="33" r="3"/><circle class="a" cx="39" cy="33" r="3"/><circle class="a" cx="25" cy="43" r="3"/><circle class="a" cx="32" cy="43" r="3"/><circle class="a" cx="39" cy="43" r="3"/>',
+    "ask": '<path class="c" d="M10 12h44v28H28l-10 10v-10h-8z"/><path class="b" d="M10 12h44v28H28l-10 10v-10h-8zM20 22h24M20 30h16"/>',
+    "learn": '<path class="c" d="M8 14c8-3 16-3 24 2v36c-8-5-16-5-24-2z"/><path class="b" d="M8 14c8-3 16-3 24 2 8-5 16-5 24-2v36c-8-3-16-3-24 2-8-5-16-5-24-2zM32 16v36"/>',
+    "macro": '<path class="c" d="M12 36h8v16h-8zM28 24h8v28h-8zM44 30h8v22h-8z"/><path class="b" d="M8 52h48M12 36h8v16h-8zM28 24h8v28h-8zM44 30h8v22h-8z"/>',
+    "paper": '<path class="c" d="M16 8h22l10 10v38H16z"/><path class="b" d="M16 8h22l10 10v38H16zM38 8v10h10M22 30h20M22 38h20M22 46h12"/>',
+    "audit": '<path class="b" d="M22 26a8 8 0 0 1 0 12h-6a8 8 0 0 1 0-12zM48 26a8 8 0 0 1 0 12h-6a8 8 0 0 1 0-12zM24 32h16"/><circle class="a" cx="32" cy="32" r="3"/>',
+    "maint": '<path class="c" d="M40 10a12 12 0 0 0-12 16L10 44l10 10 18-18a12 12 0 0 0 16-12l-8 4-6-6z"/><path class="b" d="M40 10a12 12 0 0 0-12 16L10 44l10 10 18-18a12 12 0 0 0 16-12l-8 4-6-6z"/>',
+    "providers": '<path class="c" d="M20 24h24v12a12 12 0 0 1-24 0z"/><path class="b" d="M26 10v14M38 10v14M20 24h24v12a12 12 0 0 1-24 0zM32 48v8"/>',
+    "lock": '<path class="c" d="M14 28h36v26H14z"/><path class="b" d="M14 28h36v26H14zM22 28v-8a10 10 0 0 1 20 0v8M32 38v8"/>',
+    "page": '<path class="c" d="M16 8h32v48H16z"/><path class="b" d="M16 8h32v48H16zM22 20h20M22 30h20M22 40h14"/>',
+}
+_FA_D = str.maketrans("0123456789", "\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9")
+
+
+def fa_digits(v):
+    return str(v).translate(_FA_D)
+
+
+def ill(kind):
+    return ('<svg class="ill" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true" focusable="false">%s</svg>'
+            % _ILL.get(kind, _ILL["page"]))
+
+
+def learn_counts():
+    """Every number /learn and the tour state, read from its registry at render time (VERIFIED)."""
+    from market import coingecko as _cg
+    return {"tools": len(REG.tool_names()), "cats": len(CAT.CATEGORIES), "sources": len(DH.SOURCES_FA),
+            "chains": len(_cg.PLATFORMS), "tabs": len(App.MARKET_TABS), "pages": len(NAV),
+            "windows": "/".join(str(d) for d in App.MONITOR_DAYS), "routes": len(ASK.ROUTES),
+            "providers": len([k for k in LP.PROVIDERS if k != "local"])}
+
+
+def learn_text(href, which):
+    c = dict((k, fa_digits(v)) for k, v in learn_counts().items())
+    entry = LEARN.get(href)
+    if entry is None:
+        return "برای این صفحه هنوز توضیحی نوشته نشده است." if which == 1 else ""
+    return entry[which].format(**c)
+
+
+def tour_panel():
+    """D-0143(7): hidden by default; app.js shows it on first run, resumes it, and re-opens it from the menu."""
+    titles = dict(NAV)
+    stops = [h for h in TOUR if h in titles]
+    steps = "".join('<li class="tour-step" data-step="%d"><b class="tour-t">%s</b><p>%s</p><a href="%s">رفتن به این صفحه</a></li>' % (
+        i, esc(titles[h]), esc(learn_text(h, 0)), h) for i, h in enumerate(stops))
+    return ('<aside class="tour is-hidden" id="tour" data-tour role="dialog" aria-modal="false" aria-labelledby="tour-h" '
+            'tabindex="-1"><h2 id="tour-h">راهنمای شروع <span class="muted">(قدم <span data-tour-pos>۱</span> از %s)</span></h2>'
+            '<ol class="tour-steps">%s</ol><div class="tour-nav"><button type="button" class="ghost" data-tour-prev>قبلی</button>'
+            '<button type="button" data-tour-next data-last="پایان">بعدی</button>'
+            '<button type="button" class="ghost" data-tour-skip>رد کردن راهنما</button></div>'
+            '<p class="note">پیشرفت فقط در همین مرورگر ذخیره می‌شود. بستن با Esc؛ دوباره از منو: «راهنمای شروع».</p></aside>'
+            ) % (fa_digits(len(stops)), steps)
+
 
 #: D-0141: the look lives in two static files, served from a fixed whitelist (never a path
 #: taken from the request), so the Content-Security-Policy can forbid inline styles and
@@ -107,7 +205,10 @@ STATIC = {"/static/app.css": ("app.css", "text/css; charset=utf-8"),
           "/static/app.js": ("app.js", "text/javascript; charset=utf-8"),
           # D-0142: the logo has ONE source (assets/brand/), shared with the README.
           "/static/logo.svg": (os.path.join(BRAND_DIR, "logo.svg"), "image/svg+xml; charset=utf-8"),
-          "/static/favicon.svg": (os.path.join(BRAND_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8")}
+          "/static/favicon.svg": (os.path.join(BRAND_DIR, "favicon.svg"), "image/svg+xml; charset=utf-8"),
+          # D-0143: the standalone mark (sidebar) and the light-on-dark logo, same single source.
+          "/static/mark.svg": (os.path.join(BRAND_DIR, "mark.svg"), "image/svg+xml; charset=utf-8"),
+          "/static/logo-dark.svg": (os.path.join(BRAND_DIR, "logo-dark.svg"), "image/svg+xml; charset=utf-8")}
 CSP = ("default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; "
        "form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 try:
@@ -244,11 +345,60 @@ def svg_multi(series, w=680, h=240, pad=34):
             out.append('<polyline class="m %s" points="%s"/>' % (cls, " ".join("%.1f,%.1f" % (X(x), Y(y)) for x, y in p)))
         out.extend('<circle class="pt" cx="%.1f" cy="%.1f" r="5"><title>%s %s: %s</title></circle>'
                    % (X(x), Y(y), esc(name), esc(x), esc(fmtn(y))) for x, y in p)
-        legend.append('<span><i class="%s"></i>%s</span>' % (cls, esc(name)))
+        legend.append('<span><svg class="lg" viewBox="0 0 26 10" aria-hidden="true"><line class="m %s" x1="1" y1="5" '
+                      'x2="25" y2="5"/></svg>%s</span>' % (cls, esc(name)))
     out.append('<text class="ax" x="%d" y="%d">%s</text><text class="ax" x="%d" y="%d" text-anchor="end">%s</text>'
                % (pad, h - 8, esc(xs[0]), w - pad, h - 8, esc(xs[-1])))
     return ('<svg class="chart" viewBox="0 0 %d %d" role="img">%s</svg>' % (w, h, "".join(out)),
             '<div class="legend">%s</div>' % "".join(legend))
+
+
+def indicator_charts(points):
+    """
+    D-0143(5): price with SMA(20) and EMA(20), RSI(14) with the 30/70 guides, and MACD(12,26,9), all
+    COMPUTED by src/calc/technicals.py from the RETRIEVED closes and drawn as server-side SVG. An
+    indicator without enough history is reported as UNKNOWN, never drawn from a shorter window.
+    points: [{"date", "value"}], oldest first. Returns (html, facts) -- facts are the last values.
+    """
+    from calc import technicals as TA
+    dates = [p["date"] for p in points]
+    closes = [float(p["value"]) for p in points]
+    out, facts = [], []
+
+    def tail(series, start):
+        return [(dates[start + i], v) for i, v in enumerate(series)]
+
+    def unknown(name, need):
+        return '<p class="muted">%s: UNKNOWN (به دست‌کم %d نقطه نیاز دارد؛ %d نقطه موجود است).</p>' % (
+            esc(name), need, len(closes))
+    lines = [("قیمت پایانی", list(zip(dates, closes)))]
+    for name, fn, series in (("SMA(20)", TA.sma, TA._sma_series), ("EMA(20)", TA.ema, TA._ema_series)):
+        try:
+            last = fn(closes, 20).value                          # the public function does the refusing
+            lines.append((name, tail(series(closes, 20), 19)))
+            facts.append((name, fmtn(last)))
+        except (ValueError, TypeError):
+            out.append(unknown(name, 20))
+    chart, legend = svg_multi(lines)
+    out.insert(0, '<h3>قیمت با میانگین‌های متحرک <span class="muted">(COMPUTED)</span></h3>%s%s' % (chart, legend))
+    try:
+        r = TA.rsi(closes, 14).value
+        rs = tail(TA._rsi_series(closes, 14), 14)
+        guide = [(d, 70.0) for d, _v in rs], [(d, 30.0) for d, _v in rs]
+        c2, l2 = svg_multi([("RSI(14)", rs), ("70", guide[0]), ("30", guide[1])], h=160)
+        out.append('<h3>RSI(14) <span class="muted">(COMPUTED؛ ۷۰/۳۰ قرارداد است، نه سیگنال)</span></h3>%s%s' % (c2, l2))
+        facts.append(("RSI(14)", fmtn(r, 2)))
+    except (ValueError, TypeError):
+        out.append(unknown("RSI(14)", 15))
+    try:
+        m = TA.macd(closes, 12, 26, 9).value
+        ml, sl, _h = TA._macd_series(closes, 12, 26, 9)
+        c3, l3 = svg_multi([("MACD", tail(ml, 25)), ("Signal", tail(sl, 25 + 8))], h=160)
+        out.append('<h3>MACD(12,26,9) <span class="muted">(COMPUTED)</span></h3>%s%s' % (c3, l3))
+        facts += [("MACD", fmtn(m["macd"], 4)), ("MACD signal", fmtn(m["signal"], 4))]
+    except (ValueError, TypeError):
+        out.append(unknown("MACD(12,26,9)", 34))
+    return "".join(out), facts
 
 
 def svg_bar(value, vmax):
@@ -271,6 +421,17 @@ def value_table(v):
             "".join("<tr>%s</tr>" % "".join('<td class="num">%s</td>' % esc(fmtn(r.get(c)) if isinstance(r.get(c), (int, float)) else r.get(c))
                                             for c in cols) for r in v))
     return "<code>%s</code>" % esc(v)
+
+
+#: D-0143: every data table scrolls inside its own box on narrow screens. A bare <table> (the
+#: paper, audit, maintenance, macro and Phase 11 pages build them directly) is wrapped here, in
+#: one place, rather than at each call site. Tables are never nested in this UI, and all text
+#: that reaches a page is escaped, so "<table>" in the document can only be our own markup.
+_BARE_TABLE = re.compile(r'(?<!<div class="tbl">)<table>(.*?)</table>', re.S)
+
+
+def wrap_tables(doc):
+    return _BARE_TABLE.sub(r'<div class="tbl" tabindex="0" role="region" aria-label="جدول"><table>\1</table></div>', doc)
 
 
 def notices_html(ns):
@@ -303,6 +464,10 @@ class App(object):
         self._remote = None                     # (settings fingerprint, assistant, label)
         self._audit = None
         self.hub = hub or DH.DataHub()
+        # D-0143: the crypto route needs the DataHub (cache + CoinGecko budget); an injected
+        # assistant without one gets this App's hub, so every engine shares one budget.
+        if self.assistant is not None and getattr(self.assistant, "hub", "absent") is None:
+            self.assistant.hub = self.hub
         self.csrf = secrets.token_urlsafe(24)
         self.paper_dir = paper_dir
         self.ask_audit_path = ask_audit_path
@@ -348,7 +513,7 @@ class App(object):
         local = self.assistant
         index = local.index if local is not None else ASK.build_index_from(ASK.DEFAULT_CORPUS)
         use_macro = local.use_macro if local is not None else True
-        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro),
+        return (ASK.Assistant(runner, index=index, audit=self.audit(), use_macro=use_macro, pages=NAV, hub=self.hub),
                 "%s: %s" % (prov, eff["model_id"]))
 
     def remote_assistant(self):
@@ -368,24 +533,28 @@ class App(object):
         return self._engine
 
     def page(self, path, title, body, status=200, subtitle=""):
-        nav = "".join('<a href="%s"%s><span class="dot"></span>%s</a>' % (h, ' class="on"' if h == path else "", esc(t))
+        nav = "".join('<a href="%s"%s><span class="dot"></span>%s</a>' % (h, ' class="on" aria-current="page"' if h == path else "", esc(t))
                       for h, t in NAV)
         doc = ('<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
                '<meta name="viewport" content="width=device-width,initial-scale=1">'
                '<meta name="color-scheme" content="light dark">'
-               '<title>%s - marfin-llm</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
+               '<title>%s - Andarz</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
                '<link rel="stylesheet" href="/static/app.css">'
-               '<script src="/static/app.js" defer></script></head><body><div class="shell">'
-               '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/logo.svg" alt="" width="36" height="36"><span>marfin<b>llm</b></span></a>'
-               '<nav class="nav">%s</nav><div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
-               '<div class="main"><header class="top"><details class="menu"><summary>منو</summary>'
-               '<nav class="nav nav-m">%s</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
-               '<button class="theme" type="button" data-theme-toggle title="روشن / تیره">&#9680;</button></header>'
-               '<main class="content">%s</main>'
+               '<script src="/static/app.js" defer></script></head><body>'
+               '<a class="skip" href="#main">\u067e\u0631\u0634 \u0628\u0647 \u0645\u062d\u062a\u0648\u0627</a><div class="shell">'
+               '<aside class="side"><a class="brand" href="/"><img class="logo" src="/static/mark.svg" alt="" width="36" height="36"><span class="wm">Andarz <b>اندرز</b></span></a>'
+               '<nav class="nav">%s</nav><button type="button" class="ghost tour-start is-hidden" data-tour-start>راهنمای شروع</button>'
+               '<div class="side-foot">نسخهٔ %s &middot; فقط روی همین رایانه</div></aside>'
+               '<div class="main"><header class="top"><details class="menu"><summary aria-label="منوی صفحه‌ها">منو</summary>'
+               '<nav class="nav nav-m">%s<button type="button" class="ghost tour-start is-hidden" data-tour-start>راهنمای شروع</button>'
+               '</nav></details><div class="top-title"><h1>%s</h1>%s</div>'
+               '<button class="theme" type="button" data-theme-toggle title="روشن / تیره" aria-label="تغییر تم روشن و تیره">&#9680;</button></header>'
+               '<main class="content" id="main" tabindex="-1">%s</main>%s'
                '<footer class="foot">این خروجی تحلیلی است، نه توصیهٔ مالی شخصی. معاملهٔ واقعی در این برنامه غیرفعال است '
                '(فاز ۱۱ معلق).</footer></div></div></body></html>') % (
             esc(title), nav, esc(VERSION), nav, esc(title),
-            ('<p class="sub">%s</p>' % esc(subtitle)) if subtitle else "", body)
+            ('<p class="sub">%s</p>' % esc(subtitle)) if subtitle else "", body, tour_panel())
+        doc = wrap_tables(doc)
         return Response(status, doc, headers={"Content-Security-Policy": CSP,
                                               "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
                                               "X-Content-Type-Options": "nosniff"})
@@ -415,7 +584,8 @@ class App(object):
         routes = {"/": self.p_home, "/markets": self.p_markets, "/ask": self.p_ask, "/calc": self.p_calc,
                   "/macro": self.p_macro,
                   "/paper": self.p_paper, "/audit": self.p_audit, "/maintenance": self.p_maintenance,
-                  "/providers": self.p_providers, "/phase11": self.p_phase11}
+                  "/providers": self.p_providers, "/phase11": self.p_phase11, "/refresh": self.p_refresh,
+                  "/monitor": self.p_monitor, "/learn": self.p_learn}
         fn = routes.get(path)
         if fn is None:
             return self.page(path, "یافت نشد", '<p>این صفحه وجود ندارد.</p>', 404)
@@ -500,13 +670,104 @@ class App(object):
             svg_line([(p["date"], p["value"]) for p in pts], w=300, h=80, pad=6, label=s["series"]),
             len(pts), "ok" if chg >= 0 else "bad", esc(("+" if chg >= 0 else "") + fmtn(chg)))
 
-    def p_markets(self, method, q, f):
+    # -- D-0143(6): refresh controls --------------------------------------------------------
+    #: The sources each tab shows. A refresh re-fetches THESE only; the form names a tab, never a
+    #: source, so a request cannot ask for anything the page does not display.
+    TAB_SOURCES = {"overview": ("ecb_data_portal", "bis_statistics", "coingecko", "fred"),
+                   "crypto": ("coingecko",), "forex": ("alpha_vantage",),
+                   "stocks": ("alpha_vantage", "sec_edgar_xbrl"), "fx": ("ecb_data_portal", "bis_statistics"),
+                   "rates": ("bis_statistics",), "us": ("fred",), "world": ("world_bank_indicators",), "sources": (),
+                   "monitor": ("coingecko", "alpha_vantage", "sec_edgar_xbrl")}
+    BACK_KEYS = ("tab", "vs", "coin", "lookup", "from", "to", "amount", "ccy", "series", "ind", "c", "symbol", "q",
+                 "kind", "id", "days")
+    _ICON_REFRESH = ('<svg class="ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">'
+                     '<path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2.2" '
+                     'stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" '
+                     'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+
+    @staticmethod
+    def _ts(t):
+        if t is None:
+            return "\u2014"
+        return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    def _back(self, q):
+        return urllib.parse.urlencode([(k, str(q[k])[:120]) for k in self.BACK_KEYS if q.get(k)])
+
+    def _refresh_bar(self, tab, q, results=None):
+        """The refresh form (POST + CSRF, works without JS) and each source's status. No auto-refresh."""
+        srcs = self.TAB_SOURCES.get(tab, ())
+        if not srcs:
+            return ""
+        names = dict((r[0], r[1]) for r in DH.SOURCES_FA)
+        stats = [self.hub.source_status(s) for s in srcs]
+        res = dict((r["source"], r) for r in (results or ()))
+        items, flash = [], []
+        for st in stats:
+            s = st["source"]
+            line = '<li><b class="src">%s</b>: ' % esc(names.get(s, s))
+            if not st["n_items"]:
+                line += '<span class="muted">هنوز چیزی از این منبع دریافت نشده است.</span>'
+            else:
+                line += ('دریافت ما: <span class="ltr">%s</span> &middot; تاریخ خود داده (به گفتهٔ منبع): <span class="ltr">%s</span>'
+                         % (esc(self._ts(st["fetched_at"])), esc(st["source_stamp"] or "\u2014")))
+                if st["next_in_s"]:
+                    line += ' &middot; <span class="muted">تازه‌سازی بعدی تا %d ثانیهٔ دیگر (حداقل فاصله %d ثانیه)</span>' % (
+                        st["next_in_s"], st["min_interval_s"])
+            for bad in st["stale"]:
+                line += ('<div class="stale" role="status">کهنه: آخرین تازه‌سازی ناموفق بود و دادهٔ قبلی نگه داشته شد. '
+                         'خطا: <code>%s</code> &middot; برای تلاش دوباره، دکمهٔ تازه‌سازی را بزنید.</div>' % esc(bad["error"]))
+            items.append(line + "</li>")
+            r = res.get(s)
+            if r:
+                msg = {"queued": "تازه شد" if not st["stale"] else "ناموفق؛ دادهٔ قبلی نگه داشته شد",
+                       "too_soon": "خیلی زود است؛ %s ثانیهٔ دیگر" % r.get("wait_s"),
+                       "needs_confirm": "نیاز به تأیید سهمیه دارد؛ کادر تأیید را علامت بزنید",
+                       "budget": "سهمیهٔ دقیقه‌ای CoinGecko پر است؛ %s ثانیهٔ دیگر" % r.get("wait_s"),
+                       "nothing": "چیزی برای تازه‌سازی نیست"}.get(r["status"], r["status"])
+                flash.append("%s: %s" % (names.get(s, s), msg))
+        confirm = ""
+        if "alpha_vantage" in srcs:
+            from market import alpha_vantage as _av
+            b = _av.BUDGET.to_dict()
+            cost = self.hub.source_status("alpha_vantage")["n_items"]
+            confirm = ('<label class="chk"><input type="checkbox" name="confirm" value="yes"> تأیید می‌کنم: این تازه‌سازی '
+                       '<b class="ltr">%d</b> درخواست از سهمیهٔ روزانهٔ Alpha Vantage مصرف می‌کند (باقی‌مانده امروز: '
+                       '<b class="ltr">%d</b> از <b class="ltr">%d</b>، شمارش همین اجرای برنامه)</label>' % (
+                           cost, b["remaining"], b["limit"]))
+        form = ('<form method="post" action="/refresh" class="refresh-form" data-busy="در حال دریافت دوباره..."%s>%s'
+                '<input type="hidden" name="tab" value="%s"><input type="hidden" name="back" value="%s">%s'
+                '<button type="submit" class="refresh-btn" aria-label="تازه‌سازی داده‌های همین صفحه">%s<span>تازه‌سازی</span>'
+                '</button></form>') % (
+            ' data-confirm="این تازه‌سازی از سهمیهٔ روزانهٔ Alpha Vantage مصرف می‌کند. ادامه؟"' if confirm else "",
+            self.hidden(), esc(tab), esc(self._back(q)), confirm, self._ICON_REFRESH)
+        return ('<section class="card refresh" aria-label="تازه‌سازی داده">%s%s<ul class="src-status">%s</ul>'
+                '<p class="note">تازه‌سازی خودکار ندارد؛ فقط با همین دکمه، و فقط منابع همین صفحه دوباره دریافت می‌شوند. '
+                'اگر دریافت دوباره ناموفق باشد، دادهٔ قبلی با برچسب «کهنه» نگه داشته می‌شود.</p></section>') % (
+            ('<div class="flash" role="status">%s</div>' % esc(" · ".join(flash))) if flash else "", form, "".join(items))
+
+    def p_refresh(self, method, q, f):
+        if method != "POST":
+            return self.page("/refresh", "تازه‌سازی", '<p>تازه‌سازی فقط با دکمهٔ صفحه‌ها انجام می‌شود.</p>', 405)
+        tab = str(f.get("tab") or "")
+        if tab not in self.TAB_SOURCES:
+            return self.page("/refresh", "تازه‌سازی", '<div class="err">زبانهٔ ناشناخته.</div>', 400)
+        back = {k: v[-1] for k, v in urllib.parse.parse_qs(str(f.get("back") or "")[:1000]).items() if k in self.BACK_KEYS}
+        back["tab"] = tab
+        results = self.hub.refresh(self.TAB_SOURCES[tab], confirm=f.get("confirm") == "yes")
+        if tab == "monitor":
+            back.pop("tab", None)
+            return self.p_monitor("GET", back, {}, refresh_results=results)
+        return self.p_markets("GET", back, {}, refresh_results=results)
+
+    def p_markets(self, method, q, f, refresh_results=None):
         tab = q.get("tab") or "overview"
         if tab not in dict(self.MARKET_TABS):
             tab = "overview"
         tabs = '<nav class="tabs">%s</nav>' % "".join(
             '<a href="/markets?tab=%s"%s>%s</a>' % (k, ' class="on"' if k == tab else "", esc(t)) for k, t in self.MARKET_TABS)
-        body = tabs + getattr(self, "_mk_" + tab)(q)
+        content = getattr(self, "_mk_" + tab)(q)              # fetches first, so the status below is current
+        body = tabs + self._refresh_bar(tab, q, refresh_results) + content
         return self.page("/markets", "بازارها و داده‌ها", body,
                          subtitle="داده‌های رسمی روزانه یا سالانه از چند منبع مجاز؛ هیچ‌کدام لحظه‌ای نیست.")
 
@@ -630,8 +891,10 @@ class App(object):
     def _chg(v):
         if v is None:
             return '<span class="muted">\u2014</span>'
-        return '<span class="chg %s">%s%s%%</span>' % ("up" if v > 0 else ("down" if v < 0 else ""),
-                                                      "+" if v > 0 else "", esc("%.2f" % v))
+        # D-0143: never colour alone -- an arrow and a sign carry the direction too.
+        return '<span class="chg %s">%s%s%s%%</span>' % ("up" if v > 0 else ("down" if v < 0 else ""),
+                                                        "\u25b2 " if v > 0 else ("\u25bc " if v < 0 else ""),
+                                                        "+" if v > 0 else "", esc("%.2f" % v))
 
     @staticmethod
     def _attrib(data):
@@ -654,13 +917,323 @@ class App(object):
             for r in rows)
         return '<div class="tbl"><table>%s%s</table></div>' % (head, body)
 
+    def _crypto_search_form(self, lookup, vs):
+        """D-0143: GET form (works without JS). Name, symbol or contract address; the budget is shown."""
+        b = self.hub.cg_budget()
+        return ('<form method="get" action="/markets" class="card" role="search"><input type="hidden" name="tab" value="crypto">'
+                '<input type="hidden" name="vs" value="%s"><h2>جست‌وجوی توکن</h2><div class="form-row">'
+                '<label>نام، نماد یا آدرس قرارداد<input name="lookup" dir="ltr" value="%s" maxlength="120" '
+                'autocomplete="off" spellcheck="false" placeholder="uniswap · UNI · 0x… · Solana · T…"></label>'
+                '<button>جست‌وجو</button></div><p class="note">زنجیره‌ها به این ترتیب بررسی می‌شوند: %s. '
+                'سهمیهٔ CoinGecko: <b class="ltr">%d</b> از <b class="ltr">%d</b> درخواست در این دقیقه باقی است%s. '
+                'نتیجه‌ها ۱۰ دقیقه نگه داشته می‌شوند.</p></form>') % (
+            esc(vs), esc(lookup), esc(" → ".join(p[2] for p in __import__("market.coingecko", fromlist=["x"]).PLATFORMS)),
+            b["left"], b["limit"], (" (درخواست بعدی تا %d ثانیهٔ دیگر)" % b["retry_after_s"]) if not b["left"] else "")
+
+    def _crypto_lookup_card(self, res):
+        """D-0143: the resolver's answer. Ambiguous -> ranked candidates as links, never a silent pick."""
+        st, vs = res["status"], res["vs"]
+        head = '<div class="card" aria-live="polite"><h2>نتیجهٔ جست‌وجو: <span class="ltr">%s</span></h2>' % esc(res["query"] or res["input"])
+        alias = ('<p class="note">نام فارسی با جدول ثابت دست‌نویس (STATIC) به <b class="ltr">%s</b> تبدیل شد؛ '
+                 'خود رمزارز از CoinGecko می‌آید.</p>' % esc(res["alias"]["search"])) if res.get("alias") else ""
+        cand = lambda rows: '<ul class="cands">%s</ul>' % "".join(
+            '<li><a href="/markets?tab=crypto&amp;vs=%s&amp;lookup=%s"><b class="ltr">%s</b></a> <span class="muted ltr">%s · %s</span></li>' % (
+                esc(vs), esc(urllib.parse.quote(c["id"])), esc(c["symbol"]), esc(c["name"]),
+                esc("rank #%d" % c["rank"]) if c.get("rank") else "بدون رتبه") for c in rows)
+        checked = ('<p class="note">زنجیره‌ها: %s</p>' % esc("، ".join(
+            "%s: %s" % (n, {"found": "یافت شد", "not_found": "نیست", "not_checked": "بررسی نشد"}.get(s, s))
+            for n, s in res["checked"]))) if res.get("checked") else ""
+        if st == "resolved":
+            c = res["coin"]
+            rows = (("قیمت", "%s %s" % (fmtn(c["price"]), vs.upper())), ("تغییر ۲۴ ساعت", None, c["change_24h"]),
+                    ("تغییر ۷ روز", None, c["change_7d"]), ("ارزش بازار", fmtn(c["market_cap"])),
+                    ("رتبه", ("#%d" % c["rank"]) if c.get("rank") else "\u2014"), ("حجم ۲۴ ساعت", fmtn(c["volume"])),
+                    ("بالاترین / پایین‌ترین ۲۴ ساعت", "%s / %s" % (fmtn(c["high_24h"]), fmtn(c["low_24h"]))),
+                    ("سقف تاریخی (ATH)", "%s (%s)" % (fmtn(c["ath"]), c.get("ath_date") or "\u2014")),
+                    ("کف تاریخی (ATL)", "%s (%s)" % (fmtn(c["atl"]), c.get("atl_date") or "\u2014")),
+                    ("عرضهٔ در گردش / کل / حداکثر", "%s / %s / %s" % (fmtn(c["circulating_supply"]), fmtn(c["total_supply"]),
+                                                                 fmtn(c["max_supply"]))),
+                    ("آخرین به‌روزرسانی CoinGecko", c.get("last_updated") or "\u2014"))
+            tbl = "".join('<tr><th>%s</th><td class="num">%s</td></tr>' % (
+                esc(r[0]), self._chg(r[2]) if r[1] is None else esc(r[1])) for r in rows)
+            from market import coingecko as _cg
+            addrs = "".join('<tr><th>%s</th><td class="ltr mono">%s</td></tr>' % (esc(p[2]), esc(c["platforms"][p[1]]))
+                            for p in _cg.PLATFORMS if c["platforms"].get(p[1]))
+            body = ('<p><b class="ltr">%s (%s)</b> <span class="muted ltr">id: %s</span>%s</p><table>%s</table>%s%s%s' % (
+                esc(c["name"]), esc(c["symbol"]), esc(c["id"]),
+                (" · یافته روی <b>%s</b>" % esc(c["found_on"])) if c.get("found_on") else "", tbl,
+                ('<h3>آدرس قراردادها (از CoinGecko)</h3><table>%s</table>' % addrs) if addrs else "",
+                ('<h3>نتیجه‌های مشابه دیگر</h3>' + cand(res["candidates"][:5])) if res.get("candidates") else "",
+                '<p class="note ltr">%s</p>' % esc(res["label"])))
+        elif st == "ambiguous":
+            body = ('<p class="warn">این عبارت با چند رمزارز جور است و هیچ‌کدام بی‌صدا انتخاب نمی‌شود. یکی را انتخاب کنید '
+                    '(به ترتیب رتبهٔ ارزش بازار):</p>' + cand(res["candidates"]))
+        elif st == "not_found":
+            body = '<p class="empty">CoinGecko رمزارزی برای این ورودی ندارد. %s</p>' % esc(res.get("reason") or "")
+        elif st == "invalid":
+            body = '<p class="err">ورودی معتبر نیست: <span class="ltr">%s</span></p>' % esc(res["reason"])
+        elif st == "rate_limited":
+            body = ('<p class="err">سهمیهٔ CoinGecko پر است؛ هیچ درخواستی تکرار نشد. <span class="ltr">%s</span><br>'
+                    'یک دقیقه بعد دوباره جست‌وجو کنید، یا کلید رایگان <code>COINGECKO_DEMO_API_KEY</code> را تنظیم کنید.</p>'
+                    % esc(res.get("error") or ""))
+        else:
+            body = '<p class="err">دریافت نشد (هیچ عددی جایگزین نمی‌شود): <code>%s</code></p>' % esc(res.get("error") or "")
+        return head + alias + body + checked + self._attrib(res) + "</div>"
+
+    # -- D-0143(5): /monitor -- one asset, every sourced figure, indicators, UNKNOWN for the rest --
+    MONITOR_DAYS = (30, 90, 365)
+    #: Items the owner asked for that no PERMITTED source here provides. Shown as UNKNOWN, never guessed.
+    MONITOR_UNKNOWN = (("تعداد دارندگان (holders)", "منبع مجاز ندارد؛ کاوشگرهای زنجیره (Etherscan و ...) بررسی نشده‌اند"),
+                       ("نقدشوندگی استخرها (liquidity)", "GeckoTerminal/DexScreener: شرایط استفاده بررسی نشده"),
+                       ("اخبار", "منبع خبری مجاز ثبت نشده است"),
+                       ("احساسات بازار (sentiment)", "منبع مجاز ثبت نشده است"))
+
+    def _monitor_form(self, kind, ident, days, vs):
+        from market import coingecko as _cg
+        dchips = "".join('<a class="chip%s" href="/monitor?kind=%s&amp;id=%s&amp;vs=%s&amp;days=%d">%d روز</a>' % (
+            " on" if d == days else "", esc(kind), esc(urllib.parse.quote(ident)), esc(vs), d, d)
+            for d in self.MONITOR_DAYS) if ident else ""
+        return ('<form method="get" action="/monitor" class="card" role="search"><h2>کدام دارایی؟</h2>'
+                '<fieldset class="seg"><legend>نوع</legend><label><input type="radio" name="kind" value="crypto"%s> رمزارز</label>'
+                '<label><input type="radio" name="kind" value="stock"%s> سهام آمریکا</label></fieldset>'
+                '<div class="form-row"><label>رمزارز: نام، نماد یا آدرس قرارداد · سهام: نماد<input name="id" dir="ltr" '
+                'value="%s" maxlength="120" autocomplete="off" spellcheck="false" placeholder="uniswap · 0x… · IBM"></label>'
+                '<label>ارز مظنهٔ رمزارز<select name="vs">%s</select></label><input type="hidden" name="days" value="%d">'
+                '<button>نمایش</button></div><div class="chips">%s</div><p class="note">جست‌وجوی رمزارز با همان حل‌کنندهٔ '
+                'زبانهٔ رمزارزها (CoinGecko). سهام: قیمت پایانی Alpha Vantage و صورت‌های مالی SEC. هیچ‌کدام لحظه‌ای نیست.</p>'
+                '</form>') % (
+            "" if kind == "stock" else " checked", " checked" if kind == "stock" else "", esc(ident),
+            "".join('<option value="%s"%s>%s</option>' % (v, " selected" if v == vs else "", v.upper()) for v in _cg.VS_CURRENCIES),
+            days, dchips)
+
+    def _unknown_card(self):
+        return ('<div class="card"><h2>موارد بدون منبع <span class="muted">(UNKNOWN)</span></h2><table>%s</table>'
+                '<p class="note">این‌ها حدس زده یا صفر نشان داده نمی‌شوند؛ منبع‌های پیشنهادی در «پرسش‌های باز» آمده‌اند.</p></div>'
+                ) % "".join('<tr><th>%s</th><td>UNKNOWN <span class="muted">— %s</span></td></tr>' % (esc(k), esc(w))
+                            for k, w in self.MONITOR_UNKNOWN)
+
+    def _monitor_crypto(self, ident, vs, days):
+        res = self.hub.crypto_lookup(ident, vs)
+        out = [self._crypto_lookup_card(res).replace('href="/markets?tab=crypto&amp;vs=', 'href="/monitor?kind=crypto&amp;vs=')
+               .replace("&amp;lookup=", "&amp;id=")]
+        facts = []
+        if res["status"] != "resolved":
+            return out, facts
+        c = res["coin"]
+        facts += [("نام", "%s (%s)" % (c["name"], c["symbol"])), ("قیمت (%s)" % vs.upper(), fmtn(c["price"])),
+                  ("تغییر ۲۴ ساعت ٪", fmtn(c["change_24h"], 2)), ("تغییر ۷ روز ٪", fmtn(c["change_7d"], 2)),
+                  ("ارزش بازار", fmtn(c["market_cap"])), ("رتبه", c["rank"] or "\u2014")]
+        ch, err = self._try(lambda: self.hub.crypto_chart(c["id"], vs, days))
+        if err:
+            out.append('<div class="card"><h2>نمودار و شاخص‌ها</h2>%s</div>' % err)
+            return out, facts
+        html_, f2 = indicator_charts(ch["points"])
+        first, last = ch["points"][0]["value"], ch["points"][-1]["value"]
+        chg = (last / first - 1.0) * 100.0 if first else None
+        facts += [("تغییر %d روز ٪ (COMPUTED)" % days, fmtn(chg, 2))] + f2
+        out.append('<div class="card"><h2>نمودار %d روزه و شاخص‌ها: <span class="ltr">%s / %s</span></h2>'
+                   '<p class="note">تغییر در بازه (COMPUTED): %s &middot; %d نقطهٔ روزانه، آخرین %s</p>%s'
+                   '<p class="note ltr">%s; indicators COMPUTED by src/calc/technicals.py</p>%s</div>' % (
+                       days, esc(c["symbol"]), esc(vs.upper()), self._chg(chg), len(ch["points"]),
+                       esc(ch["points"][-1]["date"]), html_, esc(ch["label"]), self._attrib(ch)))
+        return out, facts
+
+    def _monitor_stock(self, sym, days):
+        from calc import valuation as VAL
+        out, facts = [], []
+        if not re.match(r"^[A-Za-z][A-Za-z0-9.\-]{0,9}$", sym):
+            return ['<div class="err">نماد سهم معتبر نیست: <span class="ltr">%s</span></div>' % esc(sym)], facts
+        s, err = self._try(lambda: self.hub.stock(sym))
+        last_price = None
+        if err:
+            out.append('<div class="card"><h2>قیمت پایانی</h2>%s</div>' % err)
+        else:
+            pts = s["points"][-days:]
+            last_price = s["last"]["value"]
+            short = len(s["points"]) < days
+            html_, f2 = indicator_charts(pts)
+            facts += [("نماد", s["symbol"]), ("قیمت پایانی", fmtn(last_price)), ("تاریخ", s["last"]["date"])] + f2
+            out.append('<div class="card"><h2>قیمت پایانی و شاخص‌ها: <span class="ltr">%s</span></h2><div class="big">%s</div>'
+                       '<p class="note">%s &middot; %s</p>%s%s<p class="note ltr">%s</p></div>' % (
+                           esc(s["symbol"]), esc(fmtn(last_price)), esc(s["last"]["date"]), esc(s["note"]),
+                           ('<p class="warn">بازهٔ %d روزه خواسته شد ولی فقط %d روز موجود است (نسخهٔ رایگان Alpha Vantage، '
+                            'خروجی compact)؛ بقیه UNKNOWN است.</p>' % (days, len(s["points"]))) if short else "",
+                           html_, esc(s["label"])))
+        fu, ferr = self._try(lambda: self.hub.fundamentals(sym))
+        if ferr:
+            out.append('<div class="card"><h2>صورت‌های مالی (SEC 10-K)</h2>%s</div>' % ferr)
+            return out, facts
+        latest = {}
+        for m in fu["metrics"]:
+            if m["points"]:
+                latest[m["key"]] = m["points"][-1]
+        rows = []
+
+        def ratio(title, fn, *keys, **kw):
+            vals = [latest.get(k, {}).get("value") for k in keys]
+            if any(v is None for v in vals) or ("price" in kw and kw["price"] is None):
+                rows.append((title, "UNKNOWN", "یکی از ورودی‌ها در 10-K نیست"))
+                return
+            try:
+                r = fn(kw["price"], *vals) if "price" in kw else fn(*vals)
+            except (ValueError, TypeError) as exc:
+                rows.append((title, "تعریف‌نشده", str(exc)[:160]))
+                return
+            shown = fmtn(r.value * 100.0, 2) + "٪" if r.units == "fraction" else fmtn(r.value, 2) + "x"
+            rows.append((title, shown, "%s · سال مالی %s" % (r.formula, latest[keys[0]]["fy_end"])))
+            facts.append((title + " (COMPUTED)", shown))
+        ratio("حاشیهٔ سود خالص", VAL.net_margin, "net_income", "revenue")
+        ratio("حاشیهٔ سود عملیاتی", VAL.operating_margin, "operating_income", "revenue")
+        ratio("بازده حقوق صاحبان سهام (ROE)", VAL.roe, "net_income", "equity")
+        ratio("بازده دارایی‌ها (ROA)", VAL.roa, "net_income", "assets")
+        ratio("P/E (قیمت پایانی / EPS رقیق‌شدهٔ سالانه)", VAL.pe_ratio, "eps_diluted", price=last_price)
+        out.append(self._fundamentals_card(sym))
+        out.append('<div class="card"><h2>نسبت‌ها <span class="muted">(COMPUTED با src/calc از ارقام 10-K)</span></h2><table>'
+                   '<tr><th>نسبت</th><th class="num">مقدار</th><th>مبنا</th></tr>%s</table><p class="note">P/E قیمت پایانی '
+                   'امروز را بر سود سالانهٔ آخرین 10-K تقسیم می‌کند؛ دو تاریخ متفاوت‌اند و این در مبنا آمده است.</p></div>'
+                   % "".join('<tr><th>%s</th><td class="num">%s</td><td class="muted">%s</td></tr>' % (esc(a), esc(b), esc(c))
+                             for a, b, c in rows))
+        return out, facts
+
+    def _monitor_summary(self, facts):
+        """Optional AI summary of the COMPUTED/RETRIEVED facts only. Every number is checked against them."""
+        if not facts:
+            return ""
+        if self.assistant is None:
+            return ('<div class="card"><h2>خلاصهٔ هوش مصنوعی</h2><p class="muted">مدل محلی بارگذاری نشده است؛ ارقام بالا '
+                    'خودشان کامل‌اند. (خلاصه فقط با مدل محلی ساخته می‌شود.)</p></div>')
+        listed = "; ".join("%s = %s" % (k, v) for k, v in facts)
+        q = ("Summarise ONLY the following facts in at most three short sentences, in Persian. Do not add any "
+             "number, date, forecast or advice that is not listed. Facts: " + listed)
+        text, _m = self.assistant._generate(ASK.RP.build_plain_prompt(q, refusal_language=True))
+        g = ASK.guard_execution_claims(ASK._strip_calls(text), lang="fa")
+        allowed = ASK.L.extract_numbers(ASK.L.fold_digits(listed))
+        extra = [n for n in ASK.L.extract_numbers(ASK.L.fold_digits(g["text"]))
+                 if not any(abs(n - a) <= max(0.01, abs(a) * 0.005) for a in allowed)]
+        self.audit().write("monitor_summary", self.clock(), facts=listed[:2000], reply=g["text"][:2000],
+                           unlisted_numbers=extra[:20], blocked=g["blocked"])
+        warn = ('<p class="warn">هشدار: این خلاصه عددی دارد که در فهرست ارقام نیست (%s). به جدول‌ها اعتماد کنید، نه به خلاصه.</p>'
+                % esc(", ".join(fmtn(x) for x in extra[:5]))) if extra else ""
+        return ('<div class="card"><h2>خلاصهٔ هوش مصنوعی <span class="muted">(ESTIMATED؛ متن مدل)</span></h2>%s<p dir="auto">%s</p>'
+                '<p class="note">فقط از ارقام همین صفحه ساخته شد؛ هر عدد آن با فهرست ارقام مقایسه شد. توصیهٔ مالی نیست.</p></div>'
+                ) % (warn, esc(g["text"]))
+
+    def p_monitor(self, method, q, f, refresh_results=None):
+        from market import coingecko as _cg
+        src = dict(q)
+        if method == "POST":
+            src.update({k: f[k] for k in ("kind", "id", "vs", "days") if f.get(k)})
+        kind = "stock" if src.get("kind") == "stock" else "crypto"
+        ident = str(src.get("id") or "").strip()[:120]
+        vs = str(src.get("vs") or "usd").strip().lower()
+        if vs not in _cg.VS_CURRENCIES:
+            vs = "usd"
+        try:
+            days = int(str(src.get("days") or "90"))
+        except ValueError:
+            days = 90
+        if days not in self.MONITOR_DAYS:
+            days = 90
+        body = [self._monitor_form(kind, ident, days, vs)]
+        facts = []
+        if ident:
+            parts, facts = (self._monitor_stock(ident.upper(), days) if kind == "stock"
+                            else self._monitor_crypto(ident, vs, days))
+            body.insert(1, self._refresh_bar("monitor", {"kind": kind, "id": ident, "vs": vs, "days": str(days)},
+                                             refresh_results))
+            body += parts
+            body.append(self._unknown_card())
+            if method == "POST" and f.get("summary") == "1":
+                body.append(self._monitor_summary(facts))
+            elif facts:
+                body.append('<form method="post" action="/monitor" class="card" data-busy="در حال نوشتن خلاصه...">%s'
+                            '<input type="hidden" name="kind" value="%s"><input type="hidden" name="id" value="%s">'
+                            '<input type="hidden" name="vs" value="%s"><input type="hidden" name="days" value="%d">'
+                            '<input type="hidden" name="summary" value="1"><h2>خلاصهٔ هوش مصنوعی (اختیاری)</h2><p class="note">'
+                            'مدل محلی فقط ارقام همین صفحه را خلاصه می‌کند؛ عددی که در فهرست نباشد علامت می‌خورد.%s</p>'
+                            '<button%s>ساخت خلاصه</button></form>' % (
+                                self.hidden(), esc(kind), esc(ident), esc(vs), days,
+                                "" if self.assistant else " مدل بارگذاری نشده است.",
+                                "" if self.assistant else ' disabled aria-disabled="true"'))
+        else:
+            body.append('<div class="empty">یک رمزارز (نام، نماد یا آدرس قرارداد) یا نماد یک سهم آمریکایی وارد کنید.</div>')
+        body.append('<p class="note">فهرست پایش (watchlist) هنوز ساخته نشده است؛ پرسش باز برای مالک است.</p>')
+        return self.page("/monitor", "پایش دارایی", "".join(body),
+                         subtitle="همهٔ ارقام از منبع با برچسب؛ شاخص‌ها COMPUTED؛ آنچه منبع ندارد UNKNOWN. لحظه‌ای نیست؛ توصیهٔ مالی نیست.")
+
+    # -- D-0143(7): /learn -- the static version of the tour, a first-steps checklist, a glossary --
+    GLOSSARY = (("RETRIEVED", "عددی که همان‌طور که منبع داده نشان داده می‌شود، با نام منبع و تاریخ."),
+                ("END_OF_DAY", "قیمت پایانی روز؛ نه لحظه‌ای و نه قابل معامله."),
+                ("P/E", "قیمت تقسیم بر سود هر سهم؛ برای سود صفر یا منفی تعریف نشده است."),
+                ("SMA / EMA", "میانگین متحرک ساده / نمایی قیمت‌های پایانی در یک پنجرهٔ ثابت."),
+                ("RSI", "شاخص قدرت نسبی بین ۰ تا ۱۰۰؛ مرزهای ۷۰ و ۳۰ قرارداد است، نه سیگنال."),
+                ("MACD", "تفاوت دو میانگین نمایی و خط سیگنال آن."),
+                ("ATH / ATL", "بالاترین / پایین‌ترین قیمت تاریخی‌ای که CoinGecko ثبت کرده است."),
+                ("ارزش بازار", "قیمت ضرب در عرضهٔ در گردش."),
+                ("آدرس قرارداد", "نشانی توکن روی یک زنجیره؛ نام‌ها تکراری‌اند، آدرس یکتاست."),
+                ("بدون کلید / کلید Demo", "CoinGecko بدون کلید حدود ۵ درخواست در دقیقه می‌دهد؛ کلید رایگان Demo بیشتر."),
+                ("معاملهٔ کاغذی", "شبیه‌سازی سفارش با پول مجازی؛ هیچ سفارشی به کارگزار نمی‌رود."),
+                ("ANALYSIS_ONLY", "حالت اجرای برنامه: فقط تحلیل. معاملهٔ واقعی از این برنامه روشن نمی‌شود."))
+
+    def _checklist(self):
+        def env(k):
+            return bool(str(os.environ.get(k, "")).strip())
+        items = (("کلید رایگان FRED در <code>FRED_API_KEY</code> (اوراق، نفت، گاز، شاخص دلار)", env("FRED_API_KEY"), "/markets?tab=us"),
+                 ("کلید رایگان Alpha Vantage در <code>ALPHAVANTAGE_API_KEY</code> (سهام و فارکس)", env("ALPHAVANTAGE_API_KEY"),
+                  "/markets?tab=stocks"),
+                 ("ایمیل تماس در <code>SEC_CONTACT_EMAIL</code> (صورت‌های مالی SEC)", env("SEC_CONTACT_EMAIL"), "/monitor"),
+                 ("اختیاری: کلید رایگان Demo در <code>COINGECKO_DEMO_API_KEY</code> (سهمیهٔ بیشتر رمزارز)",
+                  "optional" if not env("COINGECKO_DEMO_API_KEY") else True, "/markets?tab=crypto"),
+                 ("بارگذاری مدل محلی (<code>--model</code> یا <code>--server</code>)", self.assistant is not None, "/ask"),
+                 ("در «پرسش» بنویسید «خودت را معرفی کن» (بدون مدل هم کار می‌کند)", None, "/ask"),
+                 ("یک ماشین‌حساب را با مثال آماده‌اش اجرا کنید", None, "/calc"),
+                 ("یک رمزارز را با نام یا آدرس قرارداد در «پایش دارایی» پیدا کنید", None, "/monitor"),
+                 ("یک سفارش کاغذی پیش‌نمایش کنید", None, "/paper"))
+        rows = []
+        for text, state, href in items:
+            mark = {True: ("\u2713", "انجام شده", "ok"), False: ("\u25cb", "مانده", "due"),
+                    "optional": ("\u25cb", "اختیاری", "muted"), None: ("\u2192", "قدم دستی", "muted")}[state]
+            rows.append('<li><span class="%s" aria-hidden="true">%s</span> <span class="%s">%s</span>: %s '
+                        '<a href="%s">برو</a></li>' % (mark[2], mark[0], mark[2], mark[1], text, href))
+        return ('<section class="card" id="first-steps"><h2>قدم‌های اول</h2><ol class="check">%s</ol><p class="note">وضعیت '
+                'کلیدها هنگام ساخت همین صفحه از متغیرهای محیطی خوانده شد (فقط وجودشان؛ مقدار هیچ کلیدی نشان داده '
+                'نمی‌شود).</p></section>') % "".join(rows)
+
+    def p_learn(self, method, q, f):
+        c = learn_counts()
+        titles = dict(NAV)
+        stats = (("صفحه", c["pages"]), ("ماشین‌حساب", c["tools"]), ("دستهٔ فرمول", c["cats"]), ("منبع داده", c["sources"]),
+                 ("زنجیرهٔ جست‌وجوی توکن", c["chains"]), ("مسیر پاسخ", c["routes"]))
+        head = ('<div class="stats">%s</div><p class="note">همهٔ این شمارش‌ها هنگام ساخت صفحه از خود برنامه خوانده شده‌اند '
+                '(VERIFIED)، نه تایپ شده.</p>') % "".join(
+            '<div class="stat"><div class="k">%s</div><div class="v">%s</div></div>' % (esc(k), esc(fa_digits(v))) for k, v in stats)
+        stops = [h for h in TOUR if h in titles]
+        tour = ('<section class="card" id="tour-static"><h2>راهنمای شروع (نسخهٔ ایستا)</h2><ol class="tour-list">%s</ol>'
+                '<p><a class="btn" href="/learn?tour=1">شروع دوبارهٔ راهنمای تعاملی</a> '
+                '<span class="note">با جاوااسکریپت خاموش، همین فهرست راهنماست.</span></p></section>') % "".join(
+            '<li><a href="%s"><b class="tour-t">%s</b></a>: %s</li>' % (h, esc(titles[h]), esc(learn_text(h, 0))) for h in stops)
+        secs = "".join('<section class="card learn-sec" id="learn-%s">%s<div><h2><a href="%s">%s</a></h2><p>%s</p><p>%s</p>'
+                       '</div></section>' % (esc(h.strip("/") or "home"), ill(LEARN.get(h, ("", "", "page"))[2]), h,
+                                            esc(t), esc(learn_text(h, 0)), esc(learn_text(h, 1)))
+                       for h, t in NAV)
+        labels = "".join('<dt class="ltr">%s</dt><dd>%s</dd>' % (esc(k), esc(fa)) for k, _en, fa in ASK.EVIDENCE_LABELS)
+        terms = "".join('<dt>%s</dt><dd>%s</dd>' % (esc(k), esc(v)) for k, v in self.GLOSSARY)
+        gloss = ('<section class="card" id="glossary"><h2>واژه‌نامه</h2><h3>برچسب‌های شاهد</h3><dl class="gloss">%s</dl>'
+                 '<h3>اصطلاح‌ها</h3><dl class="gloss">%s</dl></section>') % (labels, terms)
+        body = (head + tour + self._checklist() + '<h2 class="sec-h">صفحه‌ها، یکی‌یکی</h2>' + secs + gloss)
+        return self.page("/learn", "راهنما و آموزش", body,
+                         subtitle="هر صفحه چه می‌کند، از کجا شروع کنید، و معنی برچسب‌ها. همه‌چیز بدون جاوااسکریپت هم کار می‌کند.")
+
     def _mk_crypto(self, q):
         from market import coingecko as _cg
         vs = (q.get("vs") or "usd").strip().lower()
         if vs not in _cg.VS_CURRENCIES:
             vs = "usd"
         coin = (q.get("coin") or "").strip().lower()
-        out = []
+        lookup = (q.get("lookup") or "").strip()[:120]
+        out = [self._crypto_search_form(lookup, vs)]
+        if lookup:
+            out.append(self._crypto_lookup_card(self.hub.crypto_lookup(lookup, vs)))
         g, err = self._try(self.hub.crypto_global)
         if err:
             out.append(err)
@@ -747,7 +1320,7 @@ class App(object):
         sym = (q.get("symbol") or "").strip()
         kw = (q.get("q") or "").strip()
         form = ('<form method="get" action="/markets" class="card"><input type="hidden" name="tab" value="stocks">'
-                '<div class="form-row"><label>نماد سهم (مثلاً IBM یا AAPL)<input name="symbol" dir="ltr" value="%s"></label>'
+                '<div class="form-row"><label>نماد سهم (مثلاً IBM)<input name="symbol" dir="ltr" value="%s"></label>'
                 '<button>نمایش</button></div><p class="note">قیمت: Alpha Vantage رایگان، فقط قیمت پایانی روز، ۲۵ درخواست در '
                 'روز، با کلید <code>ALPHAVANTAGE_API_KEY</code> (قیمت لحظه‌ای در نسخهٔ رایگان از نظر مقررات مجاز نیست). '
                 'صورت‌های مالی: SEC EDGAR، رسمی و رایگان.</p></form>'
@@ -816,14 +1389,28 @@ class App(object):
                 else:
                     out["engine_label"] = "آنلاین · " + label
                     self.history.append(out)
+            elif self.assistant is None and (ASK.is_about(question) or ASK.crypto_query(question)):
+                # D-0143: the self-introduction (registries) and the token lookup (CoinGecko) never
+                # use a model, so they work even when none is loaded. Same audit log as every turn.
+                out = ASK.Assistant(None, audit=self.audit(), use_macro=False, pages=NAV,
+                                    hub=self.hub).answer(question)
+                out["engine_label"] = ("بدون مدل · از فهرست‌های برنامه" if out["route"] == "about"
+                                       else "بدون مدل · داده‌های CoinGecko")
+                self.history.append(out)
             elif self.assistant is None:
                 body += '<div class="err">بدون مدل نمی‌توان پاسخ داد.</div>'
             else:
                 out = self.assistant.answer(question)
                 out["engine_label"] = "آفلاین · " + (self.model_label or "مدل محلی")
                 self.history.append(out)
-        examples = ("نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟", "سهمی با قیمت ۱۵۰ دلار و سود هر سهم ۸٫۴۰ دلار؛ P/E چقدر است؟",
-                    "موجودی ۵۰٬۰۰۰ دلار، ریسک ۲٪، ورود ۸۰ و حد ضرر ۷۶؛ چند سهم بخرم؟", "What was Apple's net income in fiscal 2023?")
+        # D-0143: neutral examples only (no company name: the Apple chip is what the model echoed
+        # when asked to introduce itself). The P/E and position-size chips use the catalogue's own
+        # worked examples, so they run as written.
+        pe, ps = CAT.TOOLS["pe_ratio"][3], CAT.TOOLS["position_size"][3]
+        examples = ("خودت را معرفی کن", "نرخ تورم آمریکا در ژانویه ۲۰۲۴ چقدر بود؟",
+                    "سهمی با قیمت %s دلار و سود هر سهم %s دلار؛ P/E چقدر است؟" % (pe["price"], pe["eps"]),
+                    "موجودی %s دلار، ریسک %s٪، ورود %s و حد ضرر %s؛ چند سهم بخرم؟" % (
+                        "{:,}".format(ps["account_equity"]), int(ps["risk_pct"] * 100), ps["entry"], ps["stop"]))
         seg = ('<fieldset class="seg"><legend>موتور پاسخ‌گویی</legend>'
                '<label><input type="radio" name="engine" value="local"%s> آفلاین <span class="muted">(%s، بدون اینترنت)</span></label>'
                '<label><input type="radio" name="engine" value="remote"%s%s> آنلاین <span class="muted ltr">(%s)</span></label>'
@@ -1293,7 +1880,7 @@ def make_handler(app):
     from http.server import BaseHTTPRequestHandler
 
     class H(BaseHTTPRequestHandler):
-        server_version = "marfin-ui"
+        server_version = "andarz-ui"
 
         def _go(self, method):
             u = urllib.parse.urlsplit(self.path)
@@ -1343,7 +1930,7 @@ def refuse_args(a):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="marfin-llm local web UI (loopback only).")
+    ap = argparse.ArgumentParser(description="Andarz (اندرز) local web UI (loopback only).")
     ap.add_argument("--model", help="GGUF file (in-process llama.cpp); without it, 'ask' is unavailable")
     ap.add_argument("--server", choices=("ollama", "lmstudio"))
     ap.add_argument("--model-id")
@@ -1383,13 +1970,13 @@ def main(argv=None):
             runner = ASK.RP.ModelRunner(Llama(model_path=a.model, n_ctx=a.ctx, n_threads=a.threads, verbose=False),
                                         max_tokens=a.max_tokens)
             label = os.path.basename(a.model)
-        assistant = ASK.Assistant(runner, index=ASK.build_index_from(a.corpus), audit=ASK.open_audit(ASK.DEFAULT_AUDIT),
+        assistant = ASK.Assistant(runner, index=ASK.build_index_from(a.corpus), audit=ASK.open_audit(ASK.DEFAULT_AUDIT), pages=NAV,
                                   use_macro=not a.no_macro)
     app = App(assistant=assistant, model_label=label)
     from http.server import ThreadingHTTPServer
     srv = ThreadingHTTPServer((HOST, a.port), make_handler(app))
     url = "http://%s:%d/" % (HOST, a.port)
-    print("marfin-llm UI: %s   (Ctrl+C to stop)" % url)
+    print("Andarz UI: %s   (Ctrl+C to stop)" % url)
     if not a.no_open:
         import webbrowser
         try:

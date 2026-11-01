@@ -130,7 +130,8 @@ tests/test_ask.py \
 tests/test_ui.py \
 tests/test_datahub.py \
 tests/test_provider_manager.py \
-tests/test_market_data.py"
+tests/test_market_data.py \
+tests/test_d0143.py"
 
 for t in $SUITES; do
   echo
@@ -669,6 +670,19 @@ if [ "$1" = "--mutate" ]; then
     echo "  ERROR: providers/settings/clients/coingecko/av_markets/sec_facts/datahub not restored, or its oracle is red"
     fail=1; }
   [ $m142_status -ne 0 ] && fail=1
+  echo
+  echo "--- D-0143 about route, token lookup, refresh, /monitor, /learn, responsive ---"
+  # The first run let 10 of 53 mutants survive a green suite (e.g. a typed tool
+  # count, a real HTTP 404 never exercised, 'back' keys not whitelisted). Each gap
+  # got a test in test_d0143.py ("battery gaps"); 53/53 killed after that.
+  m143=$(run_guarded "$BATTERY_TIMEOUT" python3 tests/mutate_d0143.py)
+  m143_status=$?
+  echo "$m143" | grep -E "seeded [0-9]+"
+  echo "$m143" | grep -E "SURVIVOR|SKIPPED" && fail=1
+  echo "$m143" | grep -q "restored+green True" || {
+    echo "  ERROR: ask/ui/app.css/app.js/crypto_resolve/coingecko/datahub not restored, or its oracle is red"
+    fail=1; }
+  [ $m143_status -ne 0 ] && fail=1
 fi
 
 echo

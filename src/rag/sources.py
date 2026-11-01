@@ -512,7 +512,11 @@ _register(Source(
     verified_status="MEASURED 2026-10-28: /coins/markets HTTP 200 (bitcoin 81036 USD, "
                     "rank 1, last_updated 2026-10-28T20:42:55Z); /global HTTP 200 "
                     "(22563 active cryptocurrencies, BTC dominance 59.46%); a third "
-                    "call within a minute returned HTTP 429 -- the keyless limit is real.",
+                    "call within a minute returned HTTP 429 -- the keyless limit is real. "
+                    "D-0143, MEASURED 2026-10-30: /search, /coins/{id} and "
+                    "/coins/{platform}/contract/{address} HTTP 200 keyless (fixtures in "
+                    "tests/fixtures/coingecko/); an unknown contract is HTTP 404 'coin not "
+                    "found'; all three are in the official Demo/Keyless endpoint list.",
     doc_url="https://www.coingecko.com/en/api_terms",
 ))
 
@@ -800,7 +804,7 @@ def check_access(key: str, user_agent: Optional[str] = None,
     if src.requires_contact_ua and not _is_contact_ua(user_agent):
         raise AccessError(
             "source %r requires a User-Agent naming a reachable contact "
-            "address, e.g. 'marfin-llm/0.1 (you@example.com)' (MEASURED: "
+            "address, e.g. 'Andarz/0.15 (you@example.com)' (MEASURED: "
             "HTTP 403 without one). Got %r." % (key, user_agent))
     if src.requires_api_key and not (api_key or "").strip():
         # .strip(): a whitespace-only key passed the first version of this

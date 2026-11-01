@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="assets/brand/banner.svg" alt="marfin-llm — local, bilingual, evidence-first financial assistant" width="100%">
+  <img src="assets/brand/banner.svg" alt="Andarz (اندرز) — local, bilingual, evidence-first financial assistant" width="100%">
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-0E7C7B"></a>
-  <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-0D3B5C">
-  <img alt="CPU only" src="https://img.shields.io/badge/runs%20on-CPU%20only-0B1B36">
-  <img alt="Live trading: disabled" src="https://img.shields.io/badge/live%20trading-disabled-B03A2E">
-  <img alt="Languages: فارسی + English" src="https://img.shields.io/badge/lang-%D9%81%D8%A7%D8%B1%D8%B3%DB%8C%20%2B%20English-F2A93B">
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-09251C"></a>
+  <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-A55704">
+  <img alt="CPU only" src="https://img.shields.io/badge/runs%20on-CPU%20only-09251C">
+  <img alt="Live trading: disabled" src="https://img.shields.io/badge/live%20trading-disabled-A0232D">
+  <img alt="Languages: فارسی + English" src="https://img.shields.io/badge/lang-%D9%81%D8%A7%D8%B1%D8%B3%DB%8C%20%2B%20English-A55704">
 </p>
 
 <p align="center">
@@ -17,12 +17,12 @@
 </p>
 
 ```text
-███╗   ███╗ █████╗ ██████╗ ███████╗██╗███╗   ██╗      ██╗     ██╗     ███╗   ███╗
-████╗ ████║██╔══██╗██╔══██╗██╔════╝██║████╗  ██║      ██║     ██║     ████╗ ████║
-██╔████╔██║███████║██████╔╝█████╗  ██║██╔██╗ ██║█████╗██║     ██║     ██╔████╔██║
-██║╚██╔╝██║██╔══██║██╔══██╗██╔══╝  ██║██║╚██╗██║╚════╝██║     ██║     ██║╚██╔╝██║
-██║ ╚═╝ ██║██║  ██║██║  ██║██║     ██║██║ ╚████║      ███████╗███████╗██║ ╚═╝ ██║
-╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═══╝      ╚══════╝╚══════╝╚═╝     ╚═╝
+ █████╗ ███╗   ██╗██████╗  █████╗ ██████╗ ███████╗
+██╔══██╗████╗  ██║██╔══██╗██╔══██╗██╔══██╗╚══███╔╝
+███████║██╔██╗ ██║██║  ██║███████║██████╔╝  ███╔╝      اندرز
+██╔══██║██║╚██╗██║██║  ██║██╔══██║██╔══██╗ ███╔╝       counsel, in Persian
+██║  ██║██║ ╚████║██████╔╝██║  ██║██║  ██║███████╗
+╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
    local model by default  ·  85 deterministic tools  ·  every number has a source
 ```
 
@@ -32,7 +32,8 @@
 
 ## English
 
-**marfin-llm** is a local, CPU-only, bilingual (Persian and English) financial assistant. It runs a 4-billion-parameter
+**Andarz** (اندرز, Persian for *counsel*) is a local, CPU-only, bilingual (Persian and English) financial assistant.
+The repository keeps its original name, `marfin-llm`. It runs a 4-billion-parameter
 open-weight model (Qwen3.5-4B, GGUF `Q4_K_M`) on an ordinary desktop. Around the model it adds 85 deterministic financial
 calculators, retrieval over cited documents, and official market data, all behind a right-to-left web UI.
 
@@ -43,13 +44,21 @@ evidence is missing, the assistant says so instead of inventing a number.
 
 | Area | What you get | Source (terms checked) |
 |---|---|---|
-| **Crypto** | Prices, market cap, volume, 24 h / 7 d change, 365-day daily chart, global market totals | CoinGecko — *Powered by CoinGecko* (keyless, about 5 calls/min, or a free Demo key) |
+| **Crypto** | Prices, market cap, volume, 24 h / 7 d change, 365-day daily chart, global market totals; **token lookup** by name, symbol or contract address (Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum, Solana, Tron) — ambiguous names list ranked candidates, nothing is picked silently | CoinGecko — *Powered by CoinGecko* (keyless, about 5 calls/min, enforced before the network; or a free Demo key) |
 | **Forex** | 9 major pairs (daily OHLC), plus 29 ECB reference rates with a converter | Alpha Vantage (free key) · ECB |
 | **US stocks** | Symbol search, end-of-day quote, annual fundamentals from 10-K filings (revenue, net income, EPS, assets…) | Alpha Vantage · SEC EDGAR |
 | **Rates & macro** | 49 central-bank policy rates; US Treasuries, oil, gas, the dollar index, CPI, unemployment; 10 World Bank indicators | BIS · FRED · World Bank |
 | **Calculators** | 85 tools: returns and risk, valuation (DCF, DDM, multiples), technicals, bonds, options (Black-Scholes, Greeks) | Your inputs, no model needed |
 | **Ask** | Questions in Persian or English, routed to tools, data, documents or plain answers; figures are checked against the evidence | Local model (default) or an online provider you choose |
 | **Paper trading** | Preview → 17 risk checks → type `CONFIRM`; kill switch, reconciliation, hash-chained audit log | Simulated only |
+| **Monitor** (`/monitor`) | One asset per page: every sourced figure, contract addresses, 30/90/365-day chart with SMA, EMA, RSI and MACD (COMPUTED, server-side SVG), stock ratios from 10-K figures; holders, liquidity, news and sentiment shown as UNKNOWN | CoinGecko · Alpha Vantage · SEC EDGAR · `src/calc` |
+| **Learn** (`/learn`) | A Persian guide to every page, a first-steps checklist, a glossary, and a skippable first-run tour; every count is read from the program itself | Generated from the registries |
+
+Every Markets tab and the monitor page have a **↻ refresh** button (a form, works without JavaScript) that re-fetches
+only that page's sources, respects each source's minimum interval (CoinGecko ≥ 60 s), asks before spending the
+Alpha Vantage daily budget, and keeps the previous figures marked **stale** if the refresh fails. Nothing refreshes
+by itself. Ask «خودت را معرفی کن» or "who are you" and the answer is built from the program's own registries,
+without the model.
 
 None of the data is real-time or tradable. Kraken and Binance are **not** used: Kraken's terms exclude Iran, and
 Binance's terms could not be read and verified.
@@ -125,7 +134,7 @@ six CPU cores is slow. Online providers are an option, not a replacement.
 ### Repository layout
 
 ```text
-marfin-llm/
+marfin-llm/              (repository name; the product is Andarz)
 ├── scripts/            entry points: ui.py (web UI), ask.py (CLI), panel.py, Phase-4 harness and graders
 │   └── ui_assets/      app.css · app.js (served from a fixed whitelist under a strict CSP)
 ├── src/
@@ -137,9 +146,9 @@ marfin-llm/
 │   ├── execution/      paper engine (two-phase protocol, kill switch, audit)
 │   ├── safety/         untrusted-content layer
 │   └── maintenance/    release manifests, offline checks, rollback
-├── tests/              31 suites + mutation batteries   (bash tests/run_all.sh [--mutate])
+├── tests/              32 suites + mutation batteries   (bash tests/run_all.sh [--mutate])
 ├── tools/              maintain.py, impact.py, build_licenses.py, eval builders
-├── assets/brand/       logo.svg · favicon.svg · banner.svg · terminal.svg
+├── assets/brand/       logo / mark / favicon / banner / terminal SVGs (generated by tools/build_brand.py)
 ├── docs/               guides · runbooks · legal · phase reports · history   → docs/README.md
 ├── evals/ evidence/    evaluation sets and recorded, hashed results
 ├── releases/           immutable release manifests (VERSION)
@@ -149,7 +158,7 @@ marfin-llm/
 ### Tests
 
 ```bash
-bash tests/run_all.sh            # 31 suites; no model and no network needed
+bash tests/run_all.sh            # 32 suites; no model and no network needed
 bash tests/run_all.sh --mutate   # + seeded-defect batteries: every assertion must be able to fail
 python3 tools/maintain.py        # offline health check: 0 OK · 1 DUE · 2 FAIL
 python3 tools/impact.py --worktree   # which suites and batteries your change reaches
@@ -170,7 +179,7 @@ curl -sL https://huggingface.co/Qwen/Qwen3.5-4B/resolve/main/tokenizer_config.js
 # optional, historical comparison only
 curl -sL https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/tokenizer_config.json -o /tmp/qwen3_tokcfg.json
 # EDGAR payload for test_rag.py (a contact-bearing User-Agent is required)
-curl -sS -H "User-Agent: marfin-llm/0.1 (contact@example.com)" \
+curl -sS -H "User-Agent: Andarz/0.15 (contact@example.com)" \
   "https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax.json" \
   -o /tmp/xbrl.json
 # v2 eval regeneration: tools/fetch_xbrl.sh then tools/extract_xbrl_facts.py (D-0096)
@@ -193,7 +202,7 @@ README, the full investigation record up to D-0141, is kept unchanged at
 
 ## فارسی
 
-**marfin-llm** یک دستیار مالی **محلی** و **دوزبانه** (فارسی و انگلیسی) است که فقط با پردازنده (بدون کارت گرافیک)
+**اندرز** (Andarz) یک دستیار مالی **محلی** و **دوزبانه** (فارسی و انگلیسی) است که فقط با پردازنده (بدون کارت گرافیک)
 کار می‌کند. یک مدل باز ۴ میلیارد پارامتری (Qwen3.5-4B با فرمت GGUF و کوانتیزاسیون `Q4_K_M`) روی یک کامپیوتر معمولی
 اجرا می‌شود. کنار مدل، ۸۵ ماشین‌حساب مالی قطعی، جست‌وجو در اسناد همراه با ارجاع، و داده‌های رسمی بازار قرار دارد،
 همه در یک رابط وب راست‌به‌چپ.
@@ -205,13 +214,20 @@ README, the full investigation record up to D-0141, is kept unchanged at
 
 | حوزه | چه چیزی | منبع (شرایط استفاده بررسی شده) |
 |---|---|---|
-| **رمزارز** | قیمت، ارزش بازار، حجم، تغییر ۲۴ ساعته و ۷ روزه، نمودار روزانهٔ ۳۶۵ روزه، آمار کل بازار | CoinGecko، با درج «Powered by CoinGecko» |
+| **رمزارز** | قیمت، ارزش بازار، حجم، تغییر ۲۴ ساعته و ۷ روزه، نمودار روزانهٔ ۳۶۵ روزه، آمار کل بازار؛ **جست‌وجوی توکن** با نام، نماد یا آدرس قرارداد روی ۷ زنجیره. نام مبهم فهرست گزینه‌ها را نشان می‌دهد و هیچ‌کدام بی‌صدا انتخاب نمی‌شود | CoinGecko، با درج «Powered by CoinGecko» |
 | **فارکس** | ۹ جفت‌ارز اصلی (OHLC روزانه) و ۲۹ نرخ مرجع بانک مرکزی اروپا با مبدل | Alpha Vantage · ECB |
 | **سهام آمریکا** | جست‌وجوی نماد، قیمت پایانی روز، صورت‌های مالی سالانه از گزارش 10-K | Alpha Vantage · SEC EDGAR |
 | **نرخ بهره و کلان** | نرخ سیاستی ۴۹ بانک مرکزی؛ اوراق خزانه، نفت، گاز، شاخص دلار، تورم و بیکاری آمریکا؛ ۱۰ شاخص بانک جهانی | BIS · FRED · بانک جهانی |
 | **ماشین‌حساب‌ها** | ۸۵ ابزار: بازده و ریسک، ارزش‌گذاری، تحلیل تکنیکال، اوراق قرضه، اختیار معامله | ورودی شما، بدون نیاز به مدل |
-| **پرسش** | سؤال به فارسی یا انگلیسی؛ اعداد پاسخ با شواهد کنترل می‌شوند | مدل محلی (پیش‌فرض) یا ارائه‌دهندهٔ آنلاین انتخابی شما |
+| **پرسش** | سؤال به فارسی یا انگلیسی؛ اعداد پاسخ با شواهد کنترل می‌شوند. «خودت را معرفی کن» و جست‌وجوی رمزارز بدون مدل پاسخ داده می‌شوند | مدل محلی (پیش‌فرض) یا ارائه‌دهندهٔ آنلاین انتخابی شما |
 | **معاملهٔ کاغذی** | پیش‌نمایش ← ۱۷ بررسی ریسک ← تایپ `CONFIRM`؛ کلید توقف، تطبیق، گزارش ممیزی با زنجیرهٔ هش | فقط شبیه‌سازی |
+| **پایش دارایی** (`/monitor`) | یک دارایی در هر صفحه: همهٔ ارقام منبع‌دار، آدرس قراردادها، نمودار ۳۰/۹۰/۳۶۵ روزه با SMA، EMA، RSI و MACD (محاسبه‌شده)، نسبت‌های سهام از گزارش 10-K؛ دارندگان، نقدشوندگی، اخبار و احساسات بازار UNKNOWN | CoinGecko · Alpha Vantage · SEC · `src/calc` |
+| **راهنما** (`/learn`) | توضیح فارسی هر صفحه، فهرست قدم‌های اول، واژه‌نامه و راهنمای شروع قابل رد کردن؛ همهٔ شمارش‌ها از خود برنامه | ساخته‌شده از فهرست‌های برنامه |
+
+هر زبانهٔ «بازارها» و صفحهٔ پایش یک دکمهٔ **↻ تازه‌سازی** دارد (فرم، بدون جاوااسکریپت هم کار می‌کند) که فقط منابع
+همان صفحه را دوباره می‌گیرد، حداقل فاصلهٔ هر منبع را رعایت می‌کند (CoinGecko دست‌کم ۶۰ ثانیه)، پیش از مصرف سهمیهٔ
+روزانهٔ Alpha Vantage تأیید می‌گیرد، و اگر ناموفق باشد دادهٔ قبلی را با برچسب **کهنه** نگه می‌دارد. هیچ چیز خودکار
+تازه نمی‌شود.
 
 هیچ‌کدام از داده‌ها لحظه‌ای یا قابل معامله نیست. از Kraken و Binance **استفاده نمی‌شود**: شرایط Kraken ایران را
 مستثنا کرده است، و شرایط Binance را نتوانستیم بخوانیم و تأیید کنیم.
@@ -251,7 +267,7 @@ python scripts\ui.py                                            # همه چیز 
 ### آزمون‌ها
 
 <pre dir="ltr" align="left">
-bash tests/run_all.sh            # ۳۱ مجموعه آزمون؛ بدون مدل و بدون اینترنت
+bash tests/run_all.sh            # ۳۲ مجموعه آزمون؛ بدون مدل و بدون اینترنت
 bash tests/run_all.sh --mutate   # همراه با آزمون جهش: هر بررسی باید بتواند شکست بخورد
 python3 tools/maintain.py        # بررسی سلامت آفلاین
 </pre>

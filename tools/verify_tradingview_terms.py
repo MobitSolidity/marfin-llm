@@ -34,7 +34,7 @@ TERMS_URL = "https://www.tradingview.com/policies/"
 
 # A contact User-Agent, for the same reason the SEC requires one: an operator who
 # is reviewing licence terms should be identifiable while doing it.
-USER_AGENT = "marfin-llm/0.1 (compliance-review; contact@example.com)"
+USER_AGENT = "Andarz/0.15 (compliance-review; contact@example.com)"
 
 # The clauses the project's entire TradingView posture rests on. Each must still be
 # present. Phrasing chosen to be the load-bearing fragment, not a whole sentence,

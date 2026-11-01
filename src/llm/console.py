@@ -634,7 +634,7 @@ def _finish(lines: List[str], state: State, quit_flag: bool
 # ---------------------------------------------------------------------------
 # The loop -- the only part that touches stdin
 # ---------------------------------------------------------------------------
-PROMPT = "marfin> "
+PROMPT = "andarz> "
 
 
 def loop(state: Optional[State] = None,

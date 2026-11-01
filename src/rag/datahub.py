@@ -44,6 +44,24 @@ from rag import sec_facts as _sec
 from rag.sources import required_notices
 
 CACHE_TTL_S = 600.0
+#: D-0143: CoinGecko calls allowed per rolling minute. Keyless: "~5 calls/min (dynamic)" per the
+#: official Keyless page (VERIFIED 2026-10-30; MEASURED the same day: a 2nd call within 20 s got 429).
+#: With the free Demo key: 30, deliberately below the plan's published limit (ESTIMATED headroom).
+CG_PER_MIN_KEYLESS = 5
+CG_PER_MIN_DEMO = 30
+
+#: D-0143(6): which source each cache key belongs to (first element of the key).
+KEY_SOURCE = {"fx": "ecb_data_portal", "fxh": "ecb_data_portal", "cbpol": "bis_statistics", "fred": "fred",
+              "wb": "world_bank_indicators", "av": "alpha_vantage", "av_fx": "alpha_vantage",
+              "av_quote": "alpha_vantage", "av_search": "alpha_vantage", "cg_markets": "coingecko",
+              "cg_global": "coingecko", "cg_chart": "coingecko", "cg_search": "coingecko", "cg_coin": "coingecko",
+              "cg_contract": "coingecko", "sec_tickers": "sec_edgar_xbrl", "sec_facts": "sec_edgar_xbrl"}
+#: Minimum seconds between two refreshes of one source. CoinGecko keyless: >= 60 (owner's rule;
+#: ~5 calls/min). Alpha Vantage: 300, because every refresh spends the 25/day budget (ESTIMATED choice).
+MIN_REFRESH_S = {"coingecko": 60, "alpha_vantage": 300}
+MIN_REFRESH_DEFAULT_S = 60
+#: Sources whose refresh spends a small daily budget: the owner confirms first.
+CONFIRM_SOURCES = ("alpha_vantage",)
 STALE_DAYS = 400            # a policy-rate series older than this is a discontinued one
 
 #: ISO-2 -> (ISO-3 for the World Bank, Persian name). XM/EMU is the euro area.
@@ -111,7 +129,7 @@ SOURCES_FA = (
     ("world_bank_indicators", "بانک جهانی", "۱۰ شاخص اقتصادی برای ۲۱۷ کشور (سالانه)", "بدون کلید"),
     ("alpha_vantage", "Alpha Vantage (رایگان)", "سهام آمریکا (قیمت پایانی، جست‌وجوی نماد)، جفت‌ارزهای فارکس؛ "
      "۲۵ درخواست در روز", "کلید رایگان ALPHAVANTAGE_API_KEY"),
-    ("coingecko", "CoinGecko", "بازار رمزارزها: قیمت، ارزش بازار، حجم، تغییرات، نمودار ۳۶۵ روزه",
+    ("coingecko", "CoinGecko", "بازار رمزارزها: قیمت، ارزش بازار، حجم، تغییرات، نمودار ۳۶۵ روزه، جست‌وجوی توکن با نام، نماد یا آدرس قرارداد",
      "بدون کلید (حدود ۵ درخواست در دقیقه) یا کلید رایگان COINGECKO_DEMO_API_KEY"),
     ("sec_edgar_xbrl", "کمیسیون بورس آمریکا (SEC EDGAR)", "صورت‌های مالی سالانهٔ شرکت‌های آمریکایی از گزارش 10-K",
      "ایمیل تماس در SEC_CONTACT_EMAIL"),
@@ -127,6 +145,17 @@ class DataError(RuntimeError):
     """A data request refused or failed. The message is shown to the user verbatim."""
 
 
+class RateBudget(DataError):
+    """D-0143: refused BEFORE any network call because the per-minute budget is spent."""
+
+    def __init__(self, msg, retry_after_s):
+        DataError.__init__(self, msg)
+        self.retry_after_s = retry_after_s
+
+
+_NOT_FOUND = ("not-found",)              # cached negative answer (CoinGecko HTTP 404)
+
+
 def _transient(exc):
     return isinstance(exc, _ERRORS) and any(t in str(exc).lower() for t in _TRANSIENT)
 
@@ -140,7 +169,8 @@ class DataHub(object):
     def __init__(self, ecb_get=None, bis_get=None, fred_get=None, wb_get=None, av_fetch=None,
                  clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep,
                  fred_key: Optional[str] = None, ttl: float = CACHE_TTL_S,
-                 cg_get=None, av_get=None, sec_get=None, sec_contact: Optional[str] = None):
+                 cg_get=None, av_get=None, sec_get=None, sec_contact: Optional[str] = None,
+                 cg_per_min: Optional[int] = None):
         self.ecb_get, self.bis_get, self.fred_get, self.wb_get = ecb_get, bis_get, fred_get, wb_get
         self.av_fetch = av_fetch
         # D-0142: crypto (CoinGecko), forex pairs / quotes / search (Alpha Vantage), fundamentals (SEC)
@@ -148,10 +178,30 @@ class DataHub(object):
         self.clock, self.sleep, self.fred_key, self.ttl = clock, sleep, fred_key, ttl
         self._cache: Dict[Any, Any] = {}
         self.calls = 0                      # network calls actually made (tests read it)
+        self.cg_per_min = cg_per_min        # None: decided from COINGECKO_DEMO_API_KEY at call time
+        self._cg_times: List[float] = []    # D-0143: times of CoinGecko network calls (rolling minute)
+        self._forced: set = set()           # D-0143(6): keys a refresh asked to fetch again
+        self._stale: Dict[Any, Any] = {}    # key -> {"error", "at"}: the refresh failed, old value kept
+        self._refreshed: Dict[str, float] = {}   # source -> time of the last accepted refresh
 
     # -- plumbing ---------------------------------------------------------------------------
     def _cached(self, key, fn):
-        hit = self._cache.get(key)
+        # D-0143(6): a refresh asked for this key -> fetch now; on failure keep the old value and
+        # mark it stale (the page shows the error and a retry). Never a zero, never a blank table.
+        if key in self._forced:
+            self._forced.discard(key)
+            old = self._cache.get(key)
+            try:
+                return self._fetch(key, fn, force=True)
+            except (DataError, RuntimeError, ValueError, OSError) as exc:
+                if old is None:
+                    raise
+                self._mark_stale(key, exc)
+                return old[1]
+        return self._fetch(key, fn)
+
+    def _fetch(self, key, fn, force=False):
+        hit = None if force else self._cache.get(key)
         now = self.clock()
         if hit is not None and now - hit[0] < self.ttl:
             return hit[1]
@@ -168,7 +218,52 @@ class DataHub(object):
             except (ValueError, RuntimeError) as exc:      # AccessError, Fact validation
                 raise DataError(str(exc))
         self._cache[key] = (now, val)
+        self._stale.pop(key, None)
         return val
+
+    # -- D-0143(6): refresh controls ------------------------------------------------------------
+    def _mark_stale(self, key, exc):
+        self._stale[key] = {"error": str(exc)[:300], "at": self.clock()}
+
+    def _keys_of(self, source):
+        return [k for k in self._cache if KEY_SOURCE.get(k[0]) == source]
+
+    def source_status(self, source: str) -> Dict[str, Any]:
+        """Fetch time (ours), the data's own date (the source's), staleness and when a refresh is allowed."""
+        now = self.clock()
+        keys = self._keys_of(source)
+        fetched = max((self._cache[k][0] for k in keys), default=None)
+        stamps = [s for s in (_stamp(self._cache[k][1]) for k in keys) if s]
+        last = max([t for t in (fetched, self._refreshed.get(source)) if t is not None], default=None)
+        gap = MIN_REFRESH_S.get(source, MIN_REFRESH_DEFAULT_S)
+        stale = [dict(v, key=k) for k, v in self._stale.items() if KEY_SOURCE.get(k[0]) == source]
+        return {"source": source, "fetched_at": fetched, "source_stamp": max(stamps) if stamps else None,
+                "n_items": len(keys), "stale": stale, "min_interval_s": gap,
+                "next_in_s": max(0, int(gap - (now - last)) + 1) if last is not None and now - last < gap else 0}
+
+    def refresh(self, sources: Sequence[str], confirm: bool = False) -> List[Dict[str, Any]]:
+        """
+        Ask for a re-fetch of these sources only. Nothing is fetched here: the keys are marked, and the
+        page that is rendered next fetches the ones it shows. Refused per source when too soon, when an
+        Alpha Vantage refresh is not confirmed, or when the CoinGecko minute budget is spent.
+        """
+        out = []
+        for src in sources:
+            st = self.source_status(src)
+            keys = self._keys_of(src)
+            if not keys:
+                out.append({"source": src, "status": "nothing"})
+            elif st["next_in_s"]:
+                out.append({"source": src, "status": "too_soon", "wait_s": st["next_in_s"]})
+            elif src in CONFIRM_SOURCES and not confirm:
+                out.append({"source": src, "status": "needs_confirm", "cost": len(keys)})
+            elif src == "coingecko" and self.cg_budget()["left"] < 1:
+                out.append({"source": src, "status": "budget", "wait_s": self.cg_budget()["retry_after_s"]})
+            else:
+                self._forced.update(keys)
+                self._refreshed[src] = self.clock()
+                out.append({"source": src, "status": "queued", "n": len(keys)})
+        return out
 
     def clear(self):
         self._cache.clear()
@@ -337,21 +432,86 @@ class DataHub(object):
         vs = str(vs or "usd").lower()
         if vs not in _cg.VS_CURRENCIES:
             raise DataError("quote currency %r is not offered; choose one of %s" % (vs, ", ".join(_cg.VS_CURRENCIES)))
-        rows = self._guard(("cg_markets", vs, n), lambda: _cg.fetch_markets(vs, n, http_get=self.cg_get))
+        rows = self._cg(("cg_markets", vs, n), lambda: _cg.fetch_markets(vs, n, http_get=self.cg_get))
         return {"vs": vs, "rows": rows, "label": "RETRIEVED (CoinGecko, aggregated across exchanges; indicative)",
                 "notices": required_notices(["coingecko"]),
                 "note": "قیمت‌ها میانگین وزنی چند صرافی‌اند، نه قیمت قابل معاملهٔ یک صرافی مشخص؛ چند دقیقه تأخیر دارند."}
 
     def crypto_global(self) -> Dict[str, Any]:
         from market import coingecko as _cg
-        g = self._guard(("cg_global",), lambda: _cg.fetch_global(http_get=self.cg_get))
+        g = self._cg(("cg_global",), lambda: _cg.fetch_global(http_get=self.cg_get))
         return dict(g, label="RETRIEVED (CoinGecko /global)", notices=required_notices(["coingecko"]))
 
     def crypto_chart(self, coin_id: str, vs: str = "usd", days: int = 90) -> Dict[str, Any]:
         from market import coingecko as _cg
-        pts = self._guard(("cg_chart", coin_id, vs, days), lambda: _cg.fetch_chart(coin_id, vs, days, http_get=self.cg_get))
+        pts = self._cg(("cg_chart", coin_id, vs, days), lambda: _cg.fetch_chart(coin_id, vs, days, http_get=self.cg_get))
         return {"id": coin_id, "vs": vs, "points": pts, "label": "RETRIEVED (CoinGecko daily, 00:00 UTC)",
                 "notices": required_notices(["coingecko"])}
+
+    # -- D-0143: CoinGecko budget and token lookup ------------------------------------------
+    def cg_limit(self) -> int:
+        if self.cg_per_min is not None:
+            return self.cg_per_min
+        import os
+        return CG_PER_MIN_DEMO if str(os.environ.get("COINGECKO_DEMO_API_KEY", "")).strip() else CG_PER_MIN_KEYLESS
+
+    def cg_budget(self) -> Dict[str, Any]:
+        """Calls left in the rolling minute and when the next one frees up (shown in the UI)."""
+        now = self.clock()
+        self._cg_times = [t for t in self._cg_times if now - t < 60.0]
+        lim = self.cg_limit()
+        left = max(0, lim - len(self._cg_times))
+        wait = 0 if left else int(60.0 - (now - self._cg_times[0])) + 1
+        return {"limit": lim, "left": left, "retry_after_s": wait}
+
+    def _cg(self, key, fn):
+        """A CoinGecko request: cache first, then the per-minute budget, then the network. Never retried."""
+        hit = self._cache.get(key)
+        if hit is not None and key not in self._forced and self.clock() - hit[0] < self.ttl:
+            return hit[1]
+        b = self.cg_budget()
+        if not b["left"] and key in self._forced and hit is not None:
+            self._forced.discard(key)
+            self._mark_stale(key, "CoinGecko budget spent; the previous figures are kept")
+            return hit[1]
+        if not b["left"]:
+            raise RateBudget("CoinGecko budget spent: %d calls a minute (%s). Try again in %d s; nothing was sent."
+                             % (b["limit"], "free Demo key" if b["limit"] > CG_PER_MIN_KEYLESS else "keyless",
+                                b["retry_after_s"]), b["retry_after_s"])
+        self._cg_times.append(self.clock())
+        return self._guard(key, fn)
+
+    @staticmethod
+    def _or_not_found(fn):
+        from market import coingecko as _cg
+
+        def go():
+            try:
+                return fn()
+            except _cg.CoinNotFound:
+                return _NOT_FOUND
+        return go
+
+    def crypto_search(self, query: str) -> List[Dict[str, Any]]:
+        from market import coingecko as _cg
+        q = " ".join(str(query or "").split()).lower()
+        return self._cg(("cg_search", q), lambda: _cg.fetch_search(q, http_get=self.cg_get))
+
+    def crypto_coin(self, coin_id: str, vs: str = "usd") -> Optional[Dict[str, Any]]:
+        from market import coingecko as _cg
+        r = self._cg(("cg_coin", coin_id, vs), self._or_not_found(
+            lambda: _cg.fetch_coin(coin_id, vs, http_get=self.cg_get)))
+        return None if r is _NOT_FOUND else r
+
+    def crypto_contract(self, platform_id: str, address: str, vs: str = "usd") -> Optional[Dict[str, Any]]:
+        from market import coingecko as _cg
+        r = self._cg(("cg_contract", platform_id, address, vs), self._or_not_found(
+            lambda: _cg.fetch_contract(platform_id, address, vs, http_get=self.cg_get)))
+        return None if r is _NOT_FOUND else r
+
+    def crypto_lookup(self, text: str, vs: str = "usd") -> Dict[str, Any]:
+        from market import crypto_resolve as _cr
+        return _cr.resolve(text, self, vs)
 
     # -- D-0142: forex pairs, quotes and search (Alpha Vantage, shared 25/day budget) --------
     def fx_pair(self, frm: str, to: str) -> Dict[str, Any]:
@@ -392,6 +552,40 @@ class DataHub(object):
         f = self._guard(("sec_facts", hit["cik"]), lambda: _sec.fetch_fundamentals(hit["cik"], ua, http_get=self.sec_get))
         return dict(f, ticker=t, label="RETRIEVED (SEC EDGAR XBRL companyfacts; annual 10-K figures, latest filing wins)",
                     notices=[], note="ارقام سالانه و از گزارش 10-K شرکت‌اند؛ هر عدد با شمارهٔ ثبت گزارش قابل ردیابی است.")
+
+
+# D-0143: the resolver reads the error types from the hub it is given (no import back, no cycle).
+DataHub.DataError = DataError
+DataHub.RateBudget = RateBudget
+
+
+def _stamp(val: Any) -> Optional[str]:
+    """The newest date the DATA itself carries (the source's own timestamp), or None."""
+    found: List[str] = []
+
+    def one(x):
+        if isinstance(x, dict):
+            for f in ("as_of", "updated", "last_updated", "date"):
+                if isinstance(x.get(f), str) and x[f][:4].isdigit():
+                    found.append(x[f])
+            last = x.get("last")
+            if isinstance(last, dict) and isinstance(last.get("date"), str):
+                found.append(last["date"])
+            rows = x.get("rows")
+            if isinstance(rows, list):
+                for r in rows[-3:]:
+                    one(r)
+        else:
+            pe = getattr(x, "period_end", None)
+            if hasattr(pe, "isoformat"):
+                found.append(pe.isoformat())
+            ts = getattr(x, "timestamp", None)
+            if ts is not None and str(ts)[:4].isdigit():
+                found.append(str(ts)[:19])
+
+    for item in (val if isinstance(val, list) else [val])[:5000]:
+        one(item)
+    return max(found) if found else None
 
 
 def today() -> datetime.date:
